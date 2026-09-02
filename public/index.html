@@ -2243,7 +2243,7 @@ body {
         </div>
       </div>
 
-      <div class="section-title" style="font-size:1.05rem">👨‍💼 Servants of God</div>
+      <div class="section-title" style="font-size:1.05rem">👨💼 Servants of God</div>
       <div class="official-card">
         <div class="official-avatar">PP</div>
         <div style="flex:1">
@@ -2910,7 +2910,7 @@ body {
 <div class="modal-overlay" id="addLeaderModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
-    <div class="modal-title">👨‍💼 Add Church Leader <span class="admin-only">Admin Only</span></div>
+    <div class="modal-title">👨💼 Add Church Leader <span class="admin-only">Admin Only</span></div>
     <div class="form-group">
       <label class="form-label">Pick from Registered Users</label>
       <div class="user-picker">
@@ -3228,8 +3228,7 @@ body {
 // 🔑🔑🔑 EDIT HERE: Supabase Dashboard → Settings → API 🔑🔑🔑
 const SUPABASE_URL = 'https://amnskvvpwobxfdgnuvdc.supabase.co';
 const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtbnNrdnZwd29ieGZkZ251dmRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDEsImV4cCI6MjEwMzgzODQ0MX0.K1rgEYRI_KDREgEWJZvt8XpVXp_ap19oaABmuBvO6YQ';
-var sb = null;
-try { sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY); } catch (e) { console.error('Supabase not ready', e); }
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
 
 // ---- REAL AUTH SYSTEM ----
 async function refreshRole() {
