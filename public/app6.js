@@ -1,10 +1,7 @@
-
-
-// app6.js — COMPLETE FIX: onboarding + registration + Brevo verification
-// This overrides the broken functions from index.html
+// app6.js — COMPLETE FIX: onboarding + registration + streak + service days + multiple pastors
 
 // ═══════════════════════════════════════════════════════════
-// FIX 1: Override broken nextOnboardingStep (no data-step attrs in HTML)
+// 1. ONBOARDING & REGISTRATION FIXES
 // ═══════════════════════════════════════════════════════════
 window.nextOnboardingStep = function() {
   var steps = document.querySelectorAll('.onboarding-step');
@@ -12,18 +9,16 @@ window.nextOnboardingStep = function() {
   var step2Name = document.getElementById('ob-name');
   var step3Ush  = document.getElementById('ob-ushirika');
 
-  // Validation on the CURRENT active step
   var currentIdx = -1;
   steps.forEach(function(s, i){ if (s.classList.contains('active')) currentIdx = i; });
 
-  if (currentIdx === 1) { // step 2 = Your Details
+  if (currentIdx === 1) {
     if (!step2Name || !step2Name.value.trim()) { alert('Please enter your name'); return; }
   }
-  if (currentIdx === 2) { // step 3 = Choose Ushirika
+  if (currentIdx === 2) {
     if (!step3Ush || !step3Ush.value) { alert('Please select your ushirika'); return; }
   }
 
-  // Hide all, show next
   steps.forEach(function(s){ s.classList.remove('active'); });
   dots.forEach(function(d){ d.classList.remove('active'); });
 
@@ -33,29 +28,19 @@ window.nextOnboardingStep = function() {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// FIX 2: showApp() — reveals the main app UI after login
-// ═══════════════════════════════════════════════════════════
 window.showApp = function() {
-  // Hide public landing (if present)
   var pub = document.getElementById('publicLanding');
   if (pub) pub.classList.add('hidden');
-  // Hide decision & onboarding overlays
   var dec = document.getElementById('decisionOverlay'); if (dec) dec.style.display = 'none';
   var onb = document.getElementById('onboardingOverlay'); if (onb) onb.classList.remove('show');
   var log = document.getElementById('loginOverlay'); if (log) log.classList.remove('show');
-  // Show main app elements
   var header = document.querySelector('.app-header'); if (header) header.style.display = 'flex';
   var nav = document.querySelector('.bottom-nav'); if (nav) nav.style.display = 'flex';
   var main = document.querySelector('.main-content'); if (main) main.style.display = 'block';
-  // Load all data
   if (typeof loadAll === 'function') { try { loadAll(); } catch(e){} }
   if (typeof refreshRole === 'function') refreshRole();
 };
 
-// ═══════════════════════════════════════════════════════════
-// FIX 3: Override completeOnboarding — creates profile row + Brevo verify + shows app
-// ═══════════════════════════════════════════════════════════
 window.completeOnboarding = async function() {
   var name     = (document.getElementById('ob-name')     || {}).value || '';
   var email    = (document.getElementById('ob-email')    || {}).value || '';
@@ -70,7 +55,6 @@ window.completeOnboarding = async function() {
   }
 
   try {
-    // 1. Sign up
     var r = await sb.auth.signUp({
       email: email.trim(), password: password,
       options: { data: { name: name.trim() } }
@@ -79,27 +63,23 @@ window.completeOnboarding = async function() {
     if (!r.data || !r.data.user) throw new Error('No user returned');
 
     var uid = r.data.user.id;
-
-    // 2. Create the profile row (THIS was missing!)
     var profileRow = { id: uid, name: name.trim(), role: 'member', phone: phone.trim() || null };
     if (ush) profileRow.ushirika_id = ush;
     profileRow.streak_days = [];
     profileRow.streak_current = 0;
     profileRow.streak_longest = 0;
 
-    // Upload profile pic if provided
     if (pic) {
       try {
         var url = await uploadMediaFile(pic);
         profileRow.profile_pic = url;
         delete window._pm.profilePic;
-      } catch(e){ /* ignore upload errors */ }
+      } catch(e){}
     }
 
-    // Use upsert (handles case where trigger already created a row)
     await sb.from('profiles').upsert(profileRow, { onConflict: 'id' });
 
-    // 3. Brevo verification email (silent, non-blocking)
+    // Brevo verification (silent)
     var token = Math.random().toString(36).slice(2) + Date.now().toString(36);
     try {
       await sb.from('verification_tokens').insert([{ user_id: uid, email: email.trim(), token: token }]);
@@ -108,9 +88,8 @@ window.completeOnboarding = async function() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ to: email.trim(), name: name.trim(), token: token })
       }).catch(function(){});
-    } catch(e){ /* verification email is optional */ }
+    } catch(e){}
 
-    // 4. Close onboarding and reveal the app
     var onb = document.getElementById('onboardingOverlay');
     if (onb) onb.classList.remove('show');
     localStorage.setItem('onboarded', 'true');
@@ -124,9 +103,6 @@ window.completeOnboarding = async function() {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// FIX 4: Override doLogin — also shows app after login
-// ═══════════════════════════════════════════════════════════
 window.doLogin = async function() {
   var email = (document.getElementById('login-email') || {}).value.trim();
   var pass  = (document.getElementById('login-password') || {}).value;
@@ -141,15 +117,11 @@ window.doLogin = async function() {
   }
 };
 
-// ═══════════════════════════════════════════════════════════
-// FIX 5: Ensure startNewMember / startExistingMember work
-// ═══════════════════════════════════════════════════════════
 window.startNewMember = function() {
   var dec = document.getElementById('decisionOverlay'); if (dec) dec.style.display = 'none';
   var onb = document.getElementById('onboardingOverlay');
   if (onb) {
     onb.classList.add('show');
-    // Reset to step 1
     var steps = onb.querySelectorAll('.onboarding-step');
     var dots  = onb.querySelectorAll('.progress-dot');
     steps.forEach(function(s){ s.classList.remove('active'); });
@@ -169,9 +141,6 @@ window.hideLogin = function() {
   var dec = document.getElementById('decisionOverlay'); if (dec) dec.style.display = 'flex';
 };
 
-// ═══════════════════════════════════════════════════════════
-// FIX 6: On boot, if already logged in — show app immediately
-// ═══════════════════════════════════════════════════════════
 (async function() {
   if (!window.sb) return;
   try {
@@ -182,27 +151,32 @@ window.hideLogin = function() {
   } catch(e){}
 })();
 
+
 // ═══════════════════════════════════════════════════════════
-// STREAK FIX (from previous app6.js — keep this)
+// 2. STREAK FIX (Only once per day, checks DB properly)
 // ═══════════════════════════════════════════════════════════
 window.updateStreak = function(){
   if(!user||!profile||!sb)return;
   var today=new Date(); today.setHours(0,0,0,0);
   var days=(profile.streak_days||[]).slice();
   var hasToday=days.some(function(d){return new Date(d).toDateString()===today.toDateString();});
+  
   if(hasToday){
     var sc=document.getElementById('streakCount');
     if(sc)sc.textContent=(profile.streak_current||0)+' Days';
     var ps=document.getElementById('profileStreak');
     if(ps)ps.textContent=(profile.streak_current||0)+' Days';
-    highlightStreakDays(days.map(function(x){return new Date(x);}));
+    if(typeof highlightStreakDays === 'function') highlightStreakDays(days.map(function(x){return new Date(x);}));
     return;
   }
+  
   var yesterday=new Date(today); yesterday.setDate(yesterday.getDate()-1);
   var hadYesterday=days.some(function(d){return new Date(d).toDateString()===yesterday.toDateString();});
   var newCount=hadYesterday?(profile.streak_current||0)+1:1;
+  
   days.push(today.toISOString()); days=days.slice(-7);
   var longest=Math.max(profile.streak_longest||0,newCount);
+  
   sb.from('profiles').update({
     streak_current:newCount, streak_longest:longest,
     streak_last_activity:new Date().toISOString(), streak_days:days
@@ -210,12 +184,237 @@ window.updateStreak = function(){
     profile.streak_current=newCount; profile.streak_days=days; profile.streak_longest=longest;
     var sc=document.getElementById('streakCount'); if(sc)sc.textContent=newCount+' Days';
     var ps=document.getElementById('profileStreak'); if(ps)ps.textContent=newCount+' Days';
-    highlightStreakDays(days.map(function(x){return new Date(x);}));
+    if(typeof highlightStreakDays === 'function') highlightStreakDays(days.map(function(x){return new Date(x);}));
     if(newCount===7&&!hadYesterday) alert('🎉 1-week streak!');
   });
 };
 
-// Also override the service-times and featured-people rendering from the previous app6.js
-// (keep those blocks — just don't repeat them here if already in app6.js)
+(function(){
+  var origRefresh=window.refreshRole;
+  if(origRefresh){
+    window.refreshRole=function(){
+      return origRefresh().then(function(){
+        if(user&&profile){
+          var today=new Date(); today.setHours(0,0,0,0);
+          var days=(profile.streak_days||[]);
+          var hasToday=days.some(function(d){return new Date(d).toDateString()===today.toDateString();});
+          if(!hasToday) updateStreak();
+        }
+      });
+    };
+  }
+})();
 
-console.log('✝️ app6.js FIXED — registration + onboarding + Brevo all working');
+
+// ═══════════════════════════════════════════════════════════
+// 3. MULTIPLE PASTORS & SERVICE DAYS (Landing Page / Church Settings)
+// ═══════════════════════════════════════════════════════════
+var SERVICE_TYPES=['Main Service','Prayer','Fasting','Prayer & Fasting','Bible Study','Youth Service','Night Vigil','Outreach'];
+
+window.loadFeatured = function(){
+  if(!sb) return Promise.resolve();
+  return sb.from('featured_people').select('*').order('sort').then(function(r){window._featured=r.data||[];}).catch(function(){window._featured=[];});
+};
+
+window.loadMinistries = function(){
+  if(!sb) return Promise.resolve();
+  return sb.from('ministries').select('*').order('created_at').then(function(r){window._ministries=r.data||[];}).catch(function(){window._ministries=[];});
+};
+
+var origRenderPublic = window.renderPublicLanding;
+window.renderPublicLanding = function(){
+  Promise.all([
+    typeof loadChurchBranding === 'function' ? loadChurchBranding() : Promise.resolve(),
+    typeof loadNewsArticles === 'function' ? loadNewsArticles() : Promise.resolve(),
+    typeof loadGalleryItems === 'function' ? loadGalleryItems() : Promise.resolve(),
+    typeof loadDocuments === 'function' ? loadDocuments() : Promise.resolve(),
+    loadFeatured(),
+    loadMinistries()
+  ]).then(function(){
+    if(origRenderPublic) origRenderPublic();
+    
+    var cb=window.churchBrandingData||{};
+    
+    var sig=document.querySelector('.pastor-signature');
+    if(sig){
+      var fp=window._featured||[];
+      if(fp.length){
+        sig.outerHTML='<div style="display:flex;flex-wrap:wrap;gap:12px" id="featuredPeople">'+
+          fp.map(function(p){
+            var pic=p.image_url?
+              '<img src="'+p.image_url+'" style="width:56px;height:56px;border-radius:50%;object-fit:cover">':
+              '<div class="pastor-avatar">'+ini(p.name)+'</div>';
+            return '<div class="pastor-signature" style="flex:1;min-width:180px">'+
+              pic+
+              '<div><div class="pastor-name">'+esc(p.name)+'</div>'+
+              '<div class="pastor-title">'+esc(p.role)+'</div></div></div>';
+          }).join('')+
+        '</div>';
+      }
+    }
+    
+    var sg=document.querySelector('.service-times-grid');
+    if(sg){
+      var svcs=cb.services||[];
+      if(svcs.length){
+        sg.innerHTML=svcs.map(function(s){
+          return '<div class="service-card">'+
+            '<div class="service-icon"><i class="fas fa-church"></i></div>'+
+            '<div class="service-day">'+esc(s.day)+'</div>'+
+            '<div class="service-time">'+esc(s.time)+'</div>'+
+            '<div class="service-label">'+esc(s.type)+'</div>'+
+          '</div>';
+        }).join('');
+      }
+    }
+  });
+};
+
+window.openLandingEditor = function(){
+  if(!isSuper()) return alert('Super admin only');
+  var DAYS=['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+  var html='<div class="modal-overlay show" id="landingEditor" onclick="if(event.target===this)this.remove()">'+
+    '<div class="modal" onclick="event.stopPropagation()">'+
+    '<div class="modal-handle"></div>'+
+    '<div class="modal-title">⚙️ Edit Landing <span class="admin-only">Super</span></div>'+
+    
+    '<h4 style="margin:10px 0 6px">Featured People (Welcome section)</h4>'+
+    '<div id="feList"></div>'+
+    '<button class="btn btn-primary btn-sm" onclick="addFeaturedPicker()">+ Add Person</button>'+
+    '<div id="fePicker" style="display:none" class="user-picker"></div>'+
+    
+    '<h4 style="margin:14px 0 6px">Church Photo (beside welcome)</h4>'+
+    '<div class="media-upload" onclick="uploadChurchPhotoLanding()"><i class="fas fa-image"></i><span>Upload church photo</span></div>'+
+    
+    '<h4 style="margin:14px 0 6px">Services (day / time / type)</h4>'+
+    '<div id="svcList"></div>'+
+    '<div class="grid-2">'+
+      '<select class="form-select" id="svcDay">'+
+        DAYS.map(function(d){return '<option value="'+d+'">'+d+'</option>';}).join('')+
+      '</select>'+
+      '<input class="form-input" id="svcTime" placeholder="Time e.g. 9:00 AM - 12:00 PM">'+
+    '</div>'+
+    '<input class="form-input" id="svcType" list="svcTypes" placeholder="Service type">'+
+    '<datalist id="svcTypes">'+
+      SERVICE_TYPES.map(function(t){return '<option value="'+t+'">';}).join('')+
+    '</datalist>'+
+    '<button class="btn btn-primary btn-sm" onclick="addServiceRow()">+ Add Service</button>'+
+    
+    '<h4 style="margin:14px 0 6px">Ministries (story + media)</h4>'+
+    '<div id="minList"></div>'+
+    '<input class="form-input" id="minName" placeholder="Ministry name" style="margin-bottom:6px">'+
+    '<textarea class="form-textarea" id="minStory" placeholder="The story behind it..." rows="3"></textarea>'+
+    '<div class="media-upload" onclick="if(typeof attachMediaTo===\'function\')attachMediaTo(\'minMedia\')"><i class="fas fa-cloud-upload-alt"></i><span>Ministry media (optional)</span></div>'+
+    '<button class="btn btn-primary btn-sm" onclick="addMinistry()">+ Add Ministry</button>'+
+    
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:14px" onclick="document.getElementById(\'landingEditor\').remove()">Close</button>'+
+    '</div></div>';
+  document.body.insertAdjacentHTML('beforeend',html);
+  refreshLandingEditorLists();
+};
+
+window.refreshLandingEditorLists = function(){
+  var fl=document.getElementById('feList');
+  if(fl) fl.innerHTML=(window._featured||[]).map(function(p){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>'+esc(p.name)+'</b> <span style="color:var(--text-light)">('+esc(p.role)+')</span><button class="post-delete" onclick="delFeatured(\''+p.id+'\')"><i class="fas fa-trash"></i></button></div>';
+  }).join('')||'<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>';
+  
+  var sv=document.getElementById('svcList');
+  var cb=window.churchBrandingData||{};
+  var svcs=cb.services||[];
+  if(sv) sv.innerHTML=svcs.map(function(s,i){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">'+esc(s.day)+' • '+esc(s.time)+' • '+esc(s.type)+'<button class="post-delete" onclick="delService('+i+')"><i class="fas fa-trash"></i></button></div>';
+  }).join('')||'<div style="color:var(--text-lighter);font-size:.8rem">None.</div>';
+  
+  var ml=document.getElementById('minList');
+  if(ml) ml.innerHTML=(window._ministries||[]).map(function(m){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>'+esc(m.name)+'</b><button class="post-delete" onclick="delMinistry(\''+m.id+'\')"><i class="fas fa-trash"></i></button></div>';
+  }).join('')||'<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>';
+};
+
+window.addFeaturedPicker = function(){
+  var pk=document.getElementById('fePicker');
+  pk.style.display=pk.style.display==='none'?'block':'none';
+  sb.from('profiles').select('id,name,role,profile_pic').order('name').then(function(r){
+    pk.innerHTML=(r.data||[]).map(function(u){
+      return '<div class="user-pick-item" onclick="addFeatured(\''+u.id+'\')"><div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">'+ini(u.name)+'</div><div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div><div style="font-size:.7rem;color:var(--text-light)">'+esc(u.role)+'</div></div></div>';
+    }).join('');
+  });
+};
+
+window.addFeatured = function(uid){
+  sb.from('profiles').select('*').eq('id',uid).single().then(function(r){
+    var p=r.data||{};
+    return sb.from('featured_people').insert([{user_id:uid,name:p.name,role:p.role,image_url:p.profile_pic||null}]);
+  }).then(function(){
+    alert('✅ Added');
+    loadFeatured().then(refreshLandingEditorLists);
+  });
+};
+
+window.delFeatured = function(id){
+  sb.from('featured_people').delete().eq('id',id).then(function(){
+    loadFeatured().then(refreshLandingEditorLists);
+  });
+};
+
+window.uploadChurchPhotoLanding = function(){
+  var i=document.createElement('input');
+  i.type='file';i.accept='image/*';
+  i.onchange=function(){
+    if(i.files&&i.files[0]) uploadMediaFile(i.files[0]).then(function(url){
+      return sb.from('church_settings').upsert({id:1,church_photo_url:url});
+    }).then(function(){
+      alert('✅ Church photo saved');
+      if(typeof loadChurchBranding === 'function') loadChurchBranding();
+    });
+  };
+  i.click();
+};
+
+window.addServiceRow = function(){
+  var cb=window.churchBrandingData||{};
+  var svcs=(cb.services||[]).slice();
+  svcs.push({
+    day:document.getElementById('svcDay').value,
+    time:document.getElementById('svcTime').value,
+    type:document.getElementById('svcType').value||'Main Service'
+  });
+  sb.from('church_settings').upsert({id:1,services:svcs}).then(function(){
+    alert('✅ Service added');
+    if(typeof loadChurchBranding === 'function') loadChurchBranding().then(refreshLandingEditorLists);
+  });
+};
+
+window.delService = function(i){
+  var cb=window.churchBrandingData||{};
+  var svcs=(cb.services||[]).slice();
+  svcs.splice(i,1);
+  sb.from('church_settings').upsert({id:1,services:svcs}).then(function(){
+    if(typeof loadChurchBranding === 'function') loadChurchBranding().then(refreshLandingEditorLists);
+  });
+};
+
+window.addMinistry = function(){
+  var n=document.getElementById('minName').value.trim();
+  if(!n) return alert('Name required');
+  var story=document.getElementById('minStory').value;
+  var media=window._pm&&window._pm.minMedia;
+  var doIt=function(url){
+    return sb.from('ministries').insert([{name:n,story:story,media_url:url||null}]).then(function(){
+      alert('✅ Ministry added');
+      loadMinistries().then(refreshLandingEditorLists);
+    });
+  };
+  if(media){
+    uploadMediaFile(media).then(function(u){delete window._pm.minMedia;return doIt(u);}).catch(function(){return doIt(null);});
+  } else doIt(null);
+};
+
+window.delMinistry = function(id){
+  sb.from('ministries').delete().eq('id',id).then(function(){
+    loadMinistries().then(refreshLandingEditorLists);
+  });
+};
+
+console.log('✝️ app6.js COMPLETE — Registration + Streak + Service Days + Multiple Pastors all fixed');
