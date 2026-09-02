@@ -10,7 +10,9 @@
 :root{--primary:#4F46E5;--primary-light:#818CF8;--primary-dark:#3730A3;--secondary:#F59E0B;--accent:#10B981;--bg:#F8FAFC;--bg-card:#FFF;--text:#1E293B;--text-light:#64748B;--text-lighter:#94A3B8;--border:#E2E8F0;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 6px -1px rgba(0,0,0,.07);--shadow-lg:0 10px 25px -5px rgba(0,0,0,.08);--shadow-xl:0 20px 40px -10px rgba(79,70,229,.15);--radius:16px;--radius-sm:10px;--radius-xs:6px;--gradient:linear-gradient(135deg,#4F46E5,#7C3AED,#A855F7);--gradient-warm:linear-gradient(135deg,#F59E0B,#EF4444);--gradient-cool:linear-gradient(135deg,#06B6D4,#3B82F6,#8B5CF6);--gradient-green:linear-gradient(135deg,#10B981,#059669);--gradient-heart:linear-gradient(135deg,#EC4899,#F43F5E,#EF4444);--gradient-dept:linear-gradient(135deg,#8B5CF6,#EC4899);--gradient-chat:linear-gradient(135deg,#10B981,#06B6D4);--nav-height:70px;--header-height:60px}
 *{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;-webkit-tap-highlight-color:transparent;min-height:100vh}
 ::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-thumb{background:var(--primary-light);border-radius:3px}
-
+/* Hide role tag on top + Edit Profile button */
+#roleIndicator{display:none!important}
+#profileModal .btn-primary{display:none!important}
 /* ══════════════ PUBLIC LANDING ══════════════ */
 .public-landing{min-height:100vh;background:#fff;display:block}
 .public-landing.hidden{display:none!important}
