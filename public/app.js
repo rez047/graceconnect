@@ -1,1047 +1,373 @@
 // ═══════════════════════════════════════════════════════════════
-// app.js — Real Supabase Read/Write Layer for GraceConnect
-// Your index.html stays UNTOUCHED. This file layers on top.
+// app.js — GraceConnect full data layer (v7)
 // ═══════════════════════════════════════════════════════════════
 (function(){
 "use strict";
+var user=null,profile=null;
+var depts=[],ushirikasData=[],titlesData=[],usersData=[];
+var forumPostsData=[],deptPostsData=[],deptMembersData=[];
+var eventsData=[],causesData=[],officialsData=[],plansData=[];
+var pendingData=[],notifsData=[],preachingsData=[];
+var currentDeptId=null,currentChatUserId=null,chatSub=null;
+var triviaUsed=[],triviaScore=0,triviaTotal=0;
+var currentGameId=null;
 
-// ─── STATE ───
-var user=null, profile=null;
-var depts=[], ushirikasData=[], titlesData=[], usersData=[];
-var forumPostsData=[], deptPostsData=[], deptMembersData=[];
-var eventsData=[], causesData=[], officialsData=[], plansData=[];
-var pendingData=[], notifsData=[], messagesData=[];
-var currentDeptId=null, currentChatUserId=null, chatSub=null;
+// ── CONFIG: free APIs ──
+var BIBLE_API='https://bible-api.com/';
+var WIKI='https://en.wikipedia.org/api/rest_v1/page/summary/';
+// Translation codes for bible-api.com (free). NIV/ESV/NLT fall back to WEB if no API.Bible key.
+var TRANS={NIV:'web',KJV:'kjv',ESV:'web',NLT:'web',Swahili:'swv',WEB:'web',ASV:'asv',DARBY:'darby',DRA:'dra',YLT:'ylt'};
 
-// ─── HELPERS ───
+// ── HELPERS ──
 function esc(s){return s==null?'':String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
-function ini(n){if(!n)return'?';return n.split(' ').map(function(w){return w[0]||'';}).join('').substring(0,2).toUpperCase();}
+function ini(n){if(!n)return'?';return String(n).split(' ').map(function(w){return w[0]||'';}).join('').substring(0,2).toUpperCase();}
 function ago(ts){if(!ts)return'';var s=(Date.now()-new Date(ts).getTime())/1000;if(s<60)return'just now';if(s<3600)return Math.floor(s/60)+'m ago';if(s<86400)return Math.floor(s/3600)+'h ago';return Math.floor(s/86400)+'d ago';}
 function fdate(ts){return ts?new Date(ts).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}):'';}
 function ftime(ts){return ts?new Date(ts).toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'}):'';}
 function isAdmin(){return profile&&(profile.role==='admin'||profile.role==='superadmin');}
-function toast(m){alert(m);} // uses native alert like original file
+function isSuper(){return profile&&profile.role==='superadmin';}
 
-// ─── get inputs from a modal by position ───
-function modalInputs(id){
-  var m=document.getElementById(id);if(!m)return null;
-  return{el:m,inputs:m.querySelectorAll('.form-input'),textareas:m.querySelectorAll('.form-textarea'),selects:m.querySelectorAll('.form-select'),btn:m.querySelector('.btn-block:last-of-type')};
+// ── DYNAMIC CONTAINERS ──
+function dyn(parentId,dynId){var p=document.getElementById(parentId);if(!p)return null;var d=document.getElementById(dynId);if(!d){d=document.createElement('div');d.id=dynId;p.appendChild(d);}return d;}
+function hideStatic(p,sel){var p2=document.getElementById(p);if(!p2)return;p2.querySelectorAll(sel).forEach(function(el){el.style.display='none';});}
+
+// ══════════════════ BIBLE (online) ══════════════════
+function bibleFetch(ref,trans){
+  var code=TRANS[trans]||'web';
+  return fetch(BIBLE_API+encodeURIComponent(ref)+'?translation='+code).then(function(r){return r.json();});
+}
+// Verse of the Day — popular verses rotated by day-of-year
+var POPULAR=[["John 3:16","For God so loved the world..."],["Philippians 4:13","I can do all things through Christ..."],["Psalm 23:1","The LORD is my shepherd..."],["Jeremiah 29:11","For I know the plans I have for you..."],["Romans 8:28","All things work together for good..."],["Isaiah 41:10","Fear not, for I am with you..."],["Psalm 46:1","God is our refuge and strength..."],["Matthew 11:28","Come to me, all who are weary..."],["Proverbs 3:5","Trust in the LORD with all your heart..."],["Joshua 1:9","Be strong and courageous..."]];
+function verseOfTheDay(){
+  var now=new Date();var start=new Date(now.getFullYear(),0,0);
+  var doy=Math.floor((now-start)/86400000);
+  var pick=POPULAR[doy%POPULAR.length];
+  bibleFetch(pick[0],'web').then(function(d){
+    var el=document.querySelector('.greeting-verse');
+    if(el&&d&&d.text){el.innerHTML='"'+esc(d.text.trim())+'" <span>— '+esc(d.reference)+' (Verse of the Day)</span>';}
+  }).catch(function(){var el=document.querySelector('.greeting-verse');if(el)el.innerHTML='"'+pick[1]+'" <span>— '+pick[0]+'</span>';});
 }
 
-// ─── DYNAMIC CONTAINERS ───
-// We inject a <div> inside existing sections to hold real data
-// Static demo content gets hidden
-function dynContainer(parentId, dynId){
-  var p=document.getElementById(parentId);if(!p)return null;
-  var d=document.getElementById(dynId);
-  if(!d){d=document.createElement('div');d.id=dynId;p.appendChild(d);}
-  return d;
-}
-function hideStatic(parentId, selector){
-  var p=document.getElementById(parentId);if(!p)return;
-  p.querySelectorAll(selector).forEach(function(el){el.style.display='none';});
-}
-
-// ═══════════════════════════════
-//  LOADERS (read from Supabase)
-// ═══════════════════════════════
-
-function loadAll(){
-  return Promise.all([
-    loadDepts(),loadUshirikas(),loadTitles(),loadUsers(),
-    loadForumPosts(),loadEvents(),loadCauses(),
-    loadOfficials(),loadPlans(),loadPending(),loadNotifs()
-  ]).then(function(){
-    loadMyDepts();
-    loadChatInbox();
-  }).catch(function(e){console.log('loadAll error:',e);});
-}
-
-function loadPublicData(){
-  return Promise.all([loadDepts(),loadUshirikas(),loadEvents(),loadCauses()]).catch(function(){});
-}
-
-// ── DEPARTMENTS ──
-function loadDepts(){
-  return sb.from('departments').select('*').order('name').then(function(r){
-    depts=r.data||[];renderDepts();renderDeptPicker();
-  });
-}
-
-function renderDepts(){
-  var c=dynContainer('ushirika-departments','dyn-depts');if(!c)return;
-  hideStatic('ushirika-departments','.dept-card');
-  if(!depts.length){c.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8"><i class="fas fa-inbox" style="font-size:2rem;display:block;margin-bottom:10px;opacity:.5"></i>No departments yet. Admins can create one above.</div>';return;}
-  var banners=['','alt1','alt2','alt3','alt4'];
-  var h='<div class="section-title" style="font-size:1.05rem">🏛️ All Church Departments</div>';
-  depts.forEach(function(d,i){
-    var bc=d.color_theme||banners[i%5];
-    h+='<div class="dept-card" onclick="window._gcOpenDept(\''+d.id+'\')">'
-      +'<div class="dept-banner '+bc+'">'
-      +'<div class="dept-icon"><i class="fas '+(d.icon||'fa-users')+'"></i></div>'
-      +'<div><div class="dept-name">'+esc(d.name)+'</div>'
-      +'<div class="dept-desc">'+esc(d.description||'')+'</div></div></div>'
-      +'<div class="dept-body"><div class="dept-stats">'
-      +'<span><i class="fas fa-users"></i> '+(d.member_count||0)+' members</span>'
-      +'</div></div></div>';
-  });
-  c.innerHTML=h;
-}
-
-function renderDeptPicker(){
-  // Update the dept picker modal with real departments
-  var picker=document.querySelector('#deptPickerModal .user-picker');
-  if(!picker||!depts.length)return;
-  var h='';
-  depts.forEach(function(d){
-    h+='<div class="user-pick-item" onclick="selectUser(this);this.dataset.deptId=\''+d.id+'\'">'
-      +'<div class="post-avatar dept" style="width:36px;height:36px;font-size:0.85rem"><i class="fas '+(d.icon||'fa-users')+'"></i></div>'
-      +'<div style="flex:1"><div style="font-weight:600;font-size:0.85rem">'+esc(d.name)+'</div>'
-      +'<div style="font-size:0.68rem;color:var(--text-light)">'+(d.member_count||0)+' members</div></div></div>';
-  });
-  picker.innerHTML=h;
-}
-
-// ── MY DEPARTMENTS ──
-function loadMyDepts(){
-  if(!user)return;
-  sb.from('department_members').select('role, departments(*)').eq('user_id',user.id).then(function(r){
-    renderMyDepts(r.data||[]);
-  });
-}
-
-function renderMyDepts(md){
-  var scroll=document.querySelector('.my-depts-scroll');if(!scroll)return;
-  var count=document.querySelector('.my-depts-count');
-  // Hide existing static minis
-  scroll.querySelectorAll('.my-dept-mini').forEach(function(el){el.style.display='none';});
-  
-  var h='';
-  var alts=['','alt1','alt2','alt3','alt4'];
-  md.forEach(function(m,i){
-    var d=m.departments||{};
-    h+='<div class="my-dept-mini '+((d.color_theme)||alts[i%5])+'" onclick="window._gcOpenDept(\''+d.id+'\')" style="display:flex!important;flex-direction:column">'
-      +'<div class="my-dept-mini-icon"><i class="fas '+(d.icon||'fa-users')+'"></i></div>'
-      +'<div class="my-dept-mini-name">'+esc(d.name||'Dept')+'</div>'
-      +'<div class="my-dept-mini-role"><span class="my-dept-mini-role-badge">'+esc(m.role||'member')+'</span></div>'
-      +'</div>';
-  });
-  // Keep the "Join Another" card
-  var joinCard=scroll.querySelector('.my-dept-join-more');
-  // Insert before joinCard
-  if(joinCard){
-    joinCard.insertAdjacentHTML('beforebegin',h);
-  }else{
-    scroll.insertAdjacentHTML('beforeend',h);
-  }
-  if(count)count.textContent=(md.length)+' serving';
-  
-  // Update profile modal departments
-  var profileChips=document.querySelector('#profileModal .chip-dept');
-  if(profileChips){
-    var pc=profileChips.parentElement;
-    pc.innerHTML=md.map(function(m){var d=m.departments||{};return '<span class="chip chip-dept"><i class="fas '+(d.icon||'fa-users')+'"></i> '+esc(d.name)+'</span>';}).join('');
-  }
-}
-
-// ── USHIRIKAS ──
-function loadUshirikas(){
-  return sb.from('ushirikas').select('*').order('name').then(function(r){
-    ushirikasData=r.data||[];renderUshirikas();renderUshirikaSelect();
-  });
-}
-
-function renderUshirikas(){
-  var c=dynContainer('ushirika-groups','dyn-ushirikas');if(!c)return;
-  hideStatic('ushirika-groups','.ushirika-card');
-  if(!ushirikasData.length){c.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">No ushirikas yet.</div>';return;}
-  var h='';
-  ushirikasData.forEach(function(u){
-    h+='<div class="ushirika-card">'
-      +'<div class="ushirika-icon"><i class="fas fa-church"></i></div>'
-      +'<div class="ushirika-info"><div class="ushirika-name">'+esc(u.name)+'</div>'
-      +'<div class="ushirika-detail">📍 '+esc(u.location||'N/A')+' • '+esc(u.meeting_day||'')+'</div>'
-      +'<div class="ushirika-members">👥 '+esc(u.venue||'')+'</div></div></div>';
-  });
-  c.innerHTML=h;
-}
-
-function renderUshirikaSelect(){
-  var sel=document.getElementById('ob-ushirika');if(!sel)return;
-  var h='<option value="">-- Select Ushirika --</option>';
-  ushirikasData.forEach(function(u){
-    h+='<option value="'+u.id+'">'+esc(u.name)+'</option>';
-  });
-  sel.innerHTML=h;
-}
-
-// ── TITLES ──
-function loadTitles(){
-  return sb.from('titles').select('*').order('name').then(function(r){
-    titlesData=r.data||[];renderTitles();
-  });
-}
-
-function renderTitles(){
-  var list=document.getElementById('titleList');if(!list)return;
-  // Remove existing static items
-  list.querySelectorAll('.title-item').forEach(function(el){el.remove();});
-  if(!titlesData.length)return;
-  var h='';
-  titlesData.forEach(function(t){
-    h+='<div class="title-item">'
-      +'<div class="title-item-icon"><i class="fas fa-tag"></i></div>'
-      +'<div class="title-item-name">'+esc(t.name)+'</div>'
-      +'<span class="chip chip-purple">'+esc(t.category||'')+'</span>'
-      +'<button class="title-item-delete" onclick="window._gcDeleteTitle(\''+t.id+'\')"><i class="fas fa-times"></i></button>'
-      +'</div>';
-  });
-  list.insertAdjacentHTML('beforeend',h);
-}
-
-// ── USERS ──
-function loadUsers(){
-  return sb.from('profiles').select('id,name,role,email,phone').order('name').then(function(r){
-    usersData=r.data||[];renderUserPickers();renderLeaders();
-  });
-}
-
-function renderUserPickers(){
-  // Update all user pickers in modals with real users
-  var pickers=['#addOfficialModal .user-picker','#addLeaderModal .user-picker','#addDeptMemberModal .user-picker','#newChatModal .user-picker'];
-  pickers.forEach(function(sel){
-    var p=document.querySelector(sel);if(!p)return;
-    var h='';
-    usersData.forEach(function(u){
-      if(user&&u.id===user.id)return;
-      h+='<div class="user-pick-item" onclick="selectUser(this);this.dataset.userId=\''+u.id+'\'">'
-        +'<div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem">'+ini(u.name)+'</div>'
-        +'<div style="flex:1"><div style="font-weight:600;font-size:0.82rem">'+esc(u.name)+'</div>'
-        +'<div style="font-size:0.68rem;color:var(--text-light)">'+esc(u.role||'member')+'</div></div></div>';
-    });
-    p.innerHTML=h||'<div style="text-align:center;padding:15px;color:#94A3B8">No other members yet.</div>';
-  });
-  
-  // Update official assign-to dropdown
-  var ot=document.querySelector('#addOfficialModal .form-select');
-  if(ot&&(ushirikasData.length||depts.length)){
-    // Find the second select (assign to)
-    var sels=document.querySelectorAll('#addOfficialModal .form-select');
-    if(sels.length>=2){
-      var h='<optgroup label="Ushirikas">';
-      ushirikasData.forEach(function(u){h+='<option value="ush_'+u.id+'">'+esc(u.name)+'</option>';});
-      h+='</optgroup><optgroup label="Departments">';
-      depts.forEach(function(d){h+='<option value="dept_'+d.id+'">'+esc(d.name)+'</option>';});
-      h+='</optgroup>';
-      sels[1].innerHTML=h;
-    }
-    // Third select = title
-    if(sels.length>=3&&titlesData.length){
-      var th='';titlesData.forEach(function(t){th+='<option>'+esc(t.name)+'</option>';});
-      sels[2].innerHTML=th;
-    }
-  }
-}
-
-function renderLeaders(){
-  // Replace the static leaders in discover section
-  var discMain=document.getElementById('discover-main');if(!discMain)return;
-  var c=dynContainer('discover-main','dyn-leaders');if(!c)return;
-  // Hide static official-cards
-  discMain.querySelectorAll('.official-card').forEach(function(el){el.style.display='none';});
-  
-  var leaders=usersData.filter(function(u){return u.role==='admin'||u.role==='superadmin';});
-  if(!leaders.length){c.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">No leaders added yet.</div>';return;}
-  var h='';
-  leaders.forEach(function(u){
-    h+='<div class="official-card">'
-      +'<div class="official-avatar">'+ini(u.name)+'</div>'
-      +'<div style="flex:1"><div class="official-name">'+esc(u.name)+'</div>'
-      +'<div class="official-role">'+esc(u.role)+'</div>'
-      +'<div class="official-contact">📞 '+esc(u.phone||'N/A')+'</div></div>'
-      +'<button class="btn btn-sm btn-chat" onclick="window._gcOpenChat(\''+u.id+'\')"><i class="fas fa-comment"></i></button>'
-      +'</div>';
-  });
-  c.innerHTML='<div class="section-title" style="font-size:1.05rem">👨‍ Servants of God</div>'+h;
-}
-
-// ── FORUM POSTS ──
-function loadForumPosts(){
-  return sb.from('posts').select('*, profiles(name,role)').is('department_id',null).is('ushirika_id',null).order('created_at',{ascending:false}).limit(50).then(function(r){
-    forumPostsData=r.data||[];renderForumPosts();
-  });
-}
-
-function renderForumPosts(){
-  var c=dynContainer('ushirika-forum','dyn-forum');if(!c)return;
-  hideStatic('ushirika-forum','.post,.card:not(:first-child)');
-  if(!forumPostsData.length){c.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8"><i class="fas fa-comments" style="font-size:2rem;display:block;margin-bottom:10px;opacity:.5"></i>No posts yet. Be the first!</div>';return;}
-  c.innerHTML=forumPostsData.map(function(p){return postHTML(p,false);}).join('');
-}
-
-function postHTML(p,isDept){
-  var pr=p.profiles||{};
-  var mine=user&&p.author_id===user.id;
-  var liked=user&&p.liked_by&&p.liked_by.indexOf(user.id)>-1;
-  var canDel=mine||isAdmin();
-  return '<div class="post">'
-    +'<div class="post-header">'
-    +'<div class="post-avatar'+(pr.role==='admin'?' admin':'')+'">'+ini(pr.name)+'</div>'
-    +'<div><div class="post-name">'+esc(pr.name||'Unknown')+'</div>'
-    +'<div class="post-role">'+((pr.role==='admin'||pr.role==='superadmin')?'🟢 '+pr.role:'Member')+'</div></div>'
-    +'<div class="post-time">'+ago(p.created_at)+'</div>'
-    +(canDel?'<button class="post-delete" onclick="window._gcDeletePost(\''+p.id+'\','+isDept+')"><i class="fas fa-trash"></i></button>':'')
-    +'</div>'
-    +'<div class="post-body">'+esc(p.content||'')+'</div>'
-    +(p.media_urls&&p.media_urls.length?'<div class="post-media"><img src="'+p.media_urls[0]+'" style="max-width:100%;border-radius:8px"></div>':'')
-    +'<div class="post-actions">'
-    +'<button class="post-action'+(liked?' liked':'')+'" onclick="window._gcLike(\''+p.id+'\','+isDept+')"><i class="fas fa-heart"></i> '+(p.likes||0)+'</button>'
-    +'</div></div>';
-}
-
-// ── DEPT POSTS & MEMBERS ──
-function loadDeptPosts(id){
-  return sb.from('posts').select('*, profiles(name,role)').eq('department_id',id).order('created_at',{ascending:false}).then(function(r){
-    deptPostsData=r.data||[];renderDeptPosts();
-  });
-}
-
-function renderDeptPosts(){
-  var c=document.getElementById('mainDept-feed');if(!c)return;
-  var dynDiv=dynContainer('mainDept-feed','dyn-dept-posts');if(!dynDiv)return;
-  // Hide static posts
-  c.querySelectorAll('.post').forEach(function(el){el.style.display='none';});
-  if(!deptPostsData.length){dynDiv.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8">No posts yet.</div>';return;}
-  dynDiv.innerHTML=deptPostsData.map(function(p){return postHTML(p,true);}).join('');
-}
-
-function loadDeptMembers(id){
-  return sb.from('department_members').select('*, profiles(name,email,role)').eq('department_id',id).order('role').then(function(r){
-    deptMembersData=r.data||[];renderDeptMembers();renderDeptLeaders();
-  });
-}
-
-function renderDeptMembers(){
-  var c=document.getElementById('mainDept-members');if(!c)return;
-  var dynDiv=dynContainer('mainDept-members','dyn-dept-members');if(!dynDiv)return;
-  c.querySelectorAll('.member-item,.official-card').forEach(function(el){el.style.display='none';});
-  if(!deptMembersData.length){dynDiv.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">No members yet.</div>';return;}
-  var h='';
-  deptMembersData.forEach(function(m){
-    var p=m.profiles||{};
-    h+='<div class="member-item" style="display:flex!important">'
-      +'<div class="official-avatar">'+ini(p.name)+'</div>'
-      +'<div style="flex:1"><div style="font-weight:700;font-size:.85rem">'+esc(p.name||'Unknown')+'</div>'
-      +'<div><span class="dept-role-badge '+m.role+'">'+esc(m.role)+'</span></div></div>'
-      +'<button class="btn btn-sm btn-chat" onclick="window._gcOpenChat(\''+m.user_id+'\')"><i class="fas fa-comment"></i></button>'
-      +'</div>';
-  });
-  dynDiv.innerHTML=h;
-}
-
-function renderDeptLeaders(){
-  var c=document.getElementById('mainDept-roles');if(!c)return;
-  var dynDiv=dynContainer('mainDept-roles','dyn-dept-leaders');if(!dynDiv)return;
-  c.querySelectorAll('.member-item,.official-card').forEach(function(el){el.style.display='none';});
-  var leaders=deptMembersData.filter(function(m){return['leader','chairman','secretary','treasurer'].indexOf(m.role)>-1;});
-  if(!leaders.length){dynDiv.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">No leaders assigned yet.</div>';return;}
-  var h='';
-  leaders.forEach(function(m){
-    var p=m.profiles||{};
-    h+='<div class="member-item" style="display:flex!important">'
-      +'<div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div>'
-      +'<div style="flex:1"><div style="font-weight:700;font-size:.85rem">'+esc(p.name)+'</div></div>'
-      +'<span class="dept-role-badge '+m.role+'">'+esc(m.role)+'</span>'
-      +'</div>';
-  });
-  dynDiv.innerHTML=h;
-}
-
-// ── EVENTS ──
-function loadEvents(){
-  return sb.from('events').select('*').order('start_date',{ascending:false}).then(function(r){
-    eventsData=r.data||[];renderEvents();
-  });
-}
-
-function renderEvents(){
-  var groups={upcoming:[],ongoing:[],completed:[]};
-  eventsData.forEach(function(e){(groups[e.status]||groups.upcoming).push(e);});
-  ['upcoming','ongoing','completed'].forEach(function(s){
-    var c=document.getElementById('event-'+s);if(!c)return;
-    var dynDiv=dynContainer('event-'+s,'dyn-events-'+s);if(!dynDiv)return;
-    c.querySelectorAll('.event-card').forEach(function(el){el.style.display='none';});
-    var L=groups[s];
-    if(!L.length){dynDiv.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8"><i class="fas fa-calendar" style="font-size:2rem;display:block;margin-bottom:10px;opacity:.5"></i>No '+s+' events.</div>';return;}
-    var h='';
-    L.forEach(function(e){
-      h+='<div class="event-card">'
-        +'<div class="event-banner"><i class="fas fa-calendar" style="font-size:2rem"></i>'
-        +'<span class="event-status status-'+s+'">'+s.charAt(0).toUpperCase()+s.slice(1)+'</span></div>'
-        +'<div class="event-info"><div class="event-title">'+esc(e.title)+'</div>'
-        +'<div class="event-date"><i class="far fa-calendar"></i> '+fdate(e.start_date)+(e.end_date?' → '+fdate(e.end_date):'')+'</div>'
-        +(e.location?'<div class="event-date"><i class="fas fa-map-marker-alt"></i> '+esc(e.location)+'</div>':'')
-        +(e.description?'<div style="font-size:.8rem;color:var(--text-light);margin-top:6px">'+esc(e.description)+'</div>':'')
-        +'</div></div>';
-    });
-    dynDiv.innerHTML=h;
-  });
-}
-
-// ── GIVING CAUSES ──
-function loadCauses(){
-  return sb.from('giving_causes').select('*').order('created_at',{ascending:false}).then(function(r){
-    causesData=r.data||[];renderCauses();
-  });
-}
-
-function renderCauses(){
-  var givSec=document.getElementById('section-giving');if(!givSec)return;
-  var c=dynContainer('section-giving','dyn-causes');if(!c)return;
-  givSec.querySelectorAll('.giving-cause,.card-green').forEach(function(el){el.style.display='none';});
-  if(!causesData.length){c.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8"><i class="fas fa-hand-holding-heart" style="font-size:2rem;display:block;margin-bottom:10px;opacity:.5"></i>No causes yet.</div>';return;}
-  var h='';
-  causesData.forEach(function(g){
-    var pct=g.goal_amount>0?Math.min(100,Math.round((g.raised_amount/g.goal_amount)*100)):0;
-    h+='<div class="card" style="margin-bottom:12px">'
-      +'<div style="display:flex;justify-content:space-between;margin-bottom:8px"><div><div class="card-title">💝 '+esc(g.title)+'</div>'
-      +'<div class="card-subtitle">'+esc(g.description||'')+'</div></div>'
-      +'<span class="chip chip-green">'+esc(g.status||'active')+'</span></div>'
-      +'<div class="giving-progress"><div class="giving-progress-bar" style="width:'+pct+'%"></div></div>'
-      +'<div class="giving-amounts"><span class="giving-raised">KES '+(g.raised_amount||0).toLocaleString()+'</span>'
-      +'<span class="giving-goal">Goal: KES '+(g.goal_amount||0).toLocaleString()+'</span></div>'
-      +'<button class="btn btn-accent btn-block" style="margin-top:10px" onclick="window._gcGive(\''+g.id+'\',\''+esc(g.title)+'\')"><i class="fas fa-hand-holding-heart"></i> Give Now</button>'
-      +'</div>';
-  });
-  c.innerHTML=h;
-}
-
-// ── OFFICIALS ──
-function loadOfficials(){
-  return sb.from('ushirika_officials').select('*, profiles(name,phone,email), ushirikas(name)').then(function(r){
-    officialsData=r.data||[];renderOfficials();
-  });
-}
-
-function renderOfficials(){
-  var c=dynContainer('ushirika-groups','dyn-officials');if(!c)return;
-  // Hide static officials
-  var grp=document.getElementById('ushirika-groups');
-  if(grp)grp.querySelectorAll('.official-card').forEach(function(el){el.style.display='none';});
-  if(!officialsData.length)return;
-  var h='<div class="section-title" style="font-size:1.05rem;margin-top:18px">👔 Ushirika Officials</div>';
-  officialsData.forEach(function(o){
-    var p=o.profiles||{};
-    h+='<div class="official-card">'
-      +'<div class="official-avatar">'+ini(p.name)+'</div>'
-      +'<div style="flex:1"><div class="official-name">'+esc(p.name||'Unknown')+'</div>'
-      +'<div class="official-role">'+esc(o.title)+' — '+esc((o.ushirikas||{}).name||'')+'</div>'
-      +'<div class="official-contact">📞 '+esc(p.phone||'N/A')+'</div></div></div>';
-  });
-  c.innerHTML=h;
-}
-
-// ── PLANS ──
-function loadPlans(){
-  return sb.from('plans').select('*').order('created_at',{ascending:false}).then(function(r){
-    plansData=r.data||[];renderPlans();
-  });
-}
-
-function renderPlans(){
-  var c=dynContainer('ushirika-plans','dyn-plans');if(!c)return;
-  hideStatic('ushirika-plans','.card');
-  if(!plansData.length){c.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8">No plans yet.</div>';return;}
-  var h='';
-  plansData.forEach(function(p){
-    h+='<div class="card" style="border-left:4px solid var(--accent)">'
-      +'<span class="chip chip-green">'+esc(p.plan_type||'personal')+'</span>'
-      +'<div style="font-weight:700;margin-top:6px">'+esc(p.title)+'</div>'
-      +(p.meeting_date?'<div style="font-size:.75rem;color:var(--text-light);margin-top:4px">'+fdate(p.meeting_date)+'</div>':'')
-      +'</div>';
-  });
-  c.innerHTML=h;
-}
-
-// ── PENDING REQUESTS ──
-function loadPending(){
-  return sb.from('pending_requests').select('*').eq('status','pending').order('created_at',{ascending:false}).then(function(r){
-    pendingData=r.data||[];renderPending();
-  });
-}
-
-function renderPending(){
-  var panel=document.getElementById('adminPendingRequests');if(!panel)return;
-  var c=dynContainer('adminPendingRequests','dyn-pending');if(!c)return;
-  panel.querySelectorAll('.request-card').forEach(function(el){el.style.display='none';});
-  if(!pendingData.length){c.innerHTML='<div style="font-size:.85rem;color:#94A3B8;padding:10px">No pending requests</div>';return;}
-  var h='';
-  pendingData.forEach(function(r){
-    h+='<div class="request-card">'
-      +'<div class="request-header">'
-      +'<div class="post-avatar" style="width:36px;height:36px;font-size:.75rem">'+ini(r.user_name||'U')+'</div>'
-      +'<div style="flex:1"><div style="font-weight:700">'+esc(r.user_name||'User')+'</div>'
-      +'<div style="font-size:.72rem;color:var(--text-light)">'+esc(r.type)+': <b>'+esc(r.target_name||'')+'</b></div></div>'
-      +'<span class="request-badge">Pending</span></div>'
-      +'<div class="request-actions">'
-      +'<button class="btn btn-accent btn-sm" onclick="window._gcApprove(\''+r.id+'\')"><i class="fas fa-check"></i> Approve</button>'
-      +'<button class="btn btn-danger btn-sm" onclick="window._gcDecline(\''+r.id+'\')"><i class="fas fa-times"></i> Decline</button>'
-      +'</div></div>';
-  });
-  c.innerHTML=h;
-}
-
-// ── NOTIFICATIONS ──
-function loadNotifs(){
-  if(!user)return Promise.resolve();
-  return sb.from('notifications').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30).then(function(r){
-    notifsData=r.data||[];
-    var badge=document.getElementById('notifBadge');
-    if(badge){
-      var unread=notifsData.filter(function(n){return!n.read;}).length;
-      badge.textContent=unread;badge.style.display=unread?'flex':'none';
-    }
-  });
-}
-
-// ── CHAT ──
-function loadChatInbox(){
-  if(!user)return;
-  sb.from('messages').select('*').or('sender_id.eq.'+user.id+',receiver_id.eq.'+user.id).order('created_at',{ascending:false}).then(function(r){
-    var msgs=r.data||[];
-    var map={};
-    msgs.forEach(function(m){var o=(m.sender_id===user.id)?m.receiver_id:m.sender_id;if(!map[o])map[o]=m;});
-    var ids=Object.keys(map);if(!ids.length)return;
-    sb.from('profiles').select('id,name,role').in('id',ids).then(function(r2){
-      var us=r2.data||[];
-      var chatDiv=dynContainer('discover-main','dyn-chat-inbox');
-      if(!chatDiv)return;
-      // Hide static chat list
-      var discMain=document.getElementById('discover-main');
-      if(discMain)discMain.querySelectorAll('.chat-list-item').forEach(function(el){el.style.display='none';});
-      
-      var h='<div class="section-title" style="font-size:1.1rem">💬 Messages</div><div class="card"><div class="chat-list">';
-      us.forEach(function(u){
-        var l=map[u.id];var me=l.sender_id===user.id;
-        h+='<div class="chat-list-item" onclick="window._gcOpenChat(\''+u.id+'\')" style="display:flex!important">'
-          +'<div class="chat-list-avatar">'+ini(u.name)+'</div>'
-          +'<div class="chat-list-info"><div class="chat-list-name">'+esc(u.name)+'</div>'
-          +'<div class="chat-list-preview">'+esc((me?'You: ':'')+((l.content)||'📎'))+'</div></div>'
-          +'<div class="chat-list-meta">'+ago(l.created_at)+'</div></div>';
-      });
-      h+='</div></div>';
-      chatDiv.innerHTML=h;
-    });
-  });
-}
-
-function loadChatMessages(){
-  if(!user||!currentChatUserId)return;
-  var c=document.getElementById('chatMessages');if(!c)return;
-  sb.from('messages').select('*').or('and(sender_id.eq.'+user.id+',receiver_id.eq.'+currentChatUserId+'),and(sender_id.eq.'+currentChatUserId+',receiver_id.eq.'+user.id+')').order('created_at',{ascending:true}).then(function(r){
-    var msgs=r.data||[];
-    if(!msgs.length){c.innerHTML='<div style="text-align:center;padding:40px;color:#94A3B8">Say hi! 👋</div>';return;}
-    var h='';
-    msgs.forEach(function(m){
-      var mine=m.sender_id===user.id;
-      h+='<div class="chat-message'+(mine?' sent':'')+'">'
-        +'<div class="chat-message-avatar">'+ini(mine?(profile?profile.name:'Me'):'')+'</div>'
-        +'<div><div class="chat-message-bubble">'
-        +'<div class="chat-message-text">'+esc(m.content||'')+'</div>'
-        +(m.media_url?'<img src="'+m.media_url+'" style="max-width:100%;border-radius:8px;margin-top:6px">':'')
-        +'</div><div class="chat-message-time">'+ftime(m.created_at)+'</div></div></div>';
-    });
+// Emotional → references, fetched ONLINE
+var FEEL_REFS={grief:["Matthew 5:4","Psalm 34:18","Psalm 147:3"],joy:["Nehemiah 8:10","Psalm 16:11","John 15:11"],anxiety:["Philippians 4:6","1 Peter 5:7","Matthew 6:34"],loneliness:["Hebrews 13:5","Deuteronomy 31:6","Psalm 27:10"],fear:["2 Timothy 1:7","Isaiah 41:10","Psalm 56:3"],doubt:["Mark 9:24","Hebrews 11:1","Matthew 7:7"]};
+var FEEL_ENC={grief:"God sees your tears and promises comfort.",joy:"Let this joy overflow and strengthen you.",anxiety:"Trade your worry for worship.",loneliness:"God is always with you.",fear:"Fear is a liar; you are equipped with power and love.",doubt:"Honest doubt brought to Jesus grows deeper faith."};
+function retrieveVersesOnline(){
+  var input=(document.getElementById('emotionalInput').value||'').trim().toLowerCase();
+  var c=document.getElementById('verseResults');if(!c)return;
+  if(!input){c.innerHTML='';return;}
+  var key=null;for(var k in FEEL_REFS){if(input.indexOf(k)>-1){key=k;break;}}
+  var refs=key?FEEL_REFS[key]:["Jeremiah 29:11"];
+  var enc=key?FEEL_ENC[key]:"God has a plan and a hope for you.";
+  var promises=refs.map(function(r){return bibleFetch(r,'web').catch(function(){return null;});});
+  Promise.all(promises).then(function(results){
+    var h='<div class="verse-result"><div class="verse-result-header"><i class="fas fa-heart"></i> God\'s Word for "'+esc(input)+'"</div>';
+    results.forEach(function(d){if(d&&d.text){h+='<div class="verse-item"><div class="verse-text">"'+esc(d.text.trim())+'"</div><div class="verse-ref">— '+esc(d.reference)+'</div></div>';}});
+    h+='<div class="verse-encourage">💝 '+esc(enc)+'</div></div>';
     c.innerHTML=h;
-    c.scrollTop=c.scrollHeight;
   });
 }
 
-// ═══════════════════════════════════
-//  ACTIONS (write to Supabase)
-// ═══════════════════════════════════
+// Bible Reader: load a chapter
+function loadBibleChapter(){
+  var trans=(document.getElementById('readerTrans')||{}).value||'KJV';
+  var ref=(document.getElementById('readerRef')||{}).value||'Genesis 1';
+  var out=document.getElementById('readerOut');if(!out)return;
+  out.innerHTML='<div style="color:#94A3B8">Loading...</div>';
+  bibleFetch(ref,trans).then(function(d){
+    if(!d||!d.verses){out.innerHTML='<div style="color:#991B1B">Not found. Try e.g. "John 3" or "Psalm 23".</div>';return;}
+    var h='<div style="font-weight:700;color:#92400E;margin-bottom:8px">'+esc(d.reference)+' ('+trans+')</div>';
+    d.verses.forEach(function(v){h+='<div style="margin-bottom:6px"><sup>'+v.verse+'</sup> '+esc(v.text)+'</div>';});
+    out.innerHTML=h;
+  }).catch(function(){out.innerHTML='<div style="color:#991B1B">Could not load. Check connection.</div>';});
+}
+// Search verse by reference or phrase
+function searchBible(){
+  var q=(document.getElementById('readerSearch')||{}).value||'';if(!q)return;
+  var out=document.getElementById('readerOut');if(!out)return;
+  out.innerHTML='<div style="color:#94A3B8">Searching...</div>';
+  bibleFetch(q,'web').then(function(d){
+    if(d&&d.verses){var h='';d.verses.forEach(function(v){h+='<div style="margin-bottom:6px"><sup>'+v.verse+'</sup> '+esc(v.text)+'</div>';});out.innerHTML='<div style="font-weight:700;color:#92400E;margin-bottom:8px">'+esc(d.reference)+'</div>'+h;}
+    else{out.innerHTML='<div style="color:#991B1B">No match. Try a reference like "John 3:16" or a book+chapter like "Psalm 23".</div>';}
+  }).catch(function(){out.innerHTML='<div style="color:#991B1B">Search failed.</div>';});
+}
 
-// ── OPEN DEPARTMENT (override existing) ──
-window._gcOpenDept=function(id){
-  var d=null;for(var i=0;i<depts.length;i++){if(depts[i].id===id){d=depts[i];break;}}
-  if(!d)return;
-  currentDeptId=id;
-  document.getElementById('mainDeptName').textContent=d.name;
-  document.getElementById('mainDeptDesc').textContent=d.description||'';
-  document.getElementById('mainDeptMembers').textContent=(d.member_count||0)+' members';
-  document.getElementById('mainDeptIcon').innerHTML='<i class="fas '+(d.icon||'fa-users')+'"></i>';
-  showSubPage('home-mainDept');
-  loadDeptPosts(id);loadDeptMembers(id);
-};
-// Also keep original working for static cards
-var origOpenDept=window.openMainDepartment;
-window.openMainDepartment=function(key){
-  // If it's a UUID, use new function
-  if(key&&key.length>10){window._gcOpenDept(key);}
-  else if(origOpenDept){origOpenDept(key);}
-};
+// Bible Characters — Wikipedia (online, with image)
+function loadCharacter(){
+  var q=(document.getElementById('charSearch')||{}).value||'';if(!q)return;
+  var out=document.getElementById('charOut');if(!out)return;
+  out.innerHTML='<div style="color:#94A3B8">Loading...</div>';
+  fetch(WIKI+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(d){
+    if(!d||!d.extract){out.innerHTML='<div style="color:#991B1B">Character not found.</div>';return;}
+    var img=d.thumbnail?('<img src="'+d.thumbnail.source+'" style="max-width:100%;border-radius:8px;margin-bottom:8px">'):'';
+    out.innerHTML='<div style="font-weight:800;font-size:1rem;margin-bottom:6px">'+esc(d.title)+'</div>'+img+'<div style="font-size:.85rem;line-height:1.6">'+esc(d.extract)+'</div>'+(d.content_urls?'<a href="'+d.content_urls.desktop.page+'" target="_blank" style="color:var(--primary);font-size:.8rem">Read more →</a>':'');
+  }).catch(function(){out.innerHTML='<div style="color:#991B1B">Could not load.</div>';});
+}
 
-// ── OPEN CHAT (override) ──
-window._gcOpenChat=function(id){
-  if(!user||id===user.id)return;
-  currentChatUserId=id;
-  var u=null;for(var i=0;i<usersData.length;i++){if(usersData[i].id===id){u=usersData[i];break;}}
-  if(!u)return;
-  document.getElementById('chatAvatar').textContent=ini(u.name);
-  document.getElementById('chatName').textContent=u.name;
-  document.getElementById('chatStatus').textContent=esc(u.role||'Member')+' • Online';
-  showSubPage('discover-chat');
-  closeModalDirect();
-  loadChatMessages();
-  // Realtime subscription
-  if(chatSub&&sb.removeChannel){sb.removeChannel(chatSub);chatSub=null;}
-  if(sb.channel){
-    chatSub=sb.channel('chat-'+user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(){
-      loadChatMessages();loadChatInbox();
-    }).subscribe();
-  }
-};
+// ══════════════════ TRIVIA (random, non-repeating) + MULTIPLAYER ══════════════════
+var BANK=[
+ {q:"Who built the ark?",a:["Abraham","Noah","Moses","David"],c:1},
+ {q:"How many days did God take to create the world?",a:["5","6","7","4"],c:1},
+ {q:"Who defeated Goliath?",a:["Saul","Jonathan","David","Samuel"],c:2},
+ {q:"Who was thrown into the lions' den?",a:["Daniel","Joseph","Jeremiah","Elijah"],c:0},
+ {q:"Who led Israel out of Egypt?",a:["Aaron","Moses","Joshua","Joseph"],c:1},
+ {q:"Who was the first king of Israel?",a:["David","Saul","Solomon","Samuel"],c:1},
+ {q:"Who denied Jesus three times?",a:["Judas","Thomas","Peter","John"],c:2},
+ {q:"Who was swallowed by a great fish?",a:["Jonah","Nahum","Micah","Amos"],c:0},
+ {q:"Who wrote most of the Psalms?",a:["Moses","David","Solomon","Asaph"],c:1},
+ {q:"Who was the strongest man?",a:["Gideon","Samson","Jephthah","Othniel"],c:1},
+ {q:"Who was the first martyr?",a:["Peter","Stephen","Paul","James"],c:1},
+ {q:"Who interpreted Pharaoh's dream?",a:["Moses","Joseph","Daniel","Aaron"],c:1},
+ {q:"Who was Ruth's husband's mother?",a:["Naomi","Orpah","Boaz","Miriam"],c:0},
+ {q:"Who baptized Jesus?",a:["Peter","John the Baptist","James","Andrew"],c:1},
+ {q:"Who was the wisest man?",a:["David","Solomon","Moses","Daniel"],c:1},
+ {q:"Who was taken to heaven in a whirlwind?",a:["Elisha","Elijah","Enoch","Moses"],c:1},
+ {q:"Who was the queen who saved the Jews?",a:["Ruth","Esther","Deborah","Sarah"],c:1},
+ {q:"Who was the first disciple called?",a:["Peter","Andrew","John","James"],c:1},
+ {q:"Who was the tax collector who became a disciple?",a:["Matthew","Mark","Luke","John"],c:0},
+ {q:"Who was the prophet fed by ravens?",a:["Elisha","Elijah","Isaiah","Jeremiah"],c:1}
+];
+function nextTriviaQuestion(){
+  if(triviaUsed.length>=BANK.length)triviaUsed=[]; // reset after all used (never repeats within a cycle)
+  var idx;do{idx=Math.floor(Math.random()*BANK.length);}while(triviaUsed.indexOf(idx)>-1);
+  triviaUsed.push(idx);return BANK[idx];
+}
+function answerTrivia(el,correctIdx,chosenIdx){
+  var btns=el.parentElement.querySelectorAll('button');
+  btns.forEach(function(b,i){b.disabled=true;b.style.opacity=(i===correctIdx)?'1':'0.5';if(i===correctIdx){b.style.background='var(--gradient-green)';b.style.color='white';}});
+  if(chosenIdx!==correctIdx){el.style.background='#FEE2E2';el.style.color='#991B1B';}
+  triviaTotal++;if(chosenIdx===correctIdx)triviaScore++;
+  var s=document.getElementById('triviaScore');if(s)s.textContent='Score: '+triviaScore+'/'+triviaTotal;
+}
+function loadRandomTrivia(){
+  var q=nextTriviaQuestion();
+  var box=document.getElementById('triviaBox');if(!box)return;
+  var h='<div style="font-weight:700;margin-bottom:12px">'+esc(q.q)+'</div><div style="display:flex;flex-direction:column;gap:6px">';
+  q.a.forEach(function(a,i){h+='<button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="window._triviaClick(this,'+i+')">'+String.fromCharCode(65+i)+') '+esc(a)+'</button>';});
+  h+='</div>';box.innerHTML=h;
+  window._curQ=q;
+}
+window._triviaClick=function(el,i){var q=window._curQ;answerTrivia(el,q.c,i);};
 
-// ── SEND CHAT MESSAGE ──
-window.sendChatMessage=function(){
-  var input=document.getElementById('chatInput');
-  var content=input.value.trim();if(!content||!user||!currentChatUserId)return;
-  sb.from('messages').insert([{sender_id:user.id,receiver_id:currentChatUserId,content:content}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    input.value='';loadChatMessages();
+// Multiplayer (Supabase)
+function createTriviaGame(){
+  if(!user)return alert('Log in first');
+  var code=Math.random().toString(36).substring(2,8).toUpperCase();
+  sb.from('trivia_games').insert([{code:code,host_id:user.id,players:[user.id],status:'open'}]).then(function(r){
+    if(r.error)return alert(r.error.message);
+    currentGameId=r.data[0].id;
+    document.getElementById('myGameInfo').innerHTML='Game code: <b>'+code+'</b> — share it!';
   });
-};
-
-// ── POST ACTIONS ──
-window._gcDeletePost=function(id,isDept){
-  if(!confirm('Delete this post?'))return;
-  sb.from('posts').delete().eq('id',id).then(function(){
-    if(isDept)loadDeptPosts(currentDeptId);else loadForumPosts();
+}
+function joinTriviaGame(){
+  if(!user)return alert('Log in first');
+  var code=(document.getElementById('joinCode').value||'').trim().toUpperCase();
+  sb.from('trivia_games').select('*').eq('code',code).single().then(function(r){
+    if(r.error||!r.data)return alert('Game not found');
+    var g=r.data;var players=g.players||[];if(players.indexOf(user.id)<0)players.push(user.id);
+    sb.from('trivia_games').update({players:players}).eq('id',g.id).then(function(){
+      currentGameId=g.id;alert('Joined game '+code+'!');closeModalDirect();
+    });
   });
-};
+}
+function submitMultiplayerAnswer(qIdx,chosen){
+  if(!currentGameId||!user)return;
+  sb.from('trivia_answers').insert([{game_id:currentGameId,user_id:user.id,question:qIdx,chosen:chosen,correct:BANK[qIdx].c}]);
+}
 
-window._gcLike=function(id,isDept){
-  if(!user)return;
-  var list=isDept?deptPostsData:forumPostsData;
-  var p=null;for(var i=0;i<list.length;i++){if(list[i].id===id){p=list[i];break;}}
-  if(!p)return;
-  var liked=p.liked_by&&p.liked_by.indexOf(user.id)>-1;
-  var nb=liked?p.liked_by.filter(function(x){return x!==user.id;}):((p.liked_by||[]).concat([user.id]));
-  sb.from('posts').update({liked_by:nb,likes:nb.length}).eq('id',id).then(function(){
-    if(isDept)loadDeptPosts(currentDeptId);else loadForumPosts();
+// ══════════════════ PREACHINGS ══════════════════
+function openPreachings(){openModal('preachingsModal');loadPreachings();}
+function loadPreachings(){
+  sb.from('preachings').select('*, profiles(name,role)').order('created_at',{ascending:false}).then(function(r){
+    preachingsData=r.data||[];renderPreachings();
+    var ab=document.getElementById('adminPreachBtn');if(ab)ab.style.display=isAdmin()?'block':'none';
   });
-};
+}
+function renderPreachings(){
+  var c=document.getElementById('preachingsList');if(!c)return;
+  if(!preachingsData.length){c.innerHTML='<div style="text-align:center;padding:20px;color:#94A3B8">No preachings yet.</div>';return;}
+  var h='';preachingsData.forEach(function(p){var pr=p.profiles||{};
+    h+='<div class="post"><div class="post-header"><div class="post-avatar admin">'+ini(pr.name)+'</div><div><div class="post-name">'+esc(pr.name)+'</div><div class="post-role">'+esc(pr.role)+'</div></div><div class="post-time">'+ago(p.created_at)+'</div></div>'
+      +'<div class="post-body"><b>'+esc(p.title)+'</b><br>'+esc(p.content||'')+'</div>'
+      +(p.media_url?'<div class="post-media"><a href="'+p.media_url+'" target="_blank">📎 Open media</a></div>':'')
+      +'<div class="post-actions"><button class="post-action" onclick="loadPreachingComments(\''+p.id+'\')"><i class="far fa-comment"></i> Comments</button></div>'
+      +'<div id="pc-'+p.id+'" style="margin-top:8px"></div></div>';
+  });
+  c.innerHTML=h;
+}
+function postPreaching(){
+  if(!isAdmin())return alert('Admin only');
+  var t=(document.getElementById('preachTitle').value||'').trim();
+  var x=(document.getElementById('preachText').value||'').trim();
+  if(!t)return alert('Title required');
+  var media=window._pm&&window._pm.preach;
+  var doIt=function(url){return sb.from('preachings').insert([{title:t,content:x,media_url:url||null,author_id:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Posted!');closeModalDirect();loadPreachings();});};
+  if(media){uploadMediaFile(media).then(function(u){delete window._pm.preach;return doIt(u);}).catch(function(){return doIt(null);});}else doIt(null);
+}
+function loadPreachingComments(pid){
+  var box=document.getElementById('pc-'+pid);if(!box)return;
+  sb.from('preaching_comments').select('*, profiles(name)').eq('preaching_id',pid).order('created_at').then(function(r){
+    var list=r.data||[];
+    var h=list.map(function(c){return '<div style="font-size:.8rem;margin-bottom:4px"><b>'+esc((c.profiles||{}).name)+':</b> '+esc(c.content)+'</div>';}).join('');
+    h+='<div style="display:flex;gap:6px;margin-top:6px"><input class="form-input" id="pci-'+pid+'" placeholder="Add comment..."><button class="btn btn-sm btn-primary" onclick="addPreachingComment(\''+pid+'\')">Send</button></div>';
+    box.innerHTML=h;
+  });
+}
+function addPreachingComment(pid){
+  if(!user)return alert('Log in first');
+  var inp=document.getElementById('pci-'+pid);var v=inp?inp.value.trim():'';if(!v)return;
+  sb.from('preaching_comments').insert([{preaching_id:pid,user_id:user.id,content:v}]).then(function(){loadPreachingComments(pid);});
+}
 
-// ── GIVE ──
-window._gcGive=function(id,title){
-  document.querySelector('#giveModal .modal-title').innerHTML='💝 Give to '+esc(title);
-  openModal('giveModal');
-  // Store cause id
-  window._gcCurrentCauseId=id;
-};
+// ══════════════════ PROFILE EDIT ══════════════════
+function openEditProfile(){
+  openModal('editProfileModal');
+  if(profile){document.getElementById('editName').value=profile.name||'';document.getElementById('editPhone').value=profile.phone||'';}
+}
+function saveProfile(){
+  if(!user)return alert('Log in first');
+  var name=(document.getElementById('editName').value||'').trim();
+  var phone=(document.getElementById('editPhone').value||'').trim();
+  var pass=(document.getElementById('editPassword').value||'').trim();
+  var pic=window._pm&&window._pm.profilePic;
+  var finish=function(url){
+    var upd={};if(name)upd.name=name;if(phone)upd.phone=phone;if(url)upd.profile_pic=url;
+    var p1=Object.keys(upd).length?sb.from('profiles').update(upd).eq('id',user.id):Promise.resolve();
+    var p2=pass?sb.auth.updateUser({password:pass}):Promise.resolve();
+    Promise.all([p1,p2]).then(function(){alert('✅ Profile saved!');closeModalDirect();refreshRole();});
+  };
+  if(pic){uploadMediaFile(pic).then(function(u){delete window._pm.profilePic;finish(u);}).catch(function(){finish(null);});}else finish(null);
+}
 
-// ── APPROVE / DECLINE ──
-window._gcApprove=function(id){
-  if(!confirm('Approve?'))return;
-  var req=null;for(var i=0;i<pendingData.length;i++){if(pendingData[i].id===id){req=pendingData[i];break;}}
-  sb.from('pending_requests').update({status:'approved'}).eq('id',id).then(function(){
-    if(req&&req.type==='join_department'&&req.target_id){
-      sb.from('department_members').insert([{department_id:req.target_id,user_id:req.user_id,role:'member'}]);
+// ══════════════════ CHURCH SETTINGS (super admin) ══════════════════
+function loadChurchSettings(){
+  sb.from('church_settings').select('*').limit(1).single().then(function(r){
+    var s=r.data;
+    if(s){
+      var loc=document.querySelector('.gps-pin .gps-text');if(loc&&s.location)loc.innerHTML='<b>'+esc(s.location)+'</b>';
+      var det=document.querySelector('.card-cool .card-subtitle');if(det&&s.details)det.textContent=s.details;
     }
-    alert('✅ Approved!');loadPending();
-  });
-};
-window._gcDecline=function(id){
-  if(!confirm('Decline?'))return;
-  sb.from('pending_requests').update({status:'declined'}).eq('id',id).then(function(){
-    alert('Declined.');loadPending();
-  });
-};
+  }).catch(function(){});
+}
+function saveChurchSettings(){
+  if(!isSuper())return alert('Super admin only');
+  var loc=(document.getElementById('churchLoc').value||'').trim();
+  var det=(document.getElementById('churchDetails').value||'').trim();
+  var media=window._pm&&window._pm.church;
+  var doIt=function(url){return sb.from('church_settings').upsert({id:1,location:loc,details:det,media_url:url||null}).then(function(){alert('✅ Saved!');closeModalDirect();loadChurchSettings();});};
+  if(media){uploadMediaFile(media).then(function(u){delete window._pm.church;return doIt(u);}).catch(function(){return doIt(null);});}else doIt(null);
+}
 
-// ── DELETE TITLE ──
-window._gcDeleteTitle=function(id){
-  if(!confirm('Delete this title?'))return;
-  sb.from('titles').delete().eq('id',id).then(function(){loadTitles();});
-};
-
-// ═══════════════════════════════════
-//  WIRE MODAL SUBMIT BUTTONS
-// ═══════════════════════════════════
-
-function wireBtn(modalId, fn){
-  var m=document.getElementById(modalId);if(!m)return;
-  var btns=m.querySelectorAll('.btn-block, .btn-warm.btn-block, .btn-accent.btn-block, .btn-dept.btn-block');
-  // Get the LAST btn-block (usually the submit)
-  var btn=null;
-  for(var i=btns.length-1;i>=0;i--){
-    if(btns[i].tagName==='BUTTON'){btn=btns[i];break;}
-  }
-  if(!btn)return;
-  btn.addEventListener('click',function(e){
-    e.preventDefault();e.stopPropagation();
-    fn(m);
+// ══════════════════ STREAK (working) ══════════════════
+function updateStreak(){
+  if(!user||!profile)return;
+  var today=new Date();today.setHours(0,0,0,0);
+  var last=profile.streak_last_activity?new Date(profile.streak_last_activity):null;
+  var cur=profile.streak_current||0;
+  var newCount;
+  if(last){last.setHours(0,0,0,0);
+    var diff=Math.round((today-last)/86400000);
+    if(diff===0)newCount=cur; else if(diff===1)newCount=cur+1; else newCount=1;
+  } else newCount=1;
+  var longest=Math.max(profile.streak_longest||0,newCount);
+  sb.from('profiles').update({streak_current:newCount,streak_longest:longest,streak_last_activity:new Date().toISOString()}).eq('id',user.id).then(function(){
+    profile.streak_current=newCount;profile.streak_longest=longest;
+    var sc=document.getElementById('streakCount');if(sc)sc.textContent=newCount+' Days';
+    var ps=document.getElementById('profileStreak');if(ps)ps.textContent=newCount+' Days';
   });
 }
 
-// ── CREATE DEPARTMENT ──
-wireBtn('addDeptModal',function(m){
-  if(!user){alert('Please log in first');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var tas=m.querySelectorAll('.form-textarea');
-  var sels=m.querySelectorAll('.form-select');
-  var name=(ins[0]||{}).value||'';
-  if(!name.trim()){alert('Department name is required');return;}
-  var iconText=(sels[0]||{}).value||'';
-  var iconMap={'🎵':'fa-music','🙏':'fa-hands-praying','📖':'fa-bible','🚪':'fa-door-open','🔥':'fa-fire','📹':'fa-video','👶':'fa-child','🎤':'fa-microphone','📚':'fa-book','🤝':'fa-handshake','💝':'fa-hand-holding-heart','🎭':'fa-masks-theater'};
-  var icon='fa-users';for(var k in iconMap){if(iconText.indexOf(k)>-1){icon=iconMap[k];break;}}
-  var colorText=(sels[1]||{}).value||'';
-  var colorMap={'Orange':'alt1','Blue':'alt2','Green':'alt3','Red':'alt4'};
-  var color='';for(var c in colorMap){if(colorText.indexOf(c)>-1){color=colorMap[c];break;}}
-  
-  sb.from('departments').insert([{name:name.trim(),description:(tas[0]||{}).value||'',icon:icon,color_theme:color,member_count:0,created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Department created!');closeModalDirect();loadDepts();
-  });
-});
+// ══════════════════ (previous loaders/writers kept) ══════════════════
+function loadAll(){return Promise.all([loadDepts(),loadUshirikas(),loadTitles(),loadUsers(),loadForumPosts(),loadEvents(),loadCauses(),loadOfficials(),loadPlans(),loadPending(),loadNotifs(),loadPreachings(),loadChurchSettings()]).then(function(){loadMyDepts();loadChatInbox();}).catch(function(e){console.log(e);});}
+function loadPublicData(){return Promise.all([loadDepts(),loadUshirikas(),loadEvents(),loadCauses(),loadChurchSettings()]).catch(function(){});}
 
-// ── CREATE USHIRIKA ──
-wireBtn('addUshirikaModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var sels=m.querySelectorAll('.form-select');
-  var name=(ins[0]||{}).value||'';
-  if(!name.trim()){alert('Ushirika name is required');return;}
-  sb.from('ushirikas').insert([{name:name.trim(),location:(ins[1]||{}).value||'',meeting_day:(sels[0]||{}).value||'',meeting_time:(ins[2]||{}).value||'',venue:(ins[3]||{}).value||'',created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Ushirika created!');closeModalDirect();loadUshirikas();
-  });
-});
+function loadDepts(){return sb.from('departments').select('*').order('name').then(function(r){depts=r.data||[];renderDepts();renderDeptPicker();});}
+function renderDepts(){var c=dyn('ushirika-departments','dyn-depts');if(!c)return;hideStatic('ushirika-departments','.dept-card');if(!depts.length){c.innerHTML='<div style="text-align:center;padding:30px;color:#94A3B8">No departments yet.</div>';return;}
+  var b=['','alt1','alt2','alt3','alt4'];var h='';depts.forEach(function(d,i){h+='<div class="dept-card" onclick="window._gcOpenDept(\''+d.id+'\')"><div class="dept-banner '+(d.color_theme||b[i%5])+'"><div class="dept-icon"><i class="fas '+(d.icon||'fa-users')+'"></i></div><div><div class="dept-name">'+esc(d.name)+'</div><div class="dept-desc">'+esc(d.description||'')+'</div></div></div><div class="dept-body"><div class="dept-stats"><span><i class="fas fa-users"></i> '+(d.member_count||0)+' members</span></div></div></div>';});c.innerHTML=h;}
+function renderDeptPicker(){var p=document.querySelector('#deptPickerModal .user-picker');if(!p||!depts.length)return;var h='';depts.forEach(function(d){h+='<div class="user-pick-item" onclick="selectUser(this);this.dataset.deptId=\''+d.id+'\'"><div class="post-avatar dept" style="width:36px;height:36px"><i class="fas '+(d.icon||'fa-users')+'"></i></div><div style="flex:1"><div style="font-weight:600">'+esc(d.name)+'</div></div></div>';});p.innerHTML=h;}
+function loadMyDepts(){if(!user)return;sb.from('department_members').select('role, departments(*)').eq('user_id',user.id).then(function(r){renderMyDepts(r.data||[]);});}
+function renderMyDepts(md){var s=document.querySelector('.my-depts-scroll');if(!s)return;var c=document.querySelector('.my-depts-count');s.querySelectorAll('.my-dept-mini').forEach(function(e){e.style.display='none';});var h='';var a=['','alt1','alt2','alt3','alt4'];md.forEach(function(m,i){var d=m.departments||{};h+='<div class="my-dept-mini '+(d.color_theme||a[i%5])+'" onclick="window._gcOpenDept(\''+d.id+'\')" style="display:flex!important;flex-direction:column"><div class="my-dept-mini-icon"><i class="fas '+(d.icon||'fa-users')+'"></i></div><div class="my-dept-mini-name">'+esc(d.name||'')+'</div><div class="my-dept-mini-role"><span class="my-dept-mini-role-badge">'+esc(m.role||'member')+'</span></div></div>';});var j=s.querySelector('.my-dept-join-more');if(j)j.insertAdjacentHTML('beforebegin',h);else s.insertAdjacentHTML('beforeend',h);if(c)c.textContent=md.length+' serving';}
+function loadUshirikas(){return sb.from('ushirikas').select('*').order('name').then(function(r){ushirikasData=r.data||[];renderUshirikas();renderUshirikaSelect();});}
+function renderUshirikas(){var c=dyn('ushirika-groups','dyn-ushirikas');if(!c)return;hideStatic('ushirika-groups','.ushirika-card');if(!ushirikasData.length){c.innerHTML='';return;}var h='';ushirikasData.forEach(function(u){h+='<div class="ushirika-card"><div class="ushirika-icon"><i class="fas fa-church"></i></div><div class="ushirika-info"><div class="ushirika-name">'+esc(u.name)+'</div><div class="ushirika-detail">📍 '+esc(u.location||'')+' • '+esc(u.meeting_day||'')+'</div></div></div>';});c.innerHTML=h;}
+function renderUshirikaSelect(){var s=document.getElementById('ob-ushirika');if(!s)return;var h='<option value="">-- Select Ushirika --</option>';ushirikasData.forEach(function(u){h+='<option value="'+u.id+'">'+esc(u.name)+'</option>';});s.innerHTML=h;}
+function loadTitles(){return sb.from('titles').select('*').order('name').then(function(r){titlesData=r.data||[];renderTitles();});}
+function renderTitles(){var l=document.getElementById('titleList');if(!l)return;l.querySelectorAll('.title-item').forEach(function(e){e.remove();});if(!titlesData.length)return;var h='';titlesData.forEach(function(t){h+='<div class="title-item"><div class="title-item-icon"><i class="fas fa-tag"></i></div><div class="title-item-name">'+esc(t.name)+'</div><button class="title-item-delete" onclick="window._gcDeleteTitle(\''+t.id+'\')"><i class="fas fa-times"></i></button></div>';});l.insertAdjacentHTML('beforeend',h);}
+function loadUsers(){return sb.from('profiles').select('id,name,role,email,phone').order('name').then(function(r){usersData=r.data||[];renderUserPickers();renderLeaders();});}
+function renderUserPickers(){['#addOfficialModal .user-picker','#addLeaderModal .user-picker','#addDeptMemberModal .user-picker','#newChatModal .user-picker'].forEach(function(sel){var p=document.querySelector(sel);if(!p)return;var h='';usersData.forEach(function(u){if(user&&u.id===user.id)return;h+='<div class="user-pick-item" onclick="selectUser(this);this.dataset.userId=\''+u.id+'\'"><div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">'+ini(u.name)+'</div><div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div></div></div>';});p.innerHTML=h||'<div style="text-align:center;padding:15px;color:#94A3B8">No other members.</div>';});}
+function renderLeaders(){var d=document.getElementById('discover-main');if(!d)return;var c=dyn('discover-main','dyn-leaders');if(!c)return;d.querySelectorAll('.official-card').forEach(function(e){e.style.display='none';});var L=usersData.filter(function(u){return u.role==='admin'||u.role==='superadmin';});if(!L.length){c.innerHTML='';return;}var h='';L.forEach(function(u){h+='<div class="official-card"><div class="official-avatar">'+ini(u.name)+'</div><div style="flex:1"><div class="official-name">'+esc(u.name)+'</div><div class="official-role">'+esc(u.role)+'</div><div class="official-contact">📞 '+esc(u.phone||'')+'</div></div><button class="btn btn-sm btn-chat" onclick="window._gcOpenChat(\''+u.id+'\')"><i class="fas fa-comment"></i></button></div>';});c.innerHTML='<div class="section-title" style="font-size:1.05rem">👨 Servants of God</div>'+h;}
+function loadForumPosts(){return sb.from('posts').select('*, profiles(name,role)').is('department_id',null).is('ushirika_id',null).order('created_at',{ascending:false}).limit(50).then(function(r){forumPostsData=r.data||[];renderForumPosts();});}
+function renderForumPosts(){var c=dyn('ushirika-forum','dyn-forum');if(!c)return;hideStatic('ushirika-forum','.post');if(!forumPostsData.length){c.innerHTML='';return;}c.innerHTML=forumPostsData.map(function(p){return postHTML(p,false);}).join('');}
+function postHTML(p,isDept){var pr=p.profiles||{};var mine=user&&p.author_id===user.id;var liked=user&&p.liked_by&&p.liked_by.indexOf(user.id)>-1;var canDel=mine||isAdmin();return '<div class="post"><div class="post-header"><div class="post-avatar'+(pr.role==='admin'?' admin':'')+'">'+ini(pr.name)+'</div><div><div class="post-name">'+esc(pr.name||'')+'</div></div><div class="post-time">'+ago(p.created_at)+'</div>'+(canDel?'<button class="post-delete" onclick="window._gcDeletePost(\''+p.id+'\','+isDept+')"><i class="fas fa-trash"></i></button>':'')+'</div><div class="post-body">'+esc(p.content||'')+'</div><div class="post-actions"><button class="post-action'+(liked?' liked':'')+'" onclick="window._gcLike(\''+p.id+'\','+isDept+')"><i class="fas fa-heart"></i> '+(p.likes||0)+'</button></div></div>';}
+function loadDeptPosts(id){return sb.from('posts').select('*, profiles(name,role)').eq('department_id',id).order('created_at',{ascending:false}).then(function(r){deptPostsData=r.data||[];renderDeptPosts();});}
+function renderDeptPosts(){var c=document.getElementById('mainDept-feed');if(!c)return;var d=dyn('mainDept-feed','dyn-dept-posts');if(!d)return;c.querySelectorAll('.post').forEach(function(e){e.style.display='none';});d.innerHTML=deptPostsData.map(function(p){return postHTML(p,true);}).join('');}
+function loadDeptMembers(id){return sb.from('department_members').select('*, profiles(name,email,role)').eq('department_id',id).order('role').then(function(r){deptMembersData=r.data||[];renderDeptMembers();renderDeptLeaders();});}
+function renderDeptMembers(){var c=document.getElementById('mainDept-members');if(!c)return;var d=dyn('mainDept-members','dyn-dept-members');if(!d)return;c.querySelectorAll('.member-item').forEach(function(e){e.style.display='none';});if(!deptMembersData.length){d.innerHTML='';return;}var h='';deptMembersData.forEach(function(m){var p=m.profiles||{};h+='<div class="member-item" style="display:flex!important"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+m.role+'">'+esc(m.role)+'</span></div></div>';});d.innerHTML=h;}
+function renderDeptLeaders(){var c=document.getElementById('mainDept-roles');if(!c)return;var d=dyn('mainDept-roles','dyn-dept-leaders');if(!d)return;var L=deptMembersData.filter(function(m){return['leader','chairman','secretary','treasurer'].indexOf(m.role)>-1;});d.innerHTML=L.length?L.map(function(m){var p=m.profiles||{};return '<div class="member-item" style="display:flex!important"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+m.role+'">'+esc(m.role)+'</span></div>';}).join(''):'';}
+function loadEvents(){return sb.from('events').select('*').order('start_date',{ascending:false}).then(function(r){eventsData=r.data||[];renderEvents();});}
+function renderEvents(){var g={upcoming:[],ongoing:[],completed:[]};eventsData.forEach(function(e){(g[e.status]||g.upcoming).push(e);});['upcoming','ongoing','completed'].forEach(function(s){var c=document.getElementById('event-'+s);if(!c)return;var d=dyn('event-'+s,'dyn-events-'+s);if(!d)return;c.querySelectorAll('.event-card').forEach(function(e){e.style.display='none';});var L=g[s];d.innerHTML=L.length?L.map(function(e){return '<div class="event-card"><div class="event-banner"><span class="event-status status-'+s+'">'+s+'</span></div><div class="event-info"><div class="event-title">'+esc(e.title)+'</div><div class="event-date">'+fdate(e.start_date)+'</div></div></div>';}).join(''):'';});}
+function loadCauses(){return sb.from('giving_causes').select('*').order('created_at',{ascending:false}).then(function(r){causesData=r.data||[];renderCauses();});}
+function renderCauses(){var g=document.getElementById('section-giving');if(!g)return;var c=dyn('section-giving','dyn-causes');if(!c)return;g.querySelectorAll('.giving-cause').forEach(function(e){e.style.display='none';});if(!causesData.length){c.innerHTML='';return;}var h='';causesData.forEach(function(x){var pct=x.goal_amount>0?Math.min(100,Math.round((x.raised_amount/x.goal_amount)*100)):0;h+='<div class="card"><div class="card-title">💝 '+esc(x.title)+'</div><div class="giving-progress"><div class="giving-progress-bar" style="width:'+pct+'%"></div></div><div class="giving-amounts"><span class="giving-raised">KES '+(x.raised_amount||0).toLocaleString()+'</span><span class="giving-goal">Goal: '+(x.goal_amount||0).toLocaleString()+'</span></div><button class="btn btn-accent btn-block" style="margin-top:10px" onclick="window._gcGive(\''+x.id+'\',\''+esc(x.title)+'\')">Give Now</button></div>';});c.innerHTML=h;}
+function loadOfficials(){return sb.from('ushirika_officials').select('*, profiles(name,phone), ushirikas(name)').then(function(r){officialsData=r.data||[];renderOfficials();});}
+function renderOfficials(){var c=dyn('ushirika-groups','dyn-officials');if(!c)return;if(!officialsData.length){c.innerHTML='';return;}var h='<div class="section-title" style="font-size:1.05rem">👔 Ushirika Officials</div>';officialsData.forEach(function(o){var p=o.profiles||{};h+='<div class="official-card"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div class="official-name">'+esc(p.name)+'</div><div class="official-role">'+esc(o.title)+' — '+esc((o.ushirikas||{}).name||'')+'</div></div></div>';});c.innerHTML=h;}
+function loadPlans(){return sb.from('plans').select('*').order('created_at',{ascending:false}).then(function(r){plansData=r.data||[];renderPlans();});}
+function renderPlans(){var c=dyn('ushirika-plans','dyn-plans');if(!c)return;hideStatic('ushirika-plans','.card');c.innerHTML=plansData.length?plansData.map(function(p){return '<div class="card" style="border-left:4px solid var(--accent)"><b>'+esc(p.title)+'</b><div style="font-size:.75rem;color:var(--text-light)">'+(p.meeting_date?fdate(p.meeting_date):'')+'</div></div>';}).join(''):'';}
+function loadPending(){return sb.from('pending_requests').select('*').eq('status','pending').then(function(r){pendingData=r.data||[];renderPending();});}
+function renderPending(){var p=document.getElementById('adminPendingRequests');if(!p)return;var c=dyn('adminPendingRequests','dyn-pending');if(!c)return;p.querySelectorAll('.request-card').forEach(function(e){e.style.display='none';});c.innerHTML=pendingData.length?pendingData.map(function(r){return '<div class="request-card"><b>'+esc(r.user_name||'')+'</b> → '+esc(r.target_name||'')+'<div class="request-actions"><button class="btn btn-accent btn-sm" onclick="window._gcApprove(\''+r.id+'\')">Approve</button><button class="btn btn-danger btn-sm" onclick="window._gcDecline(\''+r.id+'\')">Decline</button></div></div>';}).join(''):'';}
+function loadNotifs(){if(!user)return Promise.resolve();return sb.from('notifications').select('*').eq('user_id',user.id).order('created_at',{ascending:false}).limit(30).then(function(r){notifsData=r.data||[];var b=document.getElementById('notifBadge');if(b){var un=notifsData.filter(function(n){return!n.read;}).length;b.textContent=un;b.style.display=un?'flex':'none';}});}
+function loadChatInbox(){if(!user)return;sb.from('messages').select('*').or('sender_id.eq.'+user.id+',receiver_id.eq.'+user.id).order('created_at',{ascending:false}).then(function(r){var msgs=r.data||[];var map={};msgs.forEach(function(m){var o=m.sender_id===user.id?m.receiver_id:m.sender_id;if(!map[o])map[o]=m;});var ids=Object.keys(map);if(!ids.length)return;sb.from('profiles').select('id,name,role').in('id',ids).then(function(r2){var us=r2.data||[];var c=dyn('discover-main','dyn-chat-inbox');if(!c)return;var d=document.getElementById('discover-main');d.querySelectorAll('.chat-list-item').forEach(function(e){e.style.display='none';});var h='<div class="card"><div class="chat-list">';us.forEach(function(u){var l=map[u.id];h+='<div class="chat-list-item" onclick="window._gcOpenChat(\''+u.id+'\')" style="display:flex!important"><div class="chat-list-avatar">'+ini(u.name)+'</div><div class="chat-list-info"><div class="chat-list-name">'+esc(u.name)+'</div><div class="chat-list-preview">'+esc(l.content||'📎')+'</div></div></div>';});h+='</div></div>';c.innerHTML=h;});});}
+function loadChatMessages(){if(!user||!currentChatUserId)return;var c=document.getElementById('chatMessages');if(!c)return;sb.from('messages').select('*').or('and(sender_id.eq.'+user.id+',receiver_id.eq.'+currentChatUserId+'),and(sender_id.eq.'+currentChatUserId+',receiver_id.eq.'+user.id+')').order('created_at',{ascending:true}).then(function(r){var m=r.data||[];c.innerHTML=m.length?m.map(function(x){var mine=x.sender_id===user.id;return '<div class="chat-message'+(mine?' sent':'')+'"><div class="chat-message-bubble">'+esc(x.content||'')+'</div><div class="chat-message-time">'+ftime(x.created_at)+'</div></div>';}).join(''):'<div style="text-align:center;padding:40px;color:#94A3B8">Say hi! 👋</div>';c.scrollTop=c.scrollHeight;});}
 
-// ── CREATE FORUM POST ──
-wireBtn('postModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ta=m.querySelector('.form-textarea')||m.querySelector('textarea');
-  var content=(ta||{}).value||'';
-  if(!content.trim()){alert('Write something first');return;}
-  sb.from('posts').insert([{author_id:user.id,content:content.trim(),likes:0,liked_by:[]}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    if(ta)ta.value='';alert('✅ Posted!');closeModalDirect();loadForumPosts();
-  });
-});
+// ══════════════════ writers (kept) ══════════════════
+function uploadMediaFile(f){var ext=f.name.split('.').pop();var path=user.id+'/'+Date.now()+'.'+ext;return sb.storage.from('media').upload(path,f).then(function(r){if(r.error)throw r.error;return sb.storage.from('media').getPublicUrl(path).data.publicUrl;});}
+window._gcOpenDept=function(id){var d=null;for(var i=0;i<depts.length;i++){if(depts[i].id===id){d=depts[i];break;}}if(!d)return;currentDeptId=id;document.getElementById('mainDeptName').textContent=d.name;document.getElementById('mainDeptDesc').textContent=d.description||'';document.getElementById('mainDeptMembers').textContent=(d.member_count||0)+' members';showSubPage('home-mainDept');loadDeptPosts(id);loadDeptMembers(id);};
+window._gcOpenChat=function(id){if(!user||id===user.id)return;currentChatUserId=id;var u=null;for(var i=0;i<usersData.length;i++){if(usersData[i].id===id){u=usersData[i];break;}}if(!u)return;document.getElementById('chatName').textContent=u.name;showSubPage('discover-chat');closeModalDirect();loadChatMessages();if(chatSub&&sb.removeChannel){sb.removeChannel(chatSub);chatSub=null;}if(sb.channel){chatSub=sb.channel('chat-'+user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(){loadChatMessages();loadChatInbox();}).subscribe();}};
+window.sendChatMessage=function(){if(!user||!currentChatUserId)return;var i=document.getElementById('chatInput');var v=i.value.trim();if(!v)return;sb.from('messages').insert([{sender_id:user.id,receiver_id:currentChatUserId,content:v}]).then(function(){i.value='';loadChatMessages();});};
+window._gcDeletePost=function(id,isDept){if(!confirm('Delete?'))return;sb.from('posts').delete().eq('id',id).then(function(){isDept?loadDeptPosts(currentDeptId):loadForumPosts();});};
+window._gcLike=function(id,isDept){if(!user)return;var list=isDept?deptPostsData:forumPostsData;var p=null;for(var i=0;i<list.length;i++){if(list[i].id===id){p=list[i];break;}}if(!p)return;var liked=p.liked_by&&p.liked_by.indexOf(user.id)>-1;var nb=liked?p.liked_by.filter(function(x){return x!==user.id;}):(p.liked_by||[]).concat([user.id]);sb.from('posts').update({liked_by:nb,likes:nb.length}).eq('id',id).then(function(){isDept?loadDeptPosts(currentDeptId):loadForumPosts();});};
+window._gcGive=function(id,title){window._gcCurrentCauseId=id;openModal('giveModal');};
+window._gcApprove=function(id){sb.from('pending_requests').update({status:'approved'}).eq('id',id).then(function(){loadPending();});};
+window._gcDecline=function(id){sb.from('pending_requests').update({status:'declined'}).eq('id',id).then(function(){loadPending();});};
+window._gcDeleteTitle=function(id){if(!confirm('Delete?'))return;sb.from('titles').delete().eq('id',id).then(function(){loadTitles();});};
 
-// ── CREATE DEPT POST ──
-wireBtn('deptPostModal',function(m){
-  if(!user||!currentDeptId){alert('Not in a department');return;}
-  var ta=m.querySelector('.form-textarea')||m.querySelector('textarea');
-  var content=(ta||{}).value||'';
-  if(!content.trim()){alert('Write something first');return;}
-  sb.from('posts').insert([{author_id:user.id,department_id:currentDeptId,content:content.trim(),likes:0,liked_by:[]}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    if(ta)ta.value='';alert('✅ Posted!');closeModalDirect();loadDeptPosts(currentDeptId);
-  });
-});
+// wire modal submit buttons
+function wireBtn(id,fn){var m=document.getElementById(id);if(!m)return;var btns=m.querySelectorAll('button.btn-block');var btn=btns[btns.length-1];if(!btn)return;btn.addEventListener('click',function(e){e.preventDefault();e.stopPropagation();fn(m);});}
+wireBtn('addDeptModal',function(m){if(!user)return alert('Log in');var ins=m.querySelectorAll('.form-input');var name=(ins[0]||{}).value||'';if(!name.trim())return alert('Name required');sb.from('departments').insert([{name:name.trim(),description:(m.querySelector('.form-textarea')||{}).value||'',member_count:0,created_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Created!');closeModalDirect();loadDepts();});});
+wireBtn('addUshirikaModal',function(m){if(!user)return alert('Log in');var ins=m.querySelectorAll('.form-input');var name=(ins[0]||{}).value||'';if(!name.trim())return alert('Name required');sb.from('ushirikas').insert([{name:name.trim(),location:(ins[1]||{}).value||'',meeting_day:(m.querySelector('.form-select')||{}).value||'',created_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Created!');closeModalDirect();loadUshirikas();});});
+wireBtn('postModal',function(m){if(!user)return alert('Log in');var ta=m.querySelector('textarea');var v=(ta||{}).value||'';if(!v.trim())return alert('Write something');sb.from('posts').insert([{author_id:user.id,content:v.trim(),likes:0,liked_by:[]}]).then(function(r){if(r.error)return alert(r.error.message);ta.value='';closeModalDirect();loadForumPosts();});});
+wireBtn('deptPostModal',function(m){if(!user||!currentDeptId)return alert('Not in dept');var ta=m.querySelector('textarea');var v=(ta||{}).value||'';if(!v.trim())return alert('Write something');sb.from('posts').insert([{author_id:user.id,department_id:currentDeptId,content:v.trim(),likes:0,liked_by:[]}]).then(function(r){if(r.error)return alert(r.error.message);ta.value='';closeModalDirect();loadDeptPosts(currentDeptId);});});
+wireBtn('eventModal',function(m){if(!user)return alert('Log in');var ins=m.querySelectorAll('.form-input');var n=(ins[0]||{}).value||'';if(!n.trim())return alert('Name required');sb.from('events').insert([{title:n.trim(),description:(m.querySelector('.form-textarea')||{}).value||'',start_date:(ins[2]||{}).value||null,end_date:(ins[3]||{}).value||null,status:'upcoming',created_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Created!');closeModalDirect();loadEvents();});});
+wireBtn('givingModal',function(m){if(!user)return alert('Log in');var ins=m.querySelectorAll('.form-input');var t=(ins[0]||{}).value||'';var g=parseFloat((ins[1]||{}).value)||0;if(!t.trim()||!g)return alert('Title & goal required');sb.from('giving_causes').insert([{title:t.trim(),description:(m.querySelector('.form-textarea')||{}).value||'',goal_amount:g,raised_amount:0,currency:'KES',status:'active',created_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Launched!');closeModalDirect();loadCauses();});});
+wireBtn('giveModal',function(m){if(!user)return alert('Log in');var a=parseFloat((m.querySelector('.form-input')||{}).value)||0;if(!a)return alert('Amount required');var cid=window._gcCurrentCauseId;if(!cid)return;sb.from('contributions').insert([{cause_id:cid,user_id:user.id,amount:a,recorded_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);var c=null;for(var i=0;i<causesData.length;i++){if(causesData[i].id===cid){c=causesData[i];break;}}if(c)sb.from('giving_causes').update({raised_amount:(c.raised_amount||0)+a}).eq('id',cid);alert('🎉 Thank you!');closeModalDirect();loadCauses();});});
+wireBtn('planModal',function(m){if(!user)return alert('Log in');var t=(m.querySelector('.form-input')||{}).value||'';if(!t.trim())return alert('Title required');sb.from('plans').insert([{title:t.trim(),plan_type:(m.querySelector('.form-select')||{}).value||'personal',created_by:user.id}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Created!');closeModalDirect();loadPlans();});});
+wireBtn('askModal',function(m){if(!user)return alert('Log in');var v=(m.querySelector('textarea')||{}).value||'';if(!v.trim())return alert('Write question');sb.from('questions').insert([{user_id:user.id,category:(m.querySelector('.form-select')||{}).value||'',question:v.trim(),status:'pending'}]).then(function(r){if(r.error)return alert(r.error.message);alert('✅ Submitted!');closeModalDirect();});});
+wireBtn('prayerModal',function(m){if(!user)return alert('Log in');var v=(m.querySelector('textarea')||{}).value||'';if(!v.trim())return alert('Write prayer');sb.from('prayers').insert([{user_id:user.id,content:v.trim(),is_anonymous:false,status:'active'}]).then(function(r){if(r.error)return alert(r.error.message);alert('🙏 Submitted!');closeModalDirect();});});
 
-// ── CREATE EVENT ──
-wireBtn('eventModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var tas=m.querySelectorAll('.form-textarea');
-  var name=(ins[0]||{}).value||'';
-  if(!name.trim()){alert('Event name required');return;}
-  sb.from('events').insert([{title:name.trim(),description:(tas[0]||{}).value||'',start_date:(ins[2]||{}).value||null,end_date:(ins[3]||{}).value||null,location:'',status:'upcoming',created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Event created!');closeModalDirect();loadEvents();
-  });
-});
-
-// ── CREATE GIVING CAUSE ──
-wireBtn('givingModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var tas=m.querySelectorAll('.form-textarea');
-  var title=(ins[0]||{}).value||'';
-  var goal=parseFloat((ins[1]||{}).value)||0;
-  if(!title.trim()||!goal){alert('Title and goal amount required');return;}
-  sb.from('giving_causes').insert([{title:title.trim(),description:(tas[0]||{}).value||'',goal_amount:goal,raised_amount:0,currency:'KES',status:'active',created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Cause launched!');closeModalDirect();loadCauses();
-  });
-});
-
-// ── GIVE NOW ──
-wireBtn('giveModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var amount=parseFloat((ins[0]||{}).value)||0;
-  if(!amount||amount<=0){alert('Enter a valid amount');return;}
-  var causeId=window._gcCurrentCauseId;
-  if(!causeId){alert('No cause selected');return;}
-  sb.from('contributions').insert([{cause_id:causeId,user_id:user.id,amount:amount,recorded_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    // Update cause raised amount
-    var cause=null;for(var i=0;i<causesData.length;i++){if(causesData[i].id===causeId){cause=causesData[i];break;}}
-    if(cause){sb.from('giving_causes').update({raised_amount:(cause.raised_amount||0)+amount}).eq('id',causeId);}
-    alert('🎉 Thank you for giving!');closeModalDirect();loadCauses();
-  });
-});
-
-// ── CREATE PLAN ──
-wireBtn('planModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var sels=m.querySelectorAll('.form-select');
-  var title=(ins[0]||{}).value||'';
-  if(!title.trim()){alert('Title required');return;}
-  sb.from('plans').insert([{title:title.trim(),plan_type:(sels[0]||{}).value||'personal',meeting_date:(ins[1]||{}).value||null,created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Plan created!');closeModalDirect();loadPlans();
-  });
-});
-
-// ── ADD TITLE ──
-// Override the existing addCustomTitle function
-var origAddTitle=window.addCustomTitle;
-window.addCustomTitle=function(){
-  if(!user){if(origAddTitle)origAddTitle();return;}
-  var input=document.getElementById('newTitleInput');
-  var name=input?input.value.trim():'';
-  if(!name){alert('Enter a title name');return;}
-  var catSel=document.querySelector('#manageTitlesModal .form-select');
-  var cat=catSel?catSel.value:'church';
-  sb.from('titles').insert([{name:name,category:cat,created_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    if(input)input.value='';alert('✅ Title "'+name+'" added!');loadTitles();
-  });
-};
-
-// ── ADD OFFICIAL ──
-wireBtn('addOfficialModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var sel=m.querySelector('.user-pick-item.selected');
-  if(!sel){alert('Please select a user');return;}
-  var uid=sel.dataset.userId;if(!uid){alert('Please select a user');return;}
-  var sels=m.querySelectorAll('.form-select');
-  var target=(sels[1]||sels[0]||{}).value||'';
-  var title=(sels[2]||sels[1]||{}).value||'Leader';
-  var ushId=target.indexOf('ush_')===0?target.slice(4):(ushirikasData[0]?ushirikasData[0].id:null);
-  sb.from('ushirika_officials').insert([{user_id:uid,ushirika_id:ushId,title:title,appointed_by:user.id}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Official assigned!');closeModalDirect();loadOfficials();
-  });
-});
-
-// ── ADD LEADER ──
-wireBtn('addLeaderModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var sel=m.querySelector('.user-pick-item.selected');
-  if(!sel){alert('Please select a user');return;}
-  var uid=sel.dataset.userId;if(!uid){alert('Please select a user');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var phone=(ins[0]||{}).value||'';
-  var upd={role:'admin'};if(phone)upd.phone=phone;
-  sb.from('profiles').update(upd).eq('id',uid).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Leader added!');closeModalDirect();loadUsers();
-  });
-});
-
-// ── ADD DEPT MEMBER ──
-wireBtn('addDeptMemberModal',function(m){
-  if(!user||!currentDeptId){alert('Not in a department');return;}
-  var sel=m.querySelector('.user-pick-item.selected');
-  if(!sel){alert('Please select a user');return;}
-  var uid=sel.dataset.userId;if(!uid){alert('Please select a user');return;}
-  var roleSel=m.querySelectorAll('.form-select');
-  var role=(roleSel[0]||{}).value||'Member (no role)';
-  if(role.indexOf('Member')>-1)role='member';
-  sb.from('department_members').insert([{department_id:currentDeptId,user_id:uid,role:role.toLowerCase()}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    // Increment count
-    var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===currentDeptId){dept=depts[i];break;}}
-    if(dept)sb.from('departments').update({member_count:(dept.member_count||0)+1}).eq('id',currentDeptId);
-    alert('✅ Member added!');closeModalDirect();loadDeptMembers(currentDeptId);loadDepts();
-  });
-});
-
-// ── ASSIGN ROLE ──
-wireBtn('assignDeptRoleModal',function(m){
-  if(!currentDeptId)return;
-  var sels=m.querySelectorAll('.form-select');
-  // sels[0] = member name (text), sels[1] = role
-  // We need the user ID - find by name match
-  var memberName=(sels[0]||{}).value||'';
-  var newRole=(sels[1]||{}).value||'member';
-  if(newRole.indexOf('Member')>-1)newRole='member';
-  var member=null;
-  for(var i=0;i<deptMembersData.length;i++){
-    var p=deptMembersData[i].profiles||{};
-    if(p.name&&memberName.indexOf(p.name)>-1){member=deptMembersData[i];break;}
-  }
-  if(!member){alert('Member not found');return;}
-  sb.from('department_members').update({role:newRole.toLowerCase()}).eq('department_id',currentDeptId).eq('user_id',member.user_id).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Role updated!');closeModalDirect();loadDeptMembers(currentDeptId);
-  });
-});
-
-// ── REMOVE MEMBER ──
-wireBtn('removeDeptMemberModal',function(m){
-  if(!currentDeptId)return;
-  var sel=m.querySelector('.form-select');
-  var memberName=(sel||{}).value||'';
-  var member=null;
-  for(var i=0;i<deptMembersData.length;i++){
-    var p=deptMembersData[i].profiles||{};
-    if(p.name&&memberName.indexOf(p.name)>-1){member=deptMembersData[i];break;}
-  }
-  if(!member){alert('Member not found');return;}
-  if(!confirm('Remove '+((member.profiles||{}).name||'')+'?'))return;
-  sb.from('department_members').delete().eq('department_id',currentDeptId).eq('user_id',member.user_id).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===currentDeptId){dept=depts[i];break;}}
-    if(dept)sb.from('departments').update({member_count:Math.max(0,(dept.member_count||0)-1)}).eq('id',currentDeptId);
-    alert('✅ Removed!');closeModalDirect();loadDeptMembers(currentDeptId);loadDepts();
-  });
-});
-
-// ── REQUEST JOIN DEPT (override) ──
-var origJoin=window.requestJoinDept;
-window.requestJoinDept=function(){
-  if(!user){if(origJoin)origJoin();return;}
-  var sel=document.querySelector('#deptPickerModal .user-pick-item.selected');
-  if(!sel){alert('Please select a department');return;}
-  var deptId=sel.dataset.deptId;
-  var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
-  if(!dept){alert('Department not found');return;}
-  sb.from('pending_requests').insert([{user_id:user.id,user_name:profile?profile.name:'',type:'join_department',target_id:dept.id,target_name:dept.name,status:'pending'}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Request sent to admin!');closeModalDirect();
-  });
-};
-
-// ── UPDATE WEEKLY MEETING ──
-wireBtn('updateWeeklyMeetingModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var sels=m.querySelectorAll('.form-select');
-  var tas=m.querySelectorAll('.form-textarea');
-  sb.from('weekly_meetings').insert([{
-    department_id:currentDeptId||null,
-    meeting_day:(sels[0]||{}).value||'Saturday',
-    meeting_date:(ins[0]||{}).value||null,
-    start_time:(ins[1]||{}).value||null,
-    end_time:(ins[2]||{}).value||null,
-    venue:(ins[3]||{}).value||'',
-    theme:(ins[4]||{}).value||'',
-    notes:(tas[0]||{}).value||'',
-    updated_by:user.id
-  }]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('✅ Meeting updated!');closeModalDirect();
-  });
-});
-
-// ── ASK QUESTION ──
-wireBtn('askModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ta=m.querySelector('.form-textarea')||m.querySelector('textarea');
-  var sel=m.querySelector('.form-select');
-  var q=(ta||{}).value||'';
-  if(!q.trim()){alert('Write your question');return;}
-  sb.from('questions').insert([{user_id:user.id,category:(sel||{}).value||'',question:q.trim(),status:'pending'}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    if(ta)ta.value='';alert('✅ Question submitted!');closeModalDirect();
-  });
-});
-
-// ── PRAYER REQUEST ──
-wireBtn('prayerModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ta=m.querySelector('.form-textarea')||m.querySelector('textarea');
-  var content=(ta||{}).value||'';
-  if(!content.trim()){alert('Write your prayer request');return;}
-  var anonToggle=m.querySelector('.toggle');
-  var isAnon=anonToggle&&anonToggle.classList.contains('on');
-  sb.from('prayers').insert([{user_id:user.id,content:content.trim(),is_anonymous:isAnon,status:'active'}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    if(ta)ta.value='';alert('🙏 Prayer request submitted!');closeModalDirect();
-  });
-});
-
-// ── INVITE ADMIN ──
-wireBtn('inviteAdminModal',function(m){
-  if(!user){alert('Please log in');return;}
-  var ins=m.querySelectorAll('.form-input');
-  var email=(ins[0]||{}).value||'';
-  if(!email.trim()){alert('Email required');return;}
-  sb.from('admin_invites').insert([{email:email.trim(),role:(m.querySelector('.form-select')||{}).value||'',invited_by:user.id,status:'pending'}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    alert('📨 Invite saved!');closeModalDirect();
-  });
-});
-
-// ═══════════════════════════════════
-//  PROFILE UPDATE ON LOGIN
-// ═══════════════════════════════════
-function updateProfileUI(){
-  if(!profile)return;
-  var avatar=document.querySelector('#profileModal .post-avatar');
-  if(avatar)avatar.textContent=ini(profile.name);
-  var nameEl=document.querySelector('#profileModal div[style*="font-size:1.05rem"]');
-  if(nameEl)nameEl.textContent=profile.name||'User';
-  var metaEl=document.querySelector('#profileModal div[style*="font-size:0.8rem"]');
-  if(metaEl)metaEl.textContent=(profile.role||'member')+' • GraceConnect';
-  // Update new-post avatars
-  document.querySelectorAll('.new-post-box .post-avatar, #forumPostAvatar, #newPostAvatar').forEach(function(el){
-    el.textContent=ini(profile.name);
-  });
+// ══════════════════ ROLE SEPARATION (security) ══════════════════
+// The top role badge is DISPLAY-ONLY. It does NOT switch dashboards.
+function updateRoleUI(){
+  var ind=document.getElementById('roleIndicator');
+  if(isAdmin()){ind.className='role-indicator role-admin';ind.innerHTML='<i class="fas fa-crown"></i> ADMIN';}
+  else{ind.className='role-indicator role-user';ind.innerHTML='<i class="fas fa-user"></i> MEMBER';}
+  // show admin panels only for admin
+  var adminEls=['.admin-panel','#adminEventBtn','#adminGivingBtn','#adminDeptBtn','#adminPendingRequests','#adminMainDeptControl','#adminDiscoverPanel','#adminUshirikaGroupsBtn','#adminPreachBtn'];
+  adminEls.forEach(function(s){document.querySelectorAll(s).forEach(function(e){e.style.display=isAdmin()?'':'none';});});
 }
+// Override old toggle so it can't flip roles (security)
+window.toggleRole=function(){alert('Your role is fixed by your account for security. Admins see admin dashboards; members see member views.');};
 
-// ═══════════════════════════════════
-//  BOOT
-// ═══════════════════════════════════
+// profile modal: add Edit button
+function addEditProfileButton(){var pm=document.querySelector('#profileModal .btn-secondary');if(pm&&!document.getElementById('editProfileBtn')){var b=document.createElement('button');b.id='editProfileBtn';b.className='btn btn-primary btn-block';b.style.marginTop='6px';b.innerHTML='<i class="fas fa-edit"></i> Edit Profile';b.onclick=function(){openEditProfile();};pm.parentNode.insertBefore(b,pm);}}
+
+// ══════════════════ BOOT ══════════════════
+function updateGreeting(){var now=new Date();var h=now.getHours();var ts=now.toLocaleTimeString('en-US',{hour:'2-digit',minute:'2-digit'});var ds=now.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});var g,e;if(h<5){g='Good Evening';e='🌙';}else if(h<12){g='Good Morning';e='🌅';}else if(h<17){g='Good Afternoon';e='☀️';}else{g='Good Evening';e='🌙';}var a=document.getElementById('greetingTime');if(a)a.textContent=ds+' • '+ts;var b=document.getElementById('greetingText');if(b)b.textContent=e+' '+g+', Beloved!';}
+function refreshRole(){if(!sb)return Promise.resolve();return sb.auth.getUser().then(function(r){user=r.data.user;if(!user){updateRoleUI();return;}return sb.from('profiles').select('*').eq('id',user.id).single().then(function(pr){profile=pr.data;updateRoleUI();addEditProfileButton();updateStreak();});});}
+
 function boot(){
-  sb.auth.onAuthStateChange(function(event,session){
-    if(event==='SIGNED_IN'&&session){
-      user=session.user;
-      sb.from('profiles').select('*').eq('id',user.id).single().then(function(r){
-        profile=r.data;
-        updateProfileUI();
-        loadAll();
-      });
-    } else if(event==='SIGNED_OUT'){
-      user=null;profile=null;
-    }
-  });
-  
-  // Check existing session
-  sb.auth.getSession().then(function(r){
-    if(r.data&&r.data.session){
-      user=r.data.session.user;
-      sb.from('profiles').select('*').eq('id',user.id).single().then(function(pr){
-        profile=pr.data;
-        updateProfileUI();
-        loadAll();
-      });
-    } else {
-      loadPublicData();
-    }
-  }).catch(function(){loadPublicData();});
+  updateGreeting();setInterval(updateGreeting,1000); // exact device time, ticks every second
+  verseOfTheDay();
+  loadRandomTrivia();
+  sb.auth.onAuthStateChange(function(ev,ses){if(ev==='SIGNED_IN'&&ses){user=ses.user;refreshRole().then(loadAll);}else if(ev==='SIGNED_OUT'){user=null;profile=null;}});
+  sb.auth.getSession().then(function(r){if(r.data&&r.data.session){user=r.data.session.user;refreshRole().then(loadAll);}else{loadPublicData();}}).catch(function(){loadPublicData();});
 }
-
-// Override sendChatMessage to use real data
-var origSendChat=window.sendChatMessage;
-window.sendChatMessage=function(){
-  if(!user||!currentChatUserId){
-    if(origSendChat)origSendChat();return;
-  }
-  var input=document.getElementById('chatInput');
-  var content=input.value.trim();if(!content)return;
-  sb.from('messages').insert([{sender_id:user.id,receiver_id:currentChatUserId,content:content}]).then(function(r){
-    if(r.error){alert('Failed: '+r.error.message);return;}
-    input.value='';loadChatMessages();
-  });
-};
-
 boot();
-console.log('✝️ GraceConnect app.js (data layer) loaded!');
+console.log('✝️ GraceConnect v7 loaded (Bible online, trivia multiplayer, preachings, profile edit, role security).');
 })();
