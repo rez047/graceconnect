@@ -1613,7 +1613,7 @@ body {
         <div class="emotional-sub">We'll find God's word for you.</div>
         <div class="emotional-input-wrap">
           <input class="emotional-input" id="emotionalInput" placeholder="e.g. grief, joy, anxiety...">
-          <button class="emotional-btn" onclick="retrieveVerses()"><i class="fas fa-search"></i></button>
+          <button class="emotional-btn" onclick="retrieveVersesOnline()""><i class="fas fa-search"></i></button>
         </div>
         <div class="emotional-chips">
           <button class="emotional-chip" onclick="setEmotional('grief')">😢 Grief</button>
@@ -1638,9 +1638,7 @@ body {
         <div class="mini-card mc-green" onclick="openModal('prayerModal')">
           <i class="fas fa-hands-praying"></i><div class="mc-title">Prayer</div><div class="mc-sub">Request</div>
         </div>
-        <div class="mini-card mc-blue" onclick="showSubPage('home-quizMaster')">
-          <i class="fas fa-trophy"></i><div class="mc-title">Quiz</div><div class="mc-sub">Compete</div>
-        </div>
+        <div class="mini-card mc-blue" onclick="openPreachings()"><i class="fas fa-microphone"></i><div class="mc-title">Preachings</div><div class="mc-sub">Sermons & notes</div></div>
         <div class="mini-card mc-pink" onclick="showSubPage('home-characters')">
           <i class="fas fa-users"></i><div class="mc-title">Characters</div><div class="mc-sub">Explore</div>
         </div>
@@ -1653,12 +1651,10 @@ body {
       <div class="section-title">📖 Bible Trivia</div>
       <div class="card" style="padding:16px;border:2px solid var(--primary-light)">
         <div style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-bottom:6px">Question 1 of 5</div>
-        <div style="font-weight:700;margin-bottom:12px">Who built the ark?</div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">A) Abraham</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,true)">B) Noah ✓</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">C) Moses</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">D) David</button>
+        <div id="triviaBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> New Question</button>
+          <button class="btn btn-dept btn-sm" onclick="openModal('multiplayerModal')"><i class="fas fa-gamepad"></i> Multiplayer</button>
         </div>
         <div style="text-align:center;margin-top:10px;font-weight:700;color:var(--primary);font-size:0.85rem" id="triviaScore">Score: 0/0</div>
       </div>
@@ -1838,29 +1834,28 @@ body {
       <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
       <div class="section-title">🧠 Bible Trivia Challenge</div>
       <div class="card">
-        <div style="font-weight:700;margin-bottom:12px">How many days did God take to create the world?</div>
-        <div style="display:flex;flex-direction:column;gap:6px">
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">A) 5 days</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">B) 6 days ✓</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">C) 7 days</button>
-          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">D) 4 days</button>
+        <div id="triviaBox" style="display:flex;flex-direction:column;gap:6px"></div>
+        <div style="display:flex;gap:8px;margin-top:10px">
+          <button class="btn btn-secondary btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> New Question</button>
+          <button class="btn btn-dept btn-sm" onclick="openModal('multiplayerModal')"><i class="fas fa-gamepad"></i> Multiplayer</button>
         </div>
+        <div style="text-align:center;margin-top:10px;font-weight:700;color:var(--primary);font-size:0.85rem" id="triviaScore">Score: 0/0</div>
       </div>
     </div>
 
     <div id="home-bibleReader" class="sub-page">
       <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
       <div class="section-title">📖 Bible Reader</div>
-      <div class="tabs">
-        <div class="tab active">NIV</div><div class="tab">KJV</div>
-        <div class="tab">ESV</div><div class="tab">NLT</div><div class="tab">Swahili</div>
+      <div class="grid-2">
+        <select class="form-select" id="readerTrans"><option>KJV</option><option>NIV</option><option>ESV</option><option>NLT</option><option>Swahili</option><option>WEB</option><option>ASV</option><option>DARBY</option><option>DRA</option><option>YLT</option></select>
+        <input class="form-input" id="readerRef" placeholder="e.g. John 3 / Psalm 23">
       </div>
-      <div class="bible-reader">
-        <div style="font-weight:700;margin-bottom:8px;color:#92400E">Genesis 1:1-3</div>
-        <div class="bible-verse-text">
-          <sup>1</sup> In the beginning God created the heavens and the earth. <sup>2</sup> Now the earth was formless and empty... <sup>3</sup> And God said, "Let there be light," and there was light.
-        </div>
-        <div class="bible-ref">— Genesis 1:1-3 (NIV)</div>
+      <div style="display:flex;gap:8px;margin:8px 0">
+        <button class="btn btn-primary btn-sm" onclick="loadBibleChapter()"><i class="fas fa-book-open"></i> Load Chapter</button>
+        <input class="form-input" id="readerSearch" placeholder="Search a verse or phrase...">
+         <button class="btn btn-secondary btn-sm" onclick="searchBible()"><i class="fas fa-search"></i></button>
+      </div>
+      <div id="readerOut"></div>
       </div>
     </div>
 
@@ -1882,7 +1877,11 @@ body {
     <div id="home-characters" class="sub-page">
       <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
       <div class="section-title">👤 Bible Character Explorer</div>
-      <div class="search-bar"><i class="fas fa-search"></i><input placeholder="Search: Moses, David, Paul..."></div>
+      <div style="display:flex;gap:8px;margin-bottom:10px">
+        <input class="form-input" id="charSearch" placeholder="Any Bible character e.g. Moses, Esther...">
+        <button class="btn btn-primary btn-sm" onclick="loadCharacter()"><i class="fas fa-search"></i></button>
+      </div>
+      <div id="charOut"></div>
       <div class="character-card">
         <div class="character-banner" style="background:var(--gradient-cool)"><div class="character-avatar-lg">👑</div></div>
         <div class="character-body">
@@ -2182,6 +2181,7 @@ body {
           <button class="btn btn-warm btn-block btn-sm" onclick="openModal('inviteAdminModal')">
             <i class="fas fa-envelope"></i> Invite Admin
           </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('churchSettingsModal')"><i class="fas fa-church"></i> Church Details (Super)</button>
         </div>
       </div>
 
@@ -2239,7 +2239,8 @@ body {
         <i class="fas fa-map-marker-alt" style="color:#EF4444"></i>
         <div>
           <div style="font-weight:700">Church Location</div>
-          <div style="font-size:0.72rem;font-weight:400">Ngong Road, Nairobi • Tap for GPS</div>
+          <div style="font-size:0.72rem;font-weight:400">Old Uganda Road opposite Shauri estate, Eldoret • Tap for GPS</div>
+          <div class="gps-text"><b>Ngong Road, Nairobi</b> • Tap for GPS</div>
         </div>
       </div>
 
@@ -3209,6 +3210,7 @@ body {
       <div class="streak-info">
         <div class="streak-count">7 Days</div>
         <div class="streak-label">Current Streak</div>
+        <div class="streak-count" id="profileStreak">7 Days</div>
       </div>
     </div>
     <div class="toggle-row">
@@ -3672,7 +3674,42 @@ updateRoleUI();
 
 console.log('✝️ GraceConnect v6 (Supabase-connected) loaded!');
 </script>
+<!-- PREACHINGS -->
+<div class="modal-overlay" id="preachingsModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">🎤 Preachings & Sermon Notes</div>
+<div id="adminPreachBtn" style="display:none;margin-bottom:10px"><button class="btn btn-warm btn-block" onclick="openModal('addPreachingModal')"><i class="fas fa-plus"></i> Post Preaching (Admin)</button></div>
+<div id="preachingsList"></div><button class="btn btn-secondary btn-block" onclick="closeModalDirect()">Close</button></div></div>
 
+<div class="modal-overlay" id="addPreachingModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">🎤 Post Preaching <span class="admin-only">Admin</span></div>
+<div class="form-group"><label class="form-label">Title</label><input class="form-input" id="preachTitle"></div>
+<div class="form-group"><label class="form-label">Notes / Text</label><textarea class="form-textarea" id="preachText"></textarea></div>
+<div class="media-upload" onclick="attachMediaTo('preach')"><i class="fas fa-cloud-upload-alt"></i><span>Attach audio/video/PDF (all formats)</span></div>
+<button class="btn btn-warm btn-block" onclick="postPreaching()">Post Preaching</button></div></div>
+
+<!-- PROFILE EDIT -->
+<div class="modal-overlay" id="editProfileModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">✏️ Edit My Profile</div>
+<div class="media-upload" onclick="attachMediaTo('profilePic')"><i class="fas fa-camera"></i><span>Change profile picture</span></div>
+<div class="form-group"><label class="form-label">Full Name</label><input class="form-input" id="editName"></div>
+<div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="editPhone"></div>
+<div class="form-group"><label class="form-label">New Password (blank = keep)</label><input class="form-input" id="editPassword" type="password"></div>
+<button class="btn btn-primary btn-block" onclick="saveProfile()">Save Changes</button></div></div>
+
+<!-- MULTIPLAYER TRIVIA -->
+<div class="modal-overlay" id="multiplayerModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">🎮 Multiplayer Trivia</div>
+<div class="grid-2"><button class="btn btn-primary btn-block" onclick="createTriviaGame()"><i class="fas fa-plus"></i> Create Game</button>
+<button class="btn btn-secondary btn-block" onclick="openModal('joinGameModal')"><i class="fas fa-sign-in-alt"></i> Join Game</button></div>
+<div id="myGameInfo" style="margin-top:10px"></div>
+<button class="btn btn-secondary btn-block" onclick="closeModalDirect()">Close</button></div></div>
+
+<div class="modal-overlay" id="joinGameModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">🔑 Join a Game</div>
+<div class="form-group"><label class="form-label">Game Code</label><input class="form-input" id="joinCode" placeholder="e.g. ABC123"></div>
+<button class="btn btn-primary btn-block" onclick="joinTriviaGame()">Join</button></div></div>
+
+<!-- CHURCH SETTINGS (SUPER ADMIN) -->
+<div class="modal-overlay" id="churchSettingsModal" onclick="closeModal(event)"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">⛪ Church Details <span class="admin-only">Super Admin</span></div>
+<div class="form-group"><label class="form-label">Location</label><input class="form-input" id="churchLoc" placeholder="e.g. Ngong Road, Nairobi"></div>
+<div class="form-group"><label class="form-label">Details / About</label><textarea class="form-textarea" id="churchDetails"></textarea></div>
+<div class="media-upload" onclick="attachMediaTo('church')"><i class="fas fa-cloud-upload-alt"></i><span>Church photo/video (all formats)</span></div>
+<button class="btn btn-warm btn-block" onclick="saveChurchSettings()">Save Church Details</button></div></div>
 <script src="app.js"></script>
 </body>
 </html>
