@@ -79,7 +79,7 @@ function renderVerseCards(input,refs,enc){var c=document.getElementById('verseRe
   var h='<div class="verse-result"><div class="verse-result-header"><i class="fas fa-heart"></i> God\'s Word for "'+esc(input)+'"</div>';
   res.forEach(function(d){if(d&&d.text){h+='<div class="verse-item"><div class="verse-text">"'+esc(d.text.trim())+'"</div><div class="verse-ref">— '+esc(d.reference)+'</div></div>';}});
   h+='<div class="verse-encourage">💝 '+esc(enc)+'</div></div>';c.innerHTML=h;});}
-function showClarify(input){var c=document.getElementById('verseResults');
+function showClarify(input){var c=document.getElementById('verseResults');ZZ
  c.innerHTML='<div class="verse-result"><div class="verse-result-header"><i class="fas fa-comment-dots"></i> Unavailable right now</div><div class="verse-encourage">We couldn\'t find a verse for "'+esc(input)+'" right now. Send a message for clarification and a pastor or member will pray with you.</div><button class="btn btn-primary btn-block" style="margin-top:10px" onclick="askClarification(\''+esc(input).replace(/'/g,"\\'")+'\')"><i class="fas fa-paper-plane"></i> Send for clarification</button></div>';}
 function askClarification(q){openAskFlow(q);}
 
@@ -246,7 +246,7 @@ function switchUshirikaTab(el,t){var tabs=el.parentElement.querySelectorAll('.ta
 function switchMainDeptTab(el,t){var tabs=el.parentElement.querySelectorAll('.tab');for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');el.classList.add('active');['feed','members','roles'].forEach(function(x){var e=document.getElementById('mainDept-'+x);if(e)e.style.display=(x===t)?'block':'none';});}
 function switchEventTab(el,t){var tabs=el.parentElement.querySelectorAll('.tab');for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');el.classList.add('active');['upcoming','ongoing','completed'].forEach(function(x){var e=document.getElementById('event-'+x);if(e)e.style.display=(x===t)?'block':'none';});}
 function setEmotional(k){document.getElementById('emotionalInput').value=k;retrieveVersesOnline();}
-function selectUser(el){el.parentElement.querySelectorAll('.user-pick-item').forEach(function(i){i.classList.remove('selected'));el.classList.add('selected');}
+function selectUser(el){var items=el.parentElement.querySelectorAll('.user-pick-item');for(var i=0;i<items.length;i++){items[i].classList.remove('selected');}el.classList.add('selected');}
 
 // ── BOOT: wire v6 buttons + enhance modals ──
 function boot(){
