@@ -416,5 +416,101 @@ window.delMinistry = function(id){
     loadMinistries().then(refreshLandingEditorLists);
   });
 };
+// ══════════ FIX: onboarding ushirika dropdown (anon read + "Other" failsafe) ══════════
+window.loadUshirikasForOnboarding = function(){
+  if(!window.sb) return;
+  sb.from('ushirikas').select('*').order('name').then(function(r){
+    var sel=document.getElementById('ob-ushirika'); if(!sel) return;
+    var h='<option value="">-- Select Ushirika --</option>';
+    (r.data||[]).forEach(function(u){ h+='<option value="'+u.id+'">'+esc(u.name)+'</option>'; });
+    h+='<option value="other">Other / Not listed (failsafe)</option>';
+    sel.innerHTML=h;
+  }).catch(function(){});
+};
+loadUshirikasForOnboarding(); // run immediately, even logged-out
+
+// ══════════ FIX: completeOnboarding handles "other" (no bad FK) ══════════
+window.completeOnboarding = async function(){
+  var name=(document.getElementById('ob-name')||{}).value||'';
+  var email=(document.getElementById('ob-email')||{}).value||'';
+  var pass=(document.getElementById('ob-password')||{}).value||'';
+  var phone=(document.getElementById('ob-phone')||{}).value||'';
+  var ush=(document.getElementById('ob-ushirika')||{}).value||'';
+  if(!name.trim()||!email.trim()||!pass){alert('Name, email and password are required');return;}
+  try{
+    var r=await sb.auth.signUp({email:email.trim(),password:pass,options:{data:{name:name.trim()}}});
+    if(r.error)throw r.error; if(!r.data||!r.data.user)throw new Error('No user');
+    var uid=r.data.user.id;
+    var row={id:uid,name:name.trim(),role:'member',phone:phone.trim()||null,streak_days:[],streak_current:0,streak_longest:0};
+    if(ush && ush!=='other') row.ushirika_id=ush;
+    if(ush==='other') row.ushirika_other='Other (not listed)';
+    await sb.from('profiles').upsert(row,{onConflict:'id'});
+    var onb=document.getElementById('onboardingOverlay'); if(onb)onb.classList.remove('show');
+    localStorage.setItem('onboarded','true');
+    alert('🎉 Welcome, '+name+'!');
+    showApp();
+  }catch(e){ alert('Sign up failed: '+(e.message||e)); }
+};
+
+// ══════════ FIX: join ANY ushirika after login, NO approval, multiple allowed ══════════
+window.joinUshirika = function(id){
+  if(!user) return alert('Log in first');
+  sb.from('ushirika_members').insert([{user_id:user.id,ushirika_id:id,role:'member'}])
+    .then(function(r){
+      if(r.error && r.error.code==='23505') return alert('You already joined this ushirika.');
+      if(r.error) return alert(r.error.message);
+      alert('✅ Joined!'); loadMyUshirikas();
+    });
+};
+window.leaveUshirika = function(id){
+  if(!confirm('Leave this ushirika?'))return;
+  sb.from('ushirika_members').delete().eq('user_id',user.id).eq('ushirika_id',id).then(function(){loadMyUshirikas();});
+};
+window.loadMyUshirikas = function(){
+  if(!user)return;
+  sb.from('ushirika_members').select('*, ushirikas(name)').eq('user_id',user.id).then(function(r){
+    window._myUshirikas=r.data||[]; renderMyUshirikas();
+  });
+};
+function renderMyUshirikas(){
+  var box=document.getElementById('myUshirikasBox'); if(!box)return;
+  var list=window._myUshirikas||[];
+  if(!list.length){box.innerHTML='<div style="color:var(--text-lighter);font-size:.8rem">You have not joined any ushirika yet.</div>';return;}
+  box.innerHTML=list.map(function(m){
+    return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px"><b>'+esc((m.ushirikas||{}).name)+'</b><span style="color:var(--text-light);font-size:.75rem">('+esc(m.role)+')</span><button class="post-delete" onclick="leaveUshirika(\''+m.ushirika_id+'\')"><i class="fas fa-sign-out-alt"></i></button></div>';
+  }).join('');
+}
+window.openJoinUshirika = function(){
+  sb.from('ushirikas').select('*').order('name').then(function(r){
+    var h='<div class="modal-overlay show" id="joinUshModal" onclick="if(event.target===this)this.remove()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">➕ Join a Ushirika</div>'
+      +'<div style="margin-bottom:10px" id="myUshirikasBox"></div>'
+      +'<div class="user-picker">';
+    (r.data||[]).forEach(function(u){
+      h+='<div class="user-pick-item" onclick="joinUshirika(\''+u.id+'\');this.classList.add(\'selected\')"><div class="ushirika-icon" style="width:36px;height:36px;font-size:.9rem"><i class="fas fa-church"></i></div><div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div><div style="font-size:.7rem;color:var(--text-light)">'+esc(u.location||'')+'</div></div><i class="fas fa-plus" style="color:var(--primary)"></i></div>';
+    });
+    h+='</div><button class="btn btn-secondary-alt btn-block" style="margin-top:12px" onclick="document.getElementById(\'joinUshModal\').remove()">Close</button></div></div>';
+    document.body.insertAdjacentHTML('beforeend',h);
+    loadMyUshirikas();
+  });
+};
+
+// Inject a "Join Ushirika" button into the Ushirika section
+(function(){
+  var sec=document.getElementById('section-ushirika');
+  if(sec && !document.getElementById('joinUshBtn')){
+    var b=document.createElement('button');
+    b.id='joinUshBtn'; b.className='btn btn-primary btn-block'; b.style.marginBottom='14px';
+    b.innerHTML='<i class="fas fa-plus"></i> Join a Ushirika';
+    b.onclick=openJoinUshirika;
+    var first=sec.querySelector('.admin-panel')||sec.querySelector('.tabs');
+    if(first) sec.querySelector('.sub-page').insertBefore(b, first);
+  }
+})();
+
+// Hook: after login/showApp, load my ushirikas
+(function(){
+  var origShow=window.showApp;
+  window.showApp=function(){ if(origShow)origShow(); loadMyUshirikas(); };
+})();
 
 console.log('✝️ app6.js COMPLETE — Registration + Streak + Service Days + Multiple Pastors all fixed');
