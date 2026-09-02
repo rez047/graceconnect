@@ -1,0 +1,3489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>GraceConnect — Church App v6</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<style>
+:root {
+  --primary: #4F46E5; --primary-light: #818CF8; --primary-dark: #3730A3;
+  --secondary: #F59E0B; --accent: #10B981;
+  --bg: #F8FAFC; --bg-card: #FFFFFF;
+  --text: #1E293B; --text-light: #64748B; --text-lighter: #94A3B8;
+  --border: #E2E8F0;
+  --shadow: 0 1px 3px rgba(0,0,0,0.08);
+  --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.07);
+  --shadow-lg: 0 10px 25px -5px rgba(0,0,0,0.08);
+  --shadow-xl: 0 20px 40px -10px rgba(79,70,229,0.15);
+  --radius: 16px; --radius-sm: 10px; --radius-xs: 6px;
+  --gradient: linear-gradient(135deg, #4F46E5 0%, #7C3AED 50%, #A855F7 100%);
+  --gradient-warm: linear-gradient(135deg, #F59E0B 0%, #EF4444 100%);
+  --gradient-cool: linear-gradient(135deg, #06B6D4 0%, #3B82F6 50%, #8B5CF6 100%);
+  --gradient-green: linear-gradient(135deg, #10B981 0%, #059669 100%);
+  --gradient-heart: linear-gradient(135deg, #EC4899 0%, #F43F5E 50%, #EF4444 100%);
+  --gradient-dept: linear-gradient(135deg, #8B5CF6 0%, #EC4899 100%);
+  --gradient-chat: linear-gradient(135deg, #10B981 0%, #06B6D4 100%);
+  --nav-height: 70px; --header-height: 60px;
+}
+
+* { margin:0; padding:0; box-sizing:border-box; }
+html { scroll-behavior: smooth; }
+body {
+  font-family: 'Inter', -apple-system, sans-serif;
+  background: var(--bg); color: var(--text);
+  overflow-x: hidden;
+  -webkit-tap-highlight-color: transparent;
+  min-height: 100vh; min-height: 100dvh;
+}
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 3px; }
+
+.app-header {
+  position: fixed; top:0; left:0; right:0; z-index: 100;
+  height: var(--header-height);
+  background: rgba(255,255,255,0.85);
+  backdrop-filter: blur(20px);
+  border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 0 16px;
+}
+.app-header .logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.2rem; font-weight: 700;
+  background: var(--gradient);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+  display: flex; align-items: center; gap: 6px;
+}
+.app-header .logo i { -webkit-text-fill-color: var(--primary); font-size: 1rem; }
+.header-actions { display: flex; gap: 6px; align-items: center; }
+.header-btn {
+  width: 36px; height: 36px; border-radius: 50%;
+  border: none; background: var(--bg);
+  color: var(--text); font-size: 0.95rem;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  position: relative; transition: all 0.2s;
+}
+.header-btn:hover { background: var(--primary); color: white; }
+.header-btn .badge {
+  position: absolute; top: 2px; right: 2px;
+  width: 15px; height: 15px; border-radius: 50%;
+  background: #EF4444; color: white; font-size: 0.58rem;
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+}
+.role-indicator {
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 0.65rem; font-weight: 700;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  cursor: pointer; border: none;
+}
+.role-admin { background: var(--gradient-warm); color: white; }
+.role-user { background: var(--gradient-cool); color: white; }
+
+.bottom-nav {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
+  height: var(--nav-height);
+  background: rgba(255,255,255,0.92);
+  backdrop-filter: blur(20px);
+  border-top: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-around;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+}
+.nav-item {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 3px; cursor: pointer; padding: 6px 10px;
+  border-radius: var(--radius-sm); transition: all 0.3s;
+  border: none; background: none; color: var(--text-light);
+  font-size: 0.62rem; font-weight: 600; min-width: 54px;
+  text-transform: uppercase; letter-spacing: 0.5px;
+  position: relative;
+}
+.nav-item i { font-size: 1.15rem; transition: all 0.3s; }
+.nav-item.active { color: var(--primary); }
+.nav-item.active i { transform: scale(1.15); }
+
+.main-content {
+  padding-top: calc(var(--header-height) + 10px);
+  padding-bottom: calc(var(--nav-height) + 20px);
+  min-height: 100vh;
+}
+.section { display: none; padding: 0 16px; animation: fadeUp 0.4s ease; }
+.section.active { display: block; }
+@keyframes fadeUp {
+  from { opacity: 0; transform: translateY(15px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 18px;
+  box-shadow: var(--shadow);
+  margin-bottom: 14px;
+  border: 1px solid var(--border);
+}
+.card-gradient { background: var(--gradient); color: white; border: none; }
+.card-warm { background: var(--gradient-warm); color: white; border: none; }
+.card-cool { background: var(--gradient-cool); color: white; border: none; }
+.card-green { background: var(--gradient-green); color: white; border: none; }
+.card-heart { background: var(--gradient-heart); color: white; border: none; }
+.card-dept { background: var(--gradient-dept); color: white; border: none; }
+
+.section-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.35rem; font-weight: 700;
+  margin-bottom: 14px;
+  display: flex; align-items: center; gap: 8px;
+}
+.section-title .count-badge {
+  background: var(--primary);
+  color: white;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+.card-subtitle { font-size: 0.8rem; color: var(--text-light); line-height: 1.5; }
+
+.decision-overlay {
+  position: fixed; inset: 0; z-index: 400;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; color: white;
+}
+.decision-card { text-align: center; max-width: 420px; width: 100%; }
+.decision-logo {
+  font-family: 'Playfair Display', serif;
+  font-size: 2.2rem; font-weight: 700;
+  margin-bottom: 8px;
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+}
+.decision-tagline { font-size: 0.9rem; opacity: 0.9; margin-bottom: 30px; }
+.decision-icon {
+  width: 90px; height: 90px; border-radius: 50%;
+  background: rgba(255,255,255,0.2);
+  backdrop-filter: blur(10px);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 2.5rem;
+  margin: 0 auto 20px;
+  border: 2px solid rgba(255,255,255,0.3);
+}
+.decision-question {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem; font-weight: 700;
+  margin-bottom: 20px;
+}
+.decision-options { display: flex; flex-direction: column; gap: 12px; margin-bottom: 20px; }
+.decision-option {
+  background: rgba(255,255,255,0.95);
+  color: var(--primary-dark);
+  border: none; border-radius: var(--radius);
+  padding: 18px 20px; cursor: pointer;
+  display: flex; align-items: center; gap: 14px;
+  text-align: left; transition: all 0.2s; font-family: inherit;
+}
+.decision-option:hover { transform: translateY(-2px); box-shadow: 0 10px 25px rgba(0,0,0,0.2); }
+.decision-option-icon {
+  width: 48px; height: 48px; border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.2rem; flex-shrink: 0;
+}
+.decision-option-icon.alt { background: var(--gradient-warm); }
+.decision-option-title { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
+.decision-option-sub { font-size: 0.75rem; color: var(--text-light); }
+
+.onboarding-overlay {
+  position: fixed; inset: 0; z-index: 300;
+  background: rgba(0,0,0,0.7);
+  backdrop-filter: blur(8px);
+  display: none; align-items: center; justify-content: center;
+  padding: 20px;
+}
+.onboarding-overlay.show { display: flex; }
+.onboarding-card {
+  background: white; border-radius: var(--radius);
+  padding: 24px; width: 100%; max-width: 420px;
+  max-height: 90vh; overflow-y: auto; color: var(--text);
+}
+.onboarding-step { display: none; animation: fadeUp 0.4s ease; }
+.onboarding-step.active { display: block; }
+.onboarding-icon {
+  width: 70px; height: 70px; border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.8rem;
+  margin: 0 auto 14px;
+}
+.onboarding-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.4rem; font-weight: 700;
+  text-align: center; margin-bottom: 6px;
+}
+.onboarding-sub {
+  text-align: center; font-size: 0.85rem;
+  color: var(--text-light); margin-bottom: 18px;
+}
+.progress-dots { display: flex; justify-content: center; gap: 6px; margin-bottom: 18px; }
+.progress-dot {
+  width: 8px; height: 8px; border-radius: 50%;
+  background: var(--border); transition: all 0.3s;
+}
+.progress-dot.active { background: var(--primary); width: 24px; border-radius: 4px; }
+
+.greeting-section {
+  background: var(--gradient);
+  border-radius: var(--radius);
+  padding: 22px; color: white;
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+.greeting-section::after {
+  content: '✝'; position: absolute; right: -10px; top: -20px;
+  font-size: 7rem; opacity: 0.08; font-weight: 900;
+}
+.greeting-time { font-size: 0.75rem; opacity: 0.85; margin-bottom: 4px; }
+.greeting-text { font-family: 'Playfair Display', serif; font-size: 1.4rem; font-weight: 700; }
+.greeting-verse { font-size: 0.82rem; opacity: 0.9; font-style: italic; line-height: 1.5; margin-top: 10px; }
+.greeting-verse span { display: block; font-style: normal; font-weight: 600; margin-top: 4px; font-size: 0.72rem; }
+
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+.grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
+
+.mini-card {
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  padding: 14px 10px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  text-align: center; cursor: pointer;
+  transition: all 0.3s;
+}
+.mini-card:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.mini-card i { font-size: 1.4rem; margin-bottom: 6px; display: block; }
+.mini-card .mc-title { font-size: 0.75rem; font-weight: 700; }
+.mini-card .mc-sub { font-size: 0.65rem; color: var(--text-light); margin-top: 2px; }
+.mc-purple i { color: var(--primary); }
+.mc-gold i { color: var(--secondary); }
+.mc-green i { color: var(--accent); }
+.mc-red i { color: #EF4444; }
+.mc-blue i { color: #3B82F6; }
+.mc-pink i { color: #EC4899; }
+
+.my-depts-section {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.my-depts-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.my-depts-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1rem; font-weight: 700;
+  display: flex; align-items: center; gap: 8px;
+}
+.my-depts-title i { color: var(--primary); }
+.my-depts-count {
+  background: var(--gradient-dept);
+  color: white;
+  padding: 2px 10px;
+  border-radius: 20px;
+  font-family: 'Inter', sans-serif;
+  font-size: 0.7rem;
+  font-weight: 700;
+}
+.my-depts-scroll {
+  display: flex;
+  gap: 10px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+}
+.my-depts-scroll::-webkit-scrollbar { height: 4px; }
+.my-depts-scroll::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 2px; }
+
+.my-dept-mini {
+  flex: 0 0 200px;
+  background: var(--gradient-dept);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  color: white;
+  cursor: pointer;
+  transition: all 0.3s;
+  scroll-snap-align: start;
+  position: relative;
+  overflow: hidden;
+}
+.my-dept-mini:hover { transform: translateY(-2px); box-shadow: var(--shadow-lg); }
+.my-dept-mini::before {
+  content: ''; position: absolute; right: -20px; top: -20px;
+  width: 80px; height: 80px; border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+}
+.my-dept-mini.alt1 { background: var(--gradient-warm); }
+.my-dept-mini.alt2 { background: var(--gradient-cool); }
+.my-dept-mini.alt3 { background: var(--gradient-green); }
+.my-dept-mini.alt4 { background: var(--gradient-heart); }
+.my-dept-mini-icon {
+  width: 36px; height: 36px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.95rem;
+  margin-bottom: 8px;
+  border: 2px solid rgba(255,255,255,0.4);
+}
+.my-dept-mini-name {
+  font-weight: 700;
+  font-size: 0.88rem;
+  margin-bottom: 2px;
+}
+.my-dept-mini-role {
+  font-size: 0.68rem;
+  opacity: 0.9;
+  margin-bottom: 8px;
+  display: flex; align-items: center; gap: 4px;
+}
+.my-dept-mini-role-badge {
+  padding: 1px 6px;
+  background: rgba(255,255,255,0.25);
+  border-radius: 8px;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.my-dept-mini-stats {
+  display: flex; gap: 10px;
+  font-size: 0.68rem;
+  opacity: 0.9;
+}
+.my-dept-mini-stat { display: flex; align-items: center; gap: 3px; }
+
+.my-dept-join-more {
+  flex: 0 0 140px;
+  background: var(--bg);
+  border: 2px dashed var(--primary-light);
+  border-radius: var(--radius-sm);
+  padding: 14px;
+  cursor: pointer;
+  transition: all 0.3s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  scroll-snap-align: start;
+  color: var(--primary);
+}
+.my-dept-join-more:hover {
+  background: #EEF2FF;
+  border-color: var(--primary);
+  transform: translateY(-2px);
+}
+.my-dept-join-more i {
+  font-size: 1.5rem;
+  margin-bottom: 6px;
+}
+.my-dept-join-more .jd-title {
+  font-size: 0.78rem;
+  font-weight: 700;
+}
+.my-dept-join-more .jd-sub {
+  font-size: 0.65rem;
+  color: var(--text-light);
+  margin-top: 2px;
+}
+
+.btn {
+  padding: 10px 18px;
+  border-radius: var(--radius-sm);
+  border: none; font-weight: 600;
+  font-size: 0.85rem; cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: 'Inter', sans-serif;
+}
+.btn-primary { background: var(--gradient); color: white; }
+.btn-primary:hover { transform: translateY(-1px); box-shadow: var(--shadow-xl); }
+.btn-secondary { background: var(--bg); color: var(--text); border: 1px solid var(--border); }
+.btn-accent { background: var(--gradient-green); color: white; }
+.btn-warm { background: var(--gradient-warm); color: white; }
+.btn-heart { background: var(--gradient-heart); color: white; }
+.btn-dept { background: var(--gradient-dept); color: white; }
+.btn-chat { background: var(--gradient-chat); color: white; }
+.btn-sm { padding: 6px 12px; font-size: 0.75rem; }
+.btn-block { width: 100%; justify-content: center; }
+.btn-outline { background: transparent; border: 2px solid var(--primary); color: var(--primary); }
+.btn-danger { background: #FEE2E2; color: #991B1B; border: 1px solid #FECACA; }
+.btn-ghost { background: transparent; color: var(--primary); }
+
+.admin-only {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 2px 8px;
+  background: var(--gradient-warm);
+  color: white; border-radius: 10px;
+  font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px; margin-left: 6px;
+}
+
+.tabs { display: flex; gap: 4px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
+.tabs::-webkit-scrollbar { display: none; }
+.tab {
+  padding: 8px 14px; border-radius: 20px;
+  font-size: 0.75rem; font-weight: 600;
+  cursor: pointer; white-space: nowrap;
+  border: 1px solid var(--border);
+  background: white; color: var(--text-light);
+  transition: all 0.2s;
+}
+.tab.active { background: var(--primary); color: white; border-color: var(--primary); }
+
+.post {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.post-header { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.post-avatar {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 0.85rem;
+  flex-shrink: 0;
+}
+.post-avatar.admin { background: var(--gradient-warm); }
+.post-avatar.dept { background: var(--gradient-dept); }
+.post-name { font-weight: 700; font-size: 0.85rem; }
+.post-role { font-size: 0.65rem; color: var(--primary); font-weight: 600; }
+.post-time { font-size: 0.68rem; color: var(--text-lighter); margin-left: auto; }
+.post-body { font-size: 0.85rem; line-height: 1.6; margin-bottom: 8px; }
+.post-media {
+  width: 100%; border-radius: var(--radius-sm);
+  margin-bottom: 8px; background: var(--bg);
+  height: 160px; display: flex; align-items: center;
+  justify-content: center; color: var(--text-lighter);
+  font-size: 0.78rem; border: 2px dashed var(--border);
+}
+.post-actions { display: flex; gap: 14px; }
+.post-action {
+  display: flex; align-items: center; gap: 4px;
+  font-size: 0.75rem; color: var(--text-light);
+  cursor: pointer; padding: 4px 0;
+  border: none; background: none; font-family: inherit;
+}
+.post-action:hover { color: var(--primary); }
+.post-action.liked { color: #EF4444; }
+.post-delete {
+  margin-left: auto; color: #EF4444;
+  font-size: 0.75rem; cursor: pointer;
+  background: none; border: none; padding: 4px 8px;
+}
+
+.form-group { margin-bottom: 12px; }
+.form-label { font-size: 0.78rem; font-weight: 600; margin-bottom: 5px; display: block; }
+.form-input, .form-textarea, .form-select {
+  width: 100%; padding: 11px 13px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem; font-family: 'Inter', sans-serif;
+  background: white; color: var(--text);
+}
+.form-input:focus, .form-textarea:focus, .form-select:focus {
+  outline: none; border-color: var(--primary);
+}
+.form-textarea { min-height: 90px; resize: vertical; }
+.form-hint { font-size: 0.7rem; color: var(--text-lighter); margin-top: 3px; }
+
+.modal-overlay {
+  position: fixed; inset: 0; z-index: 200;
+  background: rgba(0,0,0,0.5);
+  backdrop-filter: blur(4px);
+  display: none; align-items: flex-end; justify-content: center;
+}
+.modal-overlay.show { display: flex; animation: fadeIn 0.2s; }
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+.modal {
+  background: white;
+  border-radius: var(--radius) var(--radius) 0 0;
+  width: 100%; max-width: 500px;
+  max-height: 88vh; overflow-y: auto;
+  padding: 22px 18px;
+  animation: slideUp 0.3s ease;
+}
+@keyframes slideUp { from { transform: translateY(100%); } to { transform: translateY(0); } }
+.modal-handle {
+  width: 40px; height: 4px; border-radius: 2px;
+  background: var(--border); margin: 0 auto 14px;
+}
+.modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 14px; }
+
+.chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 0.68rem; font-weight: 600;
+}
+.chip-purple { background: #EEF2FF; color: var(--primary); }
+.chip-green { background: #D1FAE5; color: #065F46; }
+.chip-gold { background: #FEF3C7; color: #92400E; }
+.chip-red { background: #FEE2E2; color: #991B1B; }
+.chip-blue { background: #DBEAFE; color: #1E40AF; }
+.chip-dept { background: #F3E8FF; color: #6B21A8; }
+
+.ushirika-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 14px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+  display: flex; align-items: center; gap: 12px;
+  cursor: pointer; transition: all 0.2s;
+}
+.ushirika-card:hover { box-shadow: var(--shadow-md); }
+.ushirika-icon {
+  width: 46px; height: 46px; border-radius: var(--radius-sm);
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 1.2rem; flex-shrink: 0;
+}
+.ushirika-info { flex: 1; }
+.ushirika-name { font-weight: 700; font-size: 0.9rem; }
+.ushirika-detail { font-size: 0.75rem; color: var(--text-light); }
+.ushirika-members { font-size: 0.7rem; color: var(--primary); font-weight: 600; margin-top: 2px; }
+
+.official-card {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px; background: var(--bg);
+  border-radius: var(--radius-sm); margin-bottom: 6px;
+}
+.official-avatar {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--gradient-warm);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-weight: 700; font-size: 0.8rem;
+}
+.official-name { font-weight: 700; font-size: 0.85rem; }
+.official-role { font-size: 0.7rem; color: var(--primary); font-weight: 600; }
+.official-contact { font-size: 0.7rem; color: var(--text-light); }
+
+.dept-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+  cursor: pointer; transition: all 0.2s;
+}
+.dept-card:hover { box-shadow: var(--shadow-md); transform: translateY(-2px); }
+.dept-banner {
+  height: 80px;
+  background: var(--gradient-dept);
+  display: flex; align-items: center;
+  padding: 0 16px; color: white;
+  position: relative;
+}
+.dept-banner.alt1 { background: var(--gradient-warm); }
+.dept-banner.alt2 { background: var(--gradient-cool); }
+.dept-banner.alt3 { background: var(--gradient-green); }
+.dept-banner.alt4 { background: var(--gradient-heart); }
+.dept-icon {
+  width: 50px; height: 50px; border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; margin-right: 12px;
+  border: 2px solid rgba(255,255,255,0.4);
+}
+.dept-name { font-size: 1.05rem; font-weight: 800; }
+.dept-desc { font-size: 0.75rem; opacity: 0.9; margin-top: 2px; }
+.dept-body { padding: 12px 14px; }
+.dept-stats {
+  display: flex; gap: 14px;
+  font-size: 0.72rem;
+  color: var(--text-light);
+  margin-bottom: 8px;
+}
+.dept-stats span { display: flex; align-items: center; gap: 4px; }
+.dept-stats i { color: var(--primary); }
+
+.dept-header {
+  background: var(--gradient-dept);
+  border-radius: var(--radius);
+  padding: 20px; color: white;
+  margin-bottom: 14px;
+  position: relative; overflow: hidden;
+}
+.dept-header::after {
+  content: ''; position: absolute; right: -20px; top: -20px;
+  width: 120px; height: 120px; border-radius: 50%;
+  background: rgba(255,255,255,0.1);
+}
+.dept-header-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.3rem; font-weight: 700;
+  margin-bottom: 4px;
+}
+.dept-header-sub { font-size: 0.8rem; opacity: 0.9; }
+.dept-header-stats {
+  display: flex; gap: 16px;
+  margin-top: 12px; font-size: 0.78rem;
+}
+.dept-header-stat { display: flex; align-items: center; gap: 4px; }
+
+.dept-role-badge {
+  padding: 3px 8px; border-radius: 10px;
+  font-size: 0.62rem; font-weight: 700;
+  text-transform: uppercase;
+  background: var(--gradient-warm); color: white;
+}
+.dept-role-badge.treasurer { background: var(--gradient-green); }
+.dept-role-badge.secretary { background: var(--gradient-cool); }
+.dept-role-badge.chairman { background: var(--gradient); }
+.dept-role-badge.member { background: var(--bg); color: var(--text-light); border: 1px solid var(--border); }
+
+.request-card {
+  background: #FEF3C7;
+  border: 2px solid #FCD34D;
+  border-radius: var(--radius);
+  padding: 14px; margin-bottom: 10px;
+}
+.request-header {
+  display: flex; align-items: center; gap: 10px;
+  margin-bottom: 10px;
+}
+.request-badge {
+  padding: 3px 8px; background: var(--secondary);
+  color: white; border-radius: 10px;
+  font-size: 0.65rem; font-weight: 700;
+}
+.request-actions { display: flex; gap: 6px; margin-top: 10px; }
+
+.admin-panel {
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  border: 2px solid #F59E0B;
+  border-radius: var(--radius);
+  padding: 16px; margin-bottom: 14px;
+}
+.admin-panel-title {
+  font-weight: 800; color: #92400E;
+  font-size: 0.9rem;
+  display: flex; align-items: center; gap: 6px;
+  margin-bottom: 10px;
+}
+
+.user-picker {
+  display: flex; flex-direction: column; gap: 6px;
+  max-height: 200px; overflow-y: auto;
+  padding: 4px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-bottom: 10px;
+}
+.user-pick-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 8px;
+  border-radius: var(--radius-xs);
+  cursor: pointer; transition: background 0.2s;
+}
+.user-pick-item:hover { background: var(--bg); }
+.user-pick-item.selected { background: #EEF2FF; border: 1px solid var(--primary-light); }
+
+.toggle-row {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 8px 0;
+}
+.toggle-label { font-size: 0.85rem; font-weight: 500; }
+.toggle {
+  width: 42px; height: 22px;
+  background: var(--border);
+  border-radius: 12px;
+  position: relative; cursor: pointer;
+  transition: background 0.3s;
+}
+.toggle.on { background: var(--primary); }
+.toggle::after {
+  content: '';
+  width: 18px; height: 18px;
+  background: white; border-radius: 50%;
+  position: absolute; top: 2px; left: 2px;
+  transition: transform 0.3s;
+  box-shadow: var(--shadow);
+}
+.toggle.on::after { transform: translateX(20px); }
+
+.media-upload {
+  border: 2px dashed var(--border);
+  border-radius: var(--radius-sm);
+  padding: 16px; text-align: center;
+  cursor: pointer; background: var(--bg);
+  margin-bottom: 10px;
+}
+.media-upload:hover { border-color: var(--primary); background: #EEF2FF; }
+.media-upload i { font-size: 1.3rem; color: var(--text-lighter); margin-bottom: 4px; display: block; }
+.media-upload span { font-size: 0.75rem; color: var(--text-light); }
+
+.sub-page { display: none; }
+.sub-page.active { display: block; }
+.back-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 0.82rem; font-weight: 600;
+  color: var(--primary); cursor: pointer;
+  margin-bottom: 10px; border: none; background: none;
+  font-family: inherit;
+}
+
+.fab {
+  position: fixed;
+  bottom: calc(var(--nav-height) + 18px);
+  right: 18px;
+  width: 52px; height: 52px;
+  border-radius: 50%;
+  background: var(--gradient);
+  color: white; border: none;
+  font-size: 1.2rem; cursor: pointer;
+  box-shadow: var(--shadow-xl);
+  z-index: 50;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.search-bar {
+  display: flex; align-items: center; gap: 8px;
+  background: var(--bg);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 9px 12px; margin-bottom: 14px;
+}
+.search-bar i { color: var(--text-lighter); }
+.search-bar input {
+  flex: 1; border: none; background: none;
+  font-size: 0.85rem; font-family: inherit; outline: none;
+}
+
+.bible-reader {
+  background: #FFFBEB;
+  border-radius: var(--radius);
+  padding: 20px;
+  border: 1px solid #FDE68A;
+  margin-bottom: 14px;
+}
+.bible-verse-text {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem; line-height: 1.7;
+  color: #78350F;
+}
+.bible-ref {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.8rem; font-weight: 700;
+  color: #92400E; margin-top: 8px;
+}
+
+.gps-pin {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px;
+  background: #DBEAFE;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  font-size: 0.8rem;
+  color: #1E40AF; font-weight: 600;
+  cursor: pointer;
+}
+
+.emotional-card {
+  background: var(--gradient-heart);
+  border-radius: var(--radius);
+  padding: 22px; color: white;
+  margin-bottom: 16px;
+  position: relative; overflow: hidden;
+}
+.emotional-card::before {
+  content: '💝'; position: absolute; right: 10px; top: 10px;
+  font-size: 3rem; opacity: 0.15;
+}
+.emotional-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.15rem; font-weight: 700;
+  margin-bottom: 6px;
+}
+.emotional-sub { font-size: 0.8rem; opacity: 0.9; margin-bottom: 14px; }
+.emotional-input-wrap {
+  display: flex; gap: 8px;
+  background: rgba(255,255,255,0.2);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+}
+.emotional-input {
+  flex: 1; background: transparent; border: none;
+  color: white; padding: 10px 14px;
+  font-size: 0.88rem; font-family: inherit; outline: none;
+}
+.emotional-input::placeholder { color: rgba(255,255,255,0.7); }
+.emotional-btn {
+  background: white; color: #EF4444;
+  border: none; border-radius: 8px;
+  padding: 0 16px; font-weight: 700;
+  cursor: pointer; font-size: 0.85rem;
+}
+.emotional-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.emotional-chip {
+  padding: 4px 10px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 20px;
+  font-size: 0.7rem; font-weight: 600;
+  cursor: pointer; border: none; color: white;
+}
+
+.verse-result {
+  background: #FFFBEB;
+  border-radius: var(--radius);
+  padding: 18px;
+  border: 1px solid #FDE68A;
+  margin-bottom: 14px;
+}
+.verse-result-header {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.8rem; font-weight: 700;
+  color: #92400E;
+}
+.verse-result-header i { color: #F59E0B; }
+.verse-item {
+  padding: 12px; background: white;
+  border-radius: var(--radius-sm);
+  margin-bottom: 8px;
+  border-left: 3px solid #F59E0B;
+}
+.verse-text {
+  font-family: 'Playfair Display', serif;
+  font-size: 0.95rem; line-height: 1.6;
+  color: #78350F; font-style: italic;
+}
+.verse-ref {
+  font-family: 'Inter', sans-serif;
+  font-size: 0.75rem; font-weight: 700;
+  color: #B45309; margin-top: 6px;
+  font-style: normal;
+}
+.verse-encourage {
+  margin-top: 10px; padding: 10px;
+  background: #FEF3C7;
+  border-radius: var(--radius-xs);
+  font-size: 0.82rem;
+  color: #78350F; line-height: 1.5;
+}
+
+.streak-bar {
+  display: flex; align-items: center; gap: 12px;
+  background: linear-gradient(135deg, #FEF3C7, #FDE68A);
+  border-radius: var(--radius-sm);
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border: 1px solid #FCD34D;
+}
+.streak-fire { font-size: 1.8rem; }
+.streak-info .streak-count { font-size: 1.2rem; font-weight: 800; color: #92400E; }
+.streak-info .streak-label { font-size: 0.7rem; color: #A16207; font-weight: 600; }
+.streak-days { display: flex; gap: 3px; margin-left: auto; }
+.streak-dot {
+  width: 20px; height: 20px; border-radius: 50%;
+  background: rgba(146,64,14,0.15);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.55rem; font-weight: 700; color: #92400E;
+}
+.streak-dot.done { background: #F59E0B; color: white; }
+
+.event-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.event-banner {
+  height: 120px;
+  background: var(--gradient-cool);
+  display: flex; align-items: center; justify-content: center;
+  color: white; font-size: 2rem; position: relative;
+}
+.event-status {
+  position: absolute; top: 8px; right: 8px;
+  padding: 4px 10px; border-radius: 20px;
+  font-size: 0.65rem; font-weight: 700;
+}
+.status-upcoming { background: #DBEAFE; color: #1E40AF; }
+.status-ongoing { background: #D1FAE5; color: #065F46; }
+.status-completed { background: #F3F4F6; color: #6B7280; }
+.event-info { padding: 14px; }
+.event-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
+.event-date { font-size: 0.75rem; color: var(--text-light); }
+
+.giving-cause {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  padding: 16px;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 12px;
+}
+.giving-progress {
+  width: 100%; height: 8px;
+  background: var(--bg);
+  border-radius: 4px;
+  margin: 10px 0 6px;
+  overflow: hidden;
+}
+.giving-progress-bar {
+  height: 100%;
+  background: var(--gradient-green);
+  border-radius: 4px;
+}
+.giving-amounts { display: flex; justify-content: space-between; font-size: 0.75rem; }
+.giving-raised { font-weight: 700; color: var(--accent); }
+.giving-goal { color: var(--text-light); }
+.pay-methods { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pay-method {
+  padding: 6px 12px;
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 0.75rem; font-weight: 600;
+  cursor: pointer;
+  display: flex; align-items: center; gap: 5px;
+  background: white;
+}
+.pay-method.selected { border-color: var(--accent); background: #D1FAE5; }
+
+.character-card {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  margin-bottom: 10px;
+}
+.character-banner {
+  height: 90px;
+  background: var(--gradient);
+  display: flex; align-items: flex-end;
+  padding: 0 14px 0;
+}
+.character-avatar-lg {
+  width: 54px; height: 54px; border-radius: 50%;
+  background: white; border: 3px solid white;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1.3rem; position: relative; top: 27px;
+  box-shadow: var(--shadow-md);
+}
+.character-body { padding: 34px 14px 14px; }
+.character-name { font-size: 1rem; font-weight: 800; }
+.character-desc { font-size: 0.8rem; color: var(--text-light); line-height: 1.5; margin-top: 4px; }
+
+.weekly-meeting-card {
+  background: linear-gradient(135deg, #DBEAFE 0%, #C7D2FE 100%);
+  border-radius: var(--radius);
+  padding: 18px;
+  margin-bottom: 14px;
+  border: 2px solid #93C5FD;
+}
+.weekly-meeting-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 12px;
+}
+.weekly-meeting-title {
+  font-family: 'Playfair Display', serif;
+  font-size: 1.05rem; font-weight: 700;
+  color: #1E40AF;
+  display: flex; align-items: center; gap: 8px;
+}
+.weekly-meeting-title i { color: #2563EB; }
+.weekly-meeting-badge {
+  padding: 3px 10px;
+  background: #2563EB;
+  color: white;
+  border-radius: 20px;
+  font-size: 0.65rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+.weekly-meeting-details {
+  display: flex; flex-direction: column; gap: 8px;
+  margin-bottom: 12px;
+}
+.weekly-meeting-item {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 0.85rem;
+  color: #1E3A8A;
+}
+.weekly-meeting-item i {
+  width: 24px;
+  color: #2563EB;
+}
+.weekly-meeting-item strong {
+  font-weight: 700;
+}
+.weekly-meeting-theme {
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 10px 12px;
+  margin-top: 8px;
+  border-left: 3px solid #2563EB;
+}
+.weekly-meeting-theme-label {
+  font-size: 0.7rem;
+  color: #2563EB;
+  font-weight: 700;
+  text-transform: uppercase;
+  margin-bottom: 2px;
+}
+.weekly-meeting-theme-text {
+  font-size: 0.88rem;
+  color: #1E3A8A;
+  font-style: italic;
+}
+.weekly-meeting-actions {
+  display: flex; gap: 8px;
+  margin-top: 12px;
+}
+
+.chat-container {
+  background: var(--bg-card);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: var(--shadow);
+  border: 1px solid var(--border);
+  height: calc(100vh - 200px);
+  display: flex;
+  flex-direction: column;
+}
+.chat-header {
+  background: var(--gradient-chat);
+  padding: 16px;
+  color: white;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.chat-header-avatar {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: rgba(255,255,255,0.25);
+  display: flex; align-items: center; justify-content: center;
+  font-weight: 700;
+  border: 2px solid rgba(255,255,255,0.4);
+}
+.chat-header-info { flex: 1; }
+.chat-header-name {
+  font-weight: 700;
+  font-size: 1rem;
+}
+.chat-header-status {
+  font-size: 0.75rem;
+  opacity: 0.9;
+}
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.chat-message {
+  display: flex;
+  gap: 8px;
+  max-width: 80%;
+}
+.chat-message.sent {
+  align-self: flex-end;
+  flex-direction: row-reverse;
+}
+.chat-message-avatar {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  font-size: 0.7rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.chat-message.sent .chat-message-avatar {
+  background: var(--gradient-chat);
+}
+.chat-message-bubble {
+  background: white;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  box-shadow: var(--shadow);
+}
+.chat-message.sent .chat-message-bubble {
+  background: var(--gradient-chat);
+  color: white;
+}
+.chat-message-text {
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+.chat-message-media {
+  margin-top: 8px;
+  border-radius: var(--radius-xs);
+  overflow: hidden;
+  background: var(--bg);
+  padding: 10px;
+  text-align: center;
+  font-size: 0.75rem;
+  color: var(--text-light);
+}
+.chat-message.sent .chat-message-media {
+  background: rgba(255,255,255,0.2);
+  color: white;
+}
+.chat-message-time {
+  font-size: 0.65rem;
+  color: var(--text-lighter);
+  margin-top: 4px;
+}
+.chat-message.sent .chat-message-time {
+  color: rgba(255,255,255,0.8);
+}
+.chat-input-area {
+  background: white;
+  padding: 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.chat-input {
+  flex: 1;
+  border: 2px solid var(--border);
+  border-radius: 24px;
+  padding: 10px 16px;
+  font-size: 0.88rem;
+  font-family: inherit;
+  outline: none;
+}
+.chat-input:focus {
+  border-color: var(--primary);
+}
+.chat-attach-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--bg);
+  border: none;
+  color: var(--text-light);
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+}
+.chat-attach-btn:hover {
+  background: var(--primary);
+  color: white;
+}
+.chat-send-btn {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: var(--gradient-chat);
+  border: none;
+  color: white;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 1rem;
+}
+.chat-send-btn:hover {
+  transform: scale(1.05);
+}
+
+.chat-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.chat-list-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  background: var(--bg-card);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: all 0.2s;
+  border: 1px solid var(--border);
+}
+.chat-list-item:hover {
+  box-shadow: var(--shadow-md);
+  transform: translateX(2px);
+}
+.chat-list-avatar {
+  width: 48px; height: 48px;
+  border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  font-weight: 700;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+.chat-list-info {
+  flex: 1;
+  min-width: 0;
+}
+.chat-list-name {
+  font-weight: 700;
+  font-size: 0.9rem;
+  margin-bottom: 2px;
+}
+.chat-list-role {
+  font-size: 0.7rem;
+  color: var(--primary);
+  font-weight: 600;
+}
+.chat-list-preview {
+  font-size: 0.78rem;
+  color: var(--text-light);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.chat-list-meta {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+.chat-list-time {
+  font-size: 0.68rem;
+  color: var(--text-lighter);
+}
+.chat-list-badge {
+  width: 20px; height: 20px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 700;
+  display: flex; align-items: center; justify-content: center;
+}
+
+.title-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+.title-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px;
+  background: var(--bg);
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border);
+}
+.title-item-icon {
+  width: 32px; height: 32px;
+  border-radius: 50%;
+  background: var(--gradient);
+  display: flex; align-items: center; justify-content: center;
+  color: white;
+  font-size: 0.85rem;
+}
+.title-item-name {
+  flex: 1;
+  font-weight: 600;
+  font-size: 0.88rem;
+}
+.title-item-delete {
+  width: 28px; height: 28px;
+  border-radius: 50%;
+  background: #FEE2E2;
+  color: #991B1B;
+  border: none;
+  cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.75rem;
+}
+
+@media (min-width: 768px) {
+  .main-content { max-width: 600px; margin: 0 auto; }
+  .bottom-nav { max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; }
+  .app-header { max-width: 600px; left: 50%; transform: translateX(-50%); }
+  .modal { border-radius: var(--radius); margin-bottom: 20px; }
+  .modal-overlay { align-items: center; }
+}
+</style>
+</head>
+<body>
+
+<div class="decision-overlay" id="decisionOverlay">
+  <div class="decision-card">
+    <div class="decision-logo"><i class="fas fa-cross"></i> GraceConnect</div>
+    <div class="decision-tagline">Your spiritual home, connected.</div>
+    <div class="decision-icon"><i class="fas fa-church"></i></div>
+    <div class="decision-question">Are you joining us today?</div>
+    <div class="decision-options">
+      <button class="decision-option" onclick="startNewMember()">
+        <div class="decision-option-icon"><i class="fas fa-user-plus"></i></div>
+        <div>
+          <div class="decision-option-title">I'm a New Member</div>
+          <div class="decision-option-sub">First time here — let's set up your profile</div>
+        </div>
+      </button>
+      <button class="decision-option" onclick="startExistingMember()">
+        <div class="decision-option-icon alt"><i class="fas fa-sign-in-alt"></i></div>
+        <div>
+          <div class="decision-option-title">I'm an Existing Member</div>
+          <div class="decision-option-sub">I already have an account — sign me in</div>
+        </div>
+      </button>
+    </div>
+    <div style="font-size:0.72rem;opacity:0.7">By continuing, you agree to our community guidelines</div>
+  </div>
+</div>
+
+<div class="onboarding-overlay" id="onboardingOverlay">
+  <div class="onboarding-card">
+    <div class="progress-dots">
+      <div class="progress-dot active" data-step="1"></div>
+      <div class="progress-dot" data-step="2"></div>
+      <div class="progress-dot" data-step="3"></div>
+      <div class="progress-dot" data-step="4"></div>
+    </div>
+    <div class="onboarding-step active" data-step="1">
+      <div class="onboarding-icon"><i class="fas fa-cross"></i></div>
+      <div class="onboarding-title">Welcome to GraceConnect</div>
+      <div class="onboarding-sub">Let's set up your profile.</div>
+      <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Get Started <i class="fas fa-arrow-right"></i></button>
+    </div>
+    <div class="onboarding-step" data-step="2">
+      <div class="onboarding-icon"><i class="fas fa-user"></i></div>
+      <div class="onboarding-title">Your Details</div>
+      <div class="onboarding-sub">Tell us about yourself</div>
+      <div class="form-group">
+        <label class="form-label">Full Name <span style="color:#EF4444">*</span></label>
+        <input class="form-input" id="ob-name" placeholder="e.g. John Mwangi">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Email (optional)</label>
+        <input class="form-input" type="email" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Phone (optional)</label>
+        <input class="form-input" type="tel" placeholder="+254 7XX XXX XXX">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Profile Picture (optional)</label>
+        <div class="media-upload"><i class="fas fa-camera"></i><span>Upload photo</span></div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Continue <i class="fas fa-arrow-right"></i></button>
+    </div>
+    <div class="onboarding-step" data-step="3">
+      <div class="onboarding-icon"><i class="fas fa-people-group"></i></div>
+      <div class="onboarding-title">Choose Your Ushirika</div>
+      <div class="onboarding-sub">Select the ushirika you belong to</div>
+      <div class="form-group">
+        <label class="form-label">Ushirika <span style="color:#EF4444">*</span></label>
+        <select class="form-select" id="ob-ushirika">
+          <option value="">-- Select Ushirika --</option>
+          <option value="nairobi">Ushirika wa Nairobi</option>
+          <option value="nakuru">Ushirika wa Nakuru</option>
+          <option value="mombasa">Ushirika wa Mombasa</option>
+        </select>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Continue <i class="fas fa-arrow-right"></i></button>
+    </div>
+    <div class="onboarding-step" data-step="4">
+      <div class="onboarding-icon" style="background:var(--gradient-green)"><i class="fas fa-check"></i></div>
+      <div class="onboarding-title">You're All Set! 🎉</div>
+      <div class="onboarding-sub">Welcome to the GraceConnect family.</div>
+      <div class="card card-gradient" style="text-align:center">
+        <div style="font-size:0.8rem;opacity:0.9">Today's Verse</div>
+        <div style="font-family:'Playfair Display',serif;font-size:1rem;margin-top:8px;font-style:italic">"The LORD bless you and keep you."</div>
+        <div style="font-size:0.75rem;margin-top:6px;opacity:0.9">— Numbers 6:24</div>
+      </div>
+      <button class="btn btn-primary btn-block" onclick="completeOnboarding()">Enter GraceConnect <i class="fas fa-arrow-right"></i></button>
+    </div>
+  </div>
+</div>
+
+<div class="onboarding-overlay" id="loginOverlay">
+  <div class="onboarding-card">
+    <div class="onboarding-icon" style="background:var(--gradient-warm)"><i class="fas fa-sign-in-alt"></i></div>
+    <div class="onboarding-title">Welcome Back!</div>
+    <div class="onboarding-sub">Sign in to continue</div>
+    <div class="form-group">
+      <label class="form-label">Email or Phone</label>
+      <input class="form-input" placeholder="you@example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Password</label>
+      <input class="form-input" type="password" placeholder="••••••••">
+    </div>
+    <button class="btn btn-primary btn-block" onclick="showLeaderPrompt()">Sign In</button>
+    <div style="text-align:center;margin-top:14px">
+      <button class="btn btn-ghost btn-sm" onclick="hideLogin()">← Back</button>
+    </div>
+  </div>
+</div>
+
+<div class="onboarding-overlay" id="leaderPromptOverlay">
+  <div class="onboarding-card">
+    <div class="onboarding-icon" style="background:var(--gradient-cool)"><i class="fas fa-user-tie"></i></div>
+    <div class="onboarding-title">Are you a Church Leader?</div>
+    <div class="onboarding-sub">If you serve in a leadership role, we can verify your position with the admin team.</div>
+    <button class="btn btn-warm btn-block" onclick="requestLeaderVerification()" style="margin-bottom:10px">
+      <i class="fas fa-crown"></i> Yes, I'm a Leader/Official
+    </button>
+    <button class="btn btn-secondary btn-block" onclick="completeLogin()">
+      No, I'm a Regular Member
+    </button>
+  </div>
+</div>
+
+<header class="app-header">
+  <div class="logo"><i class="fas fa-cross"></i> GraceConnect</div>
+  <div class="header-actions">
+    <button class="role-indicator role-admin" id="roleIndicator" onclick="toggleRole()" title="Toggle role (demo)">
+      <i class="fas fa-crown"></i> ADMIN
+    </button>
+    <button class="header-btn" onclick="openModal('searchModal')"><i class="fas fa-search"></i></button>
+    <button class="header-btn" onclick="switchSection('home');showSubPage('home-notifications')">
+      <i class="fas fa-bell"></i><span class="badge">5</span>
+    </button>
+    <button class="header-btn" onclick="openModal('profileModal')"><i class="fas fa-user"></i></button>
+  </div>
+</header>
+
+<main class="main-content">
+
+  <div id="section-home" class="section active">
+    <div id="home-main" class="sub-page active">
+
+      <div class="greeting-section">
+        <div class="greeting-time" id="greetingTime"></div>
+        <div class="greeting-text" id="greetingText"></div>
+        <div class="greeting-verse">
+          "For I know the plans I have for you," declares the LORD, "plans to prosper you and not to harm you, plans to give you hope and a future."
+          <span>— Jeremiah 29:11</span>
+        </div>
+      </div>
+
+      <div class="streak-bar">
+        <div class="streak-fire">🔥</div>
+        <div class="streak-info">
+          <div class="streak-count">7 Days</div>
+          <div class="streak-label">Daily Streak</div>
+        </div>
+        <div class="streak-days">
+          <div class="streak-dot done">M</div><div class="streak-dot done">T</div>
+          <div class="streak-dot done">W</div><div class="streak-dot done">T</div>
+          <div class="streak-dot done">F</div><div class="streak-dot done">S</div>
+          <div class="streak-dot done">S</div>
+        </div>
+      </div>
+
+      <div class="my-depts-section">
+        <div class="my-depts-header">
+          <div class="my-depts-title"><i class="fas fa-briefcase"></i> My Departments</div>
+          <div class="my-depts-count" id="myDeptsCount">3 serving</div>
+        </div>
+        <div class="my-depts-scroll" id="myDeptsScroll">
+          <div class="my-dept-mini" onclick="openMainDepartment('worship')">
+            <div class="my-dept-mini-icon"><i class="fas fa-music"></i></div>
+            <div class="my-dept-mini-name">Praise & Worship</div>
+            <div class="my-dept-mini-role">
+              <span class="my-dept-mini-role-badge">Team Member</span>
+            </div>
+            <div class="my-dept-mini-stats">
+              <div class="my-dept-mini-stat"><i class="fas fa-users"></i> 18</div>
+              <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 89</div>
+            </div>
+          </div>
+          <div class="my-dept-mini alt1" onclick="openMainDepartment('intercessory')">
+            <div class="my-dept-mini-icon"><i class="fas fa-hands-praying"></i></div>
+            <div class="my-dept-mini-name">Intercessory</div>
+            <div class="my-dept-mini-role">
+              <span class="my-dept-mini-role-badge">Prayer Warrior</span>
+            </div>
+            <div class="my-dept-mini-stats">
+              <div class="my-dept-mini-stat"><i class="fas fa-users"></i> 30</div>
+              <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 178</div>
+            </div>
+          </div>
+          <div class="my-dept-mini alt2" onclick="openMainDepartment('media')">
+            <div class="my-dept-mini-icon"><i class="fas fa-video"></i></div>
+            <div class="my-dept-mini-name">Media & Tech</div>
+            <div class="my-dept-mini-role">
+              <span class="my-dept-mini-role-badge">Sound Engineer</span>
+            </div>
+            <div class="my-dept-mini-stats">
+              <div class="my-dept-mini-stat"><i class="fas fa-users"></i> 12</div>
+              <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 67</div>
+            </div>
+          </div>
+          <div class="my-dept-join-more" onclick="showDeptPicker()">
+            <i class="fas fa-plus-circle"></i>
+            <div class="jd-title">Join Another</div>
+            <div class="jd-sub">Serve in more ministries</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="section-title">💝 How are you feeling?</div>
+      <div class="emotional-card">
+        <div class="emotional-title">Share your heart</div>
+        <div class="emotional-sub">We'll find God's word for you.</div>
+        <div class="emotional-input-wrap">
+          <input class="emotional-input" id="emotionalInput" placeholder="e.g. grief, joy, anxiety...">
+          <button class="emotional-btn" onclick="retrieveVerses()"><i class="fas fa-search"></i></button>
+        </div>
+        <div class="emotional-chips">
+          <button class="emotional-chip" onclick="setEmotional('grief')">😢 Grief</button>
+          <button class="emotional-chip" onclick="setEmotional('joy')">😊 Joy</button>
+          <button class="emotional-chip" onclick="setEmotional('anxiety')">😰 Anxiety</button>
+          <button class="emotional-chip" onclick="setEmotional('loneliness')">🥺 Lonely</button>
+          <button class="emotional-chip" onclick="setEmotional('fear')">😨 Fear</button>
+          <button class="emotional-chip" onclick="setEmotional('doubt')">🤔 Doubt</button>
+        </div>
+      </div>
+      <div id="verseResults"></div>
+
+      <div class="section-title">⚡ Quick Actions</div>
+      <div class="grid-3">
+        <div class="mini-card mc-purple" onclick="showSubPage('home-trivia')">
+          <i class="fas fa-brain"></i><div class="mc-title">Trivia</div><div class="mc-sub">Test knowledge</div>
+        </div>
+        <div class="mini-card mc-gold" onclick="showSubPage('home-bibleReader')">
+          <i class="fas fa-book-bible"></i><div class="mc-title">Bible</div><div class="mc-sub">Read & Study</div>
+        </div>
+        <div class="mini-card mc-green" onclick="openModal('prayerModal')">
+          <i class="fas fa-hands-praying"></i><div class="mc-title">Prayer</div><div class="mc-sub">Request</div>
+        </div>
+        <div class="mini-card mc-blue" onclick="showSubPage('home-quizMaster')">
+          <i class="fas fa-trophy"></i><div class="mc-title">Quiz</div><div class="mc-sub">Compete</div>
+        </div>
+        <div class="mini-card mc-pink" onclick="showSubPage('home-characters')">
+          <i class="fas fa-users"></i><div class="mc-title">Characters</div><div class="mc-sub">Explore</div>
+        </div>
+        <div class="mini-card mc-red" onclick="showSubPage('home-devotional')">
+          <i class="fas fa-sun"></i><div class="mc-title">Devotional</div><div class="mc-sub">Daily</div>
+        </div>
+      </div>
+
+      <div class="section-title">📖 Bible Trivia</div>
+      <div class="card" style="padding:16px;border:2px solid var(--primary-light)">
+        <div style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-bottom:6px">Question 1 of 5</div>
+        <div style="font-weight:700;margin-bottom:12px">Who built the ark?</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">A) Abraham</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,true)">B) Noah ✓</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">C) Moses</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start" onclick="answerTrivia(this,false)">D) David</button>
+        </div>
+        <div style="text-align:center;margin-top:10px;font-weight:700;color:var(--primary);font-size:0.85rem" id="triviaScore">Score: 0/0</div>
+      </div>
+    </div>
+
+    <div id="home-mainDept" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back to Home</button>
+      
+      <div class="dept-header">
+        <div style="display:flex;align-items:center;gap:12px">
+          <div class="dept-icon" id="mainDeptIcon"><i class="fas fa-music"></i></div>
+          <div>
+            <div class="dept-header-title" id="mainDeptName">Praise & Worship</div>
+            <div class="dept-header-sub" id="mainDeptDesc">Private forum for worship team</div>
+          </div>
+        </div>
+        <div class="dept-header-stats">
+          <div class="dept-header-stat"><i class="fas fa-users"></i> <span id="mainDeptMembers">18 members</span></div>
+          <div class="dept-header-stat"><i class="fas fa-comments"></i> <span id="mainDeptPosts">89 posts</span></div>
+        </div>
+      </div>
+
+      <div class="weekly-meeting-card">
+        <div class="weekly-meeting-header">
+          <div class="weekly-meeting-title">
+            <i class="fas fa-calendar-week"></i>
+            This Week's Meeting
+          </div>
+          <span class="weekly-meeting-badge">Updated 2h ago</span>
+        </div>
+        <div class="weekly-meeting-details">
+          <div class="weekly-meeting-item">
+            <i class="fas fa-calendar"></i>
+            <div><strong>Saturday</strong>, September 7, 2026</div>
+          </div>
+          <div class="weekly-meeting-item">
+            <i class="fas fa-clock"></i>
+            <div><strong>4:00 PM - 6:00 PM</strong> (2 hours)</div>
+          </div>
+          <div class="weekly-meeting-item">
+            <i class="fas fa-map-marker-alt"></i>
+            <div><strong>Main Sanctuary</strong> - Room 204</div>
+          </div>
+        </div>
+        <div class="weekly-meeting-theme">
+          <div class="weekly-meeting-theme-label">Meeting Theme</div>
+          <div class="weekly-meeting-theme-text">"Preparing Hearts for Sunday Worship"</div>
+        </div>
+        <div class="weekly-meeting-actions">
+          <button class="btn btn-sm btn-primary" onclick="openModal('updateWeeklyMeetingModal')">
+            <i class="fas fa-edit"></i> Update Meeting
+          </button>
+          <button class="btn btn-sm btn-secondary">
+            <i class="fas fa-bell"></i> Notify Members
+          </button>
+        </div>
+      </div>
+
+      <div class="admin-panel" id="adminMainDeptControl">
+        <div class="admin-panel-title"><i class="fas fa-crown"></i> Department Admin Controls</div>
+        <div class="grid-3" style="margin-bottom:0">
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('addDeptMemberModal')">
+            <i class="fas fa-user-plus"></i> Add Member
+          </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('assignDeptRoleModal')">
+            <i class="fas fa-user-tag"></i> Assign Role
+          </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('removeDeptMemberModal')">
+            <i class="fas fa-user-minus"></i> Remove
+          </button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchMainDeptTab(this,'feed')">Feed</div>
+        <div class="tab" onclick="switchMainDeptTab(this,'members')">Members</div>
+        <div class="tab" onclick="switchMainDeptTab(this,'roles')">Leadership</div>
+      </div>
+
+      <div id="mainDept-feed">
+        <button class="btn btn-primary btn-block" onclick="openModal('deptPostModal')" style="margin-bottom:14px">
+          <i class="fas fa-pen"></i> Post to Department
+        </button>
+        <div class="post">
+          <div class="post-header">
+            <div class="post-avatar dept">RW</div>
+            <div>
+              <div class="post-name">Ruth Wanjiku</div>
+              <div class="post-role">👑 Team Leader</div>
+            </div>
+            <div class="post-time">2h ago</div>
+            <button class="post-delete" onclick="deleteDeptPost(this)"><i class="fas fa-trash"></i></button>
+          </div>
+          <div class="post-body">🎵 <strong>Sunday Setlist:</strong><br>
+            1. Goodness of God<br>
+            2. Way Maker<br>
+            3. What a Beautiful Name<br>
+            4. Holy Spirit<br><br>
+            Rehearsal Saturday 4 PM. Please come prepared! 🙏
+          </div>
+          <div class="post-media"><i class="fas fa-music" style="margin-right:6px"></i> setlist-sep7.pdf</div>
+          <div class="post-actions">
+            <button class="post-action liked"><i class="fas fa-heart"></i> 22</button>
+            <button class="post-action"><i class="far fa-comment"></i> 8</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="mainDept-members" style="display:none">
+        <div class="search-bar"><i class="fas fa-search"></i><input placeholder="Search members..."></div>
+        <div class="official-card">
+          <div class="official-avatar" style="background:var(--gradient-dept)">RW</div>
+          <div style="flex:1">
+            <div class="official-name">Ruth Wanjiku</div>
+            <span class="dept-role-badge chairman">Team Leader</span>
+          </div>
+          <button class="btn btn-sm btn-chat" onclick="openChat('ruth')">
+            <i class="fas fa-comment"></i>
+          </button>
+        </div>
+        <div class="official-card">
+          <div class="official-avatar" style="background:var(--gradient-cool)">DM</div>
+          <div style="flex:1">
+            <div class="official-name">David Mwangi</div>
+            <span class="dept-role-badge secretary">Secretary</span>
+          </div>
+          <button class="btn btn-sm btn-chat" onclick="openChat('david')">
+            <i class="fas fa-comment"></i>
+          </button>
+        </div>
+        <div class="official-card">
+          <div class="official-avatar admin">PP</div>
+          <div style="flex:1">
+            <div class="official-name">Pastor Peter</div>
+            <span class="dept-role-badge" style="background:var(--gradient-warm)">Admin</span>
+            <span style="font-size:0.65rem;color:var(--text-lighter)">(in all depts)</span>
+          </div>
+          <button class="btn btn-sm btn-chat" onclick="openChat('pastor')">
+            <i class="fas fa-comment"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="mainDept-roles" style="display:none">
+        <div class="card">
+          <div class="card-title">👑 Department Leadership</div>
+          <div class="card-subtitle">Roles assigned by admin.</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px">
+          <div class="official-avatar" style="width:36px;height:36px;font-size:0.75rem;background:var(--gradient-dept)">RW</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:0.85rem">Ruth Wanjiku</div>
+            <div style="font-size:0.7rem;color:var(--text-light)">Team Leader</div>
+          </div>
+          <span class="dept-role-badge chairman">Leader</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:10px;padding:10px;background:var(--bg);border-radius:var(--radius-sm);margin-bottom:6px">
+          <div class="official-avatar" style="width:36px;height:36px;font-size:0.75rem;background:var(--gradient-cool)">DM</div>
+          <div style="flex:1">
+            <div style="font-weight:700;font-size:0.85rem">David Mwangi</div>
+            <div style="font-size:0.7rem;color:var(--text-light)">Secretary</div>
+          </div>
+          <span class="dept-role-badge secretary">Secretary</span>
+        </div>
+      </div>
+    </div>
+
+    <div id="home-trivia" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">🧠 Bible Trivia Challenge</div>
+      <div class="card">
+        <div style="font-weight:700;margin-bottom:12px">How many days did God take to create the world?</div>
+        <div style="display:flex;flex-direction:column;gap:6px">
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">A) 5 days</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">B) 6 days ✓</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">C) 7 days</button>
+          <button class="btn btn-secondary btn-block" style="justify-content:flex-start">D) 4 days</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="home-bibleReader" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">📖 Bible Reader</div>
+      <div class="tabs">
+        <div class="tab active">NIV</div><div class="tab">KJV</div>
+        <div class="tab">ESV</div><div class="tab">NLT</div><div class="tab">Swahili</div>
+      </div>
+      <div class="bible-reader">
+        <div style="font-weight:700;margin-bottom:8px;color:#92400E">Genesis 1:1-3</div>
+        <div class="bible-verse-text">
+          <sup>1</sup> In the beginning God created the heavens and the earth. <sup>2</sup> Now the earth was formless and empty... <sup>3</sup> And God said, "Let there be light," and there was light.
+        </div>
+        <div class="bible-ref">— Genesis 1:1-3 (NIV)</div>
+      </div>
+    </div>
+
+    <div id="home-quizMaster" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">🏆 Bible Quiz Master</div>
+      <div class="card">
+        <div style="display:flex;justify-content:space-between;margin-bottom:10px">
+          <div style="font-weight:700;color:var(--secondary)"><i class="fas fa-star"></i> 1,250 XP</div>
+          <div style="padding:4px 12px;border-radius:20px;background:var(--gradient);color:white;font-size:0.75rem;font-weight:700">Level 8</div>
+        </div>
+        <div class="grid-2">
+          <div class="mini-card mc-purple"><i class="fas fa-bolt"></i><div class="mc-title">Quick Play</div></div>
+          <div class="mini-card mc-gold"><i class="fas fa-users"></i><div class="mc-title">Multiplayer</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div id="home-characters" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">👤 Bible Character Explorer</div>
+      <div class="search-bar"><i class="fas fa-search"></i><input placeholder="Search: Moses, David, Paul..."></div>
+      <div class="character-card">
+        <div class="character-banner" style="background:var(--gradient-cool)"><div class="character-avatar-lg">👑</div></div>
+        <div class="character-body">
+          <div class="character-name">King David</div>
+          <div class="character-desc">Shepherd boy who became Israel's greatest king.</div>
+        </div>
+      </div>
+    </div>
+
+    <div id="home-devotional" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">🌅 Daily Devotional</div>
+      <div class="card card-gradient">
+        <div class="card-title" style="font-size:1.15rem">Walking in Faith</div>
+        <div class="card-subtitle" style="margin-top:8px;line-height:1.7">Today, let us reflect on what it truly means to walk by faith.</div>
+        <div style="margin-top:12px;font-style:italic;opacity:0.9;font-size:0.85rem">"For we walk by faith, not by sight." — 2 Corinthians 5:7</div>
+      </div>
+    </div>
+
+    <div id="home-notifications" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      <div class="section-title">🔔 Notifications</div>
+      <div class="card" style="padding:8px 14px">
+        <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="width:34px;height:34px;border-radius:50%;background:#EDE9FE;display:flex;align-items:center;justify-content:center;color:#7C3AED"><i class="fas fa-hands-praying"></i></div>
+          <div><div style="font-size:0.82rem"><strong>Pastor Peter</strong> answered your question.</div><div style="font-size:0.68rem;color:var(--text-lighter)">1h ago</div></div>
+        </div>
+        <div style="display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)">
+          <div style="width:34px;height:34px;border-radius:50%;background:#F3E8FF;display:flex;align-items:center;justify-content:center;color:#7C3AED"><i class="fas fa-music"></i></div>
+          <div><div style="font-size:0.82rem"><strong>Praise & Worship</strong> has 2 new posts.</div><div style="font-size:0.68rem;color:var(--text-lighter)">2h ago</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="section-ushirika" class="section">
+    <div id="ushirika-main" class="sub-page active">
+      <div class="section-title">🤝 Ushirika (Community)</div>
+
+      <div class="admin-panel" id="adminUshirikaPanel">
+        <div class="admin-panel-title"><i class="fas fa-crown"></i> Admin Controls</div>
+        <div class="grid-2" style="margin-bottom:8px">
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('addUshirikaModal')">
+            <i class="fas fa-church"></i> Add Ushirika
+          </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('addDeptModal')">
+            <i class="fas fa-briefcase"></i> Add Department
+          </button>
+        </div>
+        <div class="grid-2" style="margin-bottom:0">
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('addOfficialModal')">
+            <i class="fas fa-user-tie"></i> Add Official
+          </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('manageTitlesModal')">
+            <i class="fas fa-tags"></i> Manage Titles
+          </button>
+        </div>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchUshirikaTab(this,'forum')">Forum</div>
+        <div class="tab" onclick="switchUshirikaTab(this,'plans')">Plans</div>
+        <div class="tab" onclick="switchUshirikaTab(this,'groups')">Ushirikas</div>
+        <div class="tab" onclick="switchUshirikaTab(this,'departments')">Departments</div>
+      </div>
+
+      <div id="ushirika-forum">
+        <button class="btn btn-primary btn-block" onclick="openModal('postModal')" style="margin-bottom:14px">
+          <i class="fas fa-pen"></i> Create Post
+        </button>
+        <div class="post">
+          <div class="post-header">
+            <div class="post-avatar admin">PP</div>
+            <div>
+              <div class="post-name">Pastor Peter</div>
+              <div class="post-role">🟢 Senior Pastor</div>
+            </div>
+            <div class="post-time">30m ago</div>
+          </div>
+          <div class="post-body">🕊️ <strong>Good morning family!</strong> Today's word: "Be still, and know that I am God." — Psalm 46:10.</div>
+          <div class="post-actions">
+            <button class="post-action liked"><i class="fas fa-heart"></i> 45</button>
+            <button class="post-action"><i class="far fa-comment"></i> 12</button>
+          </div>
+        </div>
+      </div>
+
+      <div id="ushirika-plans" style="display:none">
+        <button class="btn btn-primary btn-block" onclick="openModal('planModal')" style="margin-bottom:14px">
+          <i class="fas fa-plus"></i> Create Plan
+        </button>
+        <div class="card" style="border-left:4px solid var(--accent)">
+          <span class="chip chip-green">Community</span>
+          <div style="font-weight:700;margin-top:6px">Saturday Morning Bible Study</div>
+          <div style="font-size:0.75rem;color:var(--text-light);margin-top:4px">
+            <i class="far fa-calendar"></i> Sat, Sep 5 • <i class="far fa-clock"></i> 8:00 AM
+          </div>
+        </div>
+      </div>
+
+      <div id="ushirika-groups" style="display:none">
+        <div id="adminUshirikaGroupsBtn">
+          <button class="btn btn-warm btn-block" onclick="openModal('addUshirikaModal')" style="margin-bottom:14px">
+            <i class="fas fa-crown"></i> Add New Ushirika <span class="admin-only">Admin Only</span>
+          </button>
+        </div>
+
+        <div class="weekly-meeting-card">
+          <div class="weekly-meeting-header">
+            <div class="weekly-meeting-title">
+              <i class="fas fa-calendar-week"></i>
+              This Week's Ushirika Meeting
+            </div>
+            <span class="weekly-meeting-badge">Updated 1h ago</span>
+          </div>
+          <div class="weekly-meeting-details">
+            <div class="weekly-meeting-item">
+              <i class="fas fa-calendar"></i>
+              <div><strong>Saturday</strong>, September 7, 2026</div>
+            </div>
+            <div class="weekly-meeting-item">
+              <i class="fas fa-clock"></i>
+              <div><strong>10:00 AM - 12:00 PM</strong> (2 hours)</div>
+            </div>
+            <div class="weekly-meeting-item">
+              <i class="fas fa-map-marker-alt"></i>
+              <div><strong>Kenyatta Community Hall</strong> - Main Room</div>
+            </div>
+          </div>
+          <div class="weekly-meeting-theme">
+            <div class="weekly-meeting-theme-label">Meeting Theme</div>
+            <div class="weekly-meeting-theme-text">"Building Stronger Community Bonds"</div>
+          </div>
+          <div class="weekly-meeting-actions">
+            <button class="btn btn-sm btn-primary" onclick="openModal('updateWeeklyMeetingModal')">
+              <i class="fas fa-edit"></i> Update Meeting
+            </button>
+            <button class="btn btn-sm btn-secondary">
+              <i class="fas fa-bell"></i> Notify Members
+            </button>
+          </div>
+        </div>
+
+        <div class="ushirika-card">
+          <div class="ushirika-icon"><i class="fas fa-church"></i></div>
+          <div class="ushirika-info">
+            <div class="ushirika-name">Ushirika wa Nairobi</div>
+            <div class="ushirika-detail">📍 Nairobi County • Saturdays</div>
+            <div class="ushirika-members">👥 45 members</div>
+          </div>
+          <i class="fas fa-chevron-right" style="color:var(--text-lighter)"></i>
+        </div>
+        <div class="ushirika-card">
+          <div class="ushirika-icon" style="background:var(--gradient-warm)"><i class="fas fa-mountain"></i></div>
+          <div class="ushirika-info">
+            <div class="ushirika-name">Ushirika wa Nakuru</div>
+            <div class="ushirika-detail">📍 Nakuru County • Sundays</div>
+            <div class="ushirika-members">👥 28 members</div>
+          </div>
+          <i class="fas fa-chevron-right" style="color:var(--text-lighter)"></i>
+        </div>
+        <div class="ushirika-card">
+          <div class="ushirika-icon" style="background:var(--gradient-green)"><i class="fas fa-water"></i></div>
+          <div class="ushirika-info">
+            <div class="ushirika-name">Ushirika wa Mombasa</div>
+            <div class="ushirika-detail">📍 Mombasa County • Fridays</div>
+            <div class="ushirika-members">👥 33 members</div>
+          </div>
+          <i class="fas fa-chevron-right" style="color:var(--text-lighter)"></i>
+        </div>
+
+        <div class="section-title" style="font-size:1.05rem;margin-top:18px">👔 Ushirika Officials</div>
+        <div class="official-card">
+          <div class="official-avatar">PP</div>
+          <div style="flex:1">
+            <div class="official-name">Pastor Peter Ochieng</div>
+            <div class="official-role">Senior Pastor — Nairobi</div>
+            <div class="official-contact">📞 +254 712 345 678</div>
+          </div>
+          <button class="btn btn-sm btn-chat" onclick="openChat('pastor')">
+            <i class="fas fa-comment"></i>
+          </button>
+        </div>
+      </div>
+
+      <div id="ushirika-departments" style="display:none">
+        <div id="adminDeptBtn">
+          <button class="btn btn-warm btn-block" onclick="openModal('addDeptModal')" style="margin-bottom:14px">
+            <i class="fas fa-crown"></i> Create New Department <span class="admin-only">Admin Only</span>
+          </button>
+        </div>
+
+        <div id="adminPendingRequests" style="display:none">
+          <div class="section-title" style="font-size:1rem">⏳ Pending Requests</div>
+          <div class="request-card">
+            <div class="request-header">
+              <div class="post-avatar" style="width:36px;height:36px;font-size:0.75rem">JM</div>
+              <div style="flex:1">
+                <div style="font-weight:700;font-size:0.88rem">John Mwangi</div>
+                <div style="font-size:0.72rem;color:var(--text-light)">Requests to join: <strong>Pastors Dept</strong></div>
+              </div>
+              <span class="request-badge">Pending</span>
+            </div>
+            <div class="request-actions">
+              <button class="btn btn-accent btn-sm" onclick="approveRequest()"><i class="fas fa-check"></i> Approve</button>
+              <button class="btn btn-danger btn-sm"><i class="fas fa-times"></i> Decline</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="section-title" style="font-size:1.05rem">🏛️ All Church Departments</div>
+
+        <div class="dept-card" onclick="openMainDepartment('worship')">
+          <div class="dept-banner alt1">
+            <div class="dept-icon"><i class="fas fa-music"></i></div>
+            <div><div class="dept-name">Praise & Worship</div><div class="dept-desc">Music ministry</div></div>
+          </div>
+          <div class="dept-body">
+            <div class="dept-stats">
+              <span><i class="fas fa-users"></i> 18 members</span>
+              <span><i class="fas fa-comments"></i> 89 posts</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dept-card" onclick="openMainDepartment('intercessory')">
+          <div class="dept-banner alt4">
+            <div class="dept-icon"><i class="fas fa-hands-praying"></i></div>
+            <div><div class="dept-name">Intercessory</div><div class="dept-desc">Prayer warriors</div></div>
+          </div>
+          <div class="dept-body">
+            <div class="dept-stats">
+              <span><i class="fas fa-users"></i> 30 members</span>
+              <span><i class="fas fa-comments"></i> 178 posts</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dept-card" onclick="openMainDepartment('pastors')">
+          <div class="dept-banner" style="background:var(--gradient-warm)">
+            <div class="dept-icon"><i class="fas fa-bible"></i></div>
+            <div><div class="dept-name">Pastors</div><div class="dept-desc">Shepherding the flock</div></div>
+          </div>
+          <div class="dept-body">
+            <div class="dept-stats">
+              <span><i class="fas fa-users"></i> 5 members</span>
+              <span><i class="fas fa-comments"></i> 45 posts</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dept-card" onclick="openMainDepartment('ushering')">
+          <div class="dept-banner" style="background:var(--gradient-cool)">
+            <div class="dept-icon"><i class="fas fa-door-open"></i></div>
+            <div><div class="dept-name">Ushering</div><div class="dept-desc">Welcoming & seating</div></div>
+          </div>
+          <div class="dept-body">
+            <div class="dept-stats">
+              <span><i class="fas fa-users"></i> 24 members</span>
+              <span><i class="fas fa-comments"></i> 156 posts</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="dept-card" onclick="openMainDepartment('media')">
+          <div class="dept-banner" style="background:var(--gradient-green)">
+            <div class="dept-icon"><i class="fas fa-video"></i></div>
+            <div><div class="dept-name">Media & Tech</div><div class="dept-desc">Sound, video, photography</div></div>
+          </div>
+          <div class="dept-body">
+            <div class="dept-stats">
+              <span><i class="fas fa-users"></i> 12 members</span>
+              <span><i class="fas fa-comments"></i> 67 posts</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="section-discover" class="section">
+    <div id="discover-main" class="sub-page active">
+      <div class="section-title">🔍 Discover</div>
+
+      <div class="admin-panel" id="adminDiscoverPanel">
+        <div class="admin-panel-title"><i class="fas fa-crown"></i> Admin Controls</div>
+        <div class="grid-2" style="margin-bottom:0">
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('addLeaderModal')">
+            <i class="fas fa-user-tie"></i> Add Church Leader
+          </button>
+          <button class="btn btn-warm btn-block btn-sm" onclick="openModal('inviteAdminModal')">
+            <i class="fas fa-envelope"></i> Invite Admin
+          </button>
+        </div>
+      </div>
+
+      <div class="section-title" style="font-size:1.1rem">💬 Messages</div>
+      <div class="card" style="padding:12px">
+        <div class="chat-list">
+          <div class="chat-list-item" onclick="openChat('pastor')">
+            <div class="chat-list-avatar" style="background:var(--gradient-warm)">PP</div>
+            <div class="chat-list-info">
+              <div class="chat-list-name">Pastor Peter Ochieng</div>
+              <div class="chat-list-role">Senior Pastor</div>
+              <div class="chat-list-preview">Thank you for your service in the worship team...</div>
+            </div>
+            <div class="chat-list-meta">
+              <div class="chat-list-time">2h</div>
+              <div class="chat-list-badge">2</div>
+            </div>
+          </div>
+          <div class="chat-list-item" onclick="openChat('ruth')">
+            <div class="chat-list-avatar" style="background:var(--gradient-dept)">RW</div>
+            <div class="chat-list-info">
+              <div class="chat-list-name">Ruth Wanjiku</div>
+              <div class="chat-list-role">Worship Team Leader</div>
+              <div class="chat-list-preview">Don't forget about Saturday's rehearsal at 4 PM!</div>
+            </div>
+            <div class="chat-list-meta">
+              <div class="chat-list-time">5h</div>
+            </div>
+          </div>
+          <div class="chat-list-item" onclick="openChat('sarah')">
+            <div class="chat-list-avatar" style="background:var(--gradient-green)">SK</div>
+            <div class="chat-list-info">
+              <div class="chat-list-name">Sarah Kamau</div>
+              <div class="chat-list-role">Member</div>
+              <div class="chat-list-preview">Can we discuss the youth event planning?</div>
+            </div>
+            <div class="chat-list-meta">
+              <div class="chat-list-time">1d</div>
+            </div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-block" style="margin-top:12px" onclick="openModal('newChatModal')">
+          <i class="fas fa-plus"></i> Start New Chat
+        </button>
+      </div>
+
+      <div class="card card-cool" style="text-align:center;padding:24px">
+        <i class="fas fa-church" style="font-size:2rem;margin-bottom:8px"></i>
+        <div class="card-title" style="font-size:1.2rem">Grace Community Church</div>
+        <div class="card-subtitle">A place of worship, love, and transformation</div>
+      </div>
+
+      <div class="gps-pin">
+        <i class="fas fa-map-marker-alt" style="color:#EF4444"></i>
+        <div>
+          <div style="font-weight:700">Church Location</div>
+          <div style="font-size:0.72rem;font-weight:400">Ngong Road, Nairobi • Tap for GPS</div>
+        </div>
+      </div>
+
+      <div class="section-title" style="font-size:1.05rem">👨💼 Servants of God</div>
+      <div class="official-card">
+        <div class="official-avatar">PP</div>
+        <div style="flex:1">
+          <div class="official-name">Pastor Peter Ochieng</div>
+          <div class="official-role">Senior Pastor</div>
+          <div class="official-contact">📞 +254 712 345 678</div>
+        </div>
+        <button class="btn btn-sm btn-chat" onclick="openChat('pastor')">
+          <i class="fas fa-comment"></i>
+        </button>
+      </div>
+      <div class="official-card">
+        <div class="official-avatar" style="background:var(--gradient-cool)">MN</div>
+        <div style="flex:1">
+          <div class="official-name">Pastor Mary Njeri</div>
+          <div class="official-role">Associate Pastor</div>
+          <div class="official-contact">📞 +254 722 345 678</div>
+        </div>
+        <button class="btn btn-sm btn-chat" onclick="openChat('mary')">
+          <i class="fas fa-comment"></i>
+        </button>
+      </div>
+    </div>
+
+    <div id="discover-chat" class="sub-page">
+      <button class="back-btn" onclick="showSubPage('discover-main')"><i class="fas fa-arrow-left"></i> Back</button>
+      
+      <div class="chat-container">
+        <div class="chat-header">
+          <div class="chat-header-avatar" id="chatAvatar">PP</div>
+          <div class="chat-header-info">
+            <div class="chat-header-name" id="chatName">Pastor Peter Ochieng</div>
+            <div class="chat-header-status" id="chatStatus">Senior Pastor • Online</div>
+          </div>
+        </div>
+
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-message">
+            <div class="chat-message-avatar">PP</div>
+            <div>
+              <div class="chat-message-bubble">
+                <div class="chat-message-text">Hello John! Thank you for your dedicated service in the worship team. God bless you! 🙏</div>
+              </div>
+              <div class="chat-message-time">Today at 10:30 AM</div>
+            </div>
+          </div>
+          <div class="chat-message sent">
+            <div class="chat-message-avatar">JM</div>
+            <div>
+              <div class="chat-message-bubble">
+                <div class="chat-message-text">Thank you Pastor! It's truly a privilege to serve in worship.</div>
+              </div>
+              <div class="chat-message-time">Today at 10:45 AM</div>
+            </div>
+          </div>
+          <div class="chat-message">
+            <div class="chat-message-avatar">PP</div>
+            <div>
+              <div class="chat-message-bubble">
+                <div class="chat-message-text">I wanted to discuss the upcoming Christmas service. Are you available for a meeting this week?</div>
+              </div>
+              <div class="chat-message-time">Today at 11:00 AM</div>
+            </div>
+          </div>
+          <div class="chat-message">
+            <div class="chat-message-avatar">PP</div>
+            <div>
+              <div class="chat-message-bubble">
+                <div class="chat-message-media">
+                  <i class="fas fa-file-pdf"></i> christmas-service-plan.pdf
+                </div>
+              </div>
+              <div class="chat-message-time">Today at 11:01 AM</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-input-area">
+          <button class="chat-attach-btn" onclick="openModal('chatAttachModal')">
+            <i class="fas fa-paperclip"></i>
+          </button>
+          <input class="chat-input" id="chatInput" placeholder="Type a message..." onkeypress="if(event.key==='Enter')sendChatMessage()">
+          <button class="chat-send-btn" onclick="sendChatMessage()">
+            <i class="fas fa-paper-plane"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="section-event" class="section">
+    <div id="event-main" class="sub-page active">
+      <div class="section-title">🎉 Events</div>
+
+      <div id="adminEventBtn">
+        <button class="btn btn-warm btn-block" onclick="openModal('eventModal')" style="margin-bottom:14px">
+          <i class="fas fa-crown"></i> Add Event <span class="admin-only">Admin Only</span>
+        </button>
+      </div>
+
+      <div class="tabs">
+        <div class="tab active" onclick="switchEventTab(this,'upcoming')">Upcoming</div>
+        <div class="tab" onclick="switchEventTab(this,'ongoing')">Ongoing</div>
+        <div class="tab" onclick="switchEventTab(this,'completed')">Completed</div>
+      </div>
+
+      <div id="event-upcoming">
+        <div class="event-card">
+          <div class="event-banner" style="background:var(--gradient)">
+            <i class="fas fa-fire"></i>
+            <span class="event-status status-upcoming">Upcoming</span>
+          </div>
+          <div class="event-info">
+            <div class="event-title">Youth Revival Week 2026</div>
+            <div class="event-date"><i class="far fa-calendar"></i> Sep 5-10, 2026 • 6:00 PM</div>
+            <div class="post-actions" style="margin-top:10px">
+              <button class="post-action"><i class="far fa-heart"></i> 34</button>
+              <button class="post-action"><i class="far fa-comment"></i> 15</button>
+              <button class="btn btn-accent btn-sm" style="margin-left:auto">RSVP</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div id="event-ongoing" style="display:none">
+        <div class="event-card">
+          <div class="event-banner" style="background:var(--gradient-green)">
+            <i class="fas fa-book-open"></i>
+            <span class="event-status status-ongoing">🟢 Live</span>
+          </div>
+          <div class="event-info">
+            <div class="event-title">30-Day Bible Reading Challenge</div>
+            <div class="event-date"><i class="far fa-calendar"></i> Aug 1 - Aug 31, 2026</div>
+          </div>
+        </div>
+      </div>
+
+      <div id="event-completed" style="display:none">
+        <div style="text-align:center;padding:30px;color:var(--text-lighter)">
+          <i class="fas fa-check-circle" style="font-size:2.5rem;margin-bottom:10px;display:block"></i>
+          <p>No completed events yet</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="section-giving" class="section">
+    <div id="giving-main" class="sub-page active">
+      <div class="section-title">💝 Giving</div>
+
+      <div id="adminGivingBtn">
+        <button class="btn btn-warm btn-block" onclick="openModal('givingModal')" style="margin-bottom:14px">
+          <i class="fas fa-crown"></i> Rally a Cause <span class="admin-only">Admin Only</span>
+        </button>
+        <button class="btn btn-secondary btn-block" onclick="openModal('addPaymentMethodModal')" style="margin-bottom:14px">
+          <i class="fas fa-credit-card"></i> Add Payment Method <span class="admin-only">Admin Only</span>
+        </button>
+      </div>
+
+      <div class="giving-cause">
+        <div style="display:flex;justify-content:space-between;align-items:start">
+          <div>
+            <div class="card-title">🏗️ Church Building Fund</div>
+            <div class="card-subtitle">Help us complete the new worship hall.</div>
+          </div>
+          <span class="chip chip-green">Active</span>
+        </div>
+        <div class="giving-progress"><div class="giving-progress-bar" style="width:75%"></div></div>
+        <div class="giving-amounts">
+          <span class="giving-raised">KES 750,000 raised</span>
+          <span class="giving-goal">Goal: KES 1,000,000</span>
+        </div>
+        <div class="pay-methods">
+          <div class="pay-method selected"><i class="fas fa-mobile-alt"></i> M-Pesa</div>
+          <div class="pay-method"><i class="fas fa-university"></i> Bank</div>
+          <div class="pay-method"><i class="fas fa-money-bill"></i> Cash</div>
+        </div>
+        <button class="btn btn-accent btn-block" style="margin-top:10px" onclick="openModal('giveModal')">
+          <i class="fas fa-hand-holding-heart"></i> Give Now
+        </button>
+      </div>
+    </div>
+  </div>
+
+</main>
+
+<nav class="bottom-nav">
+  <button class="nav-item active" onclick="switchSection('home')"><i class="fas fa-home"></i>Home</button>
+  <button class="nav-item" onclick="switchSection('ushirika')"><i class="fas fa-people-group"></i>Ushirika</button>
+  <button class="nav-item" onclick="switchSection('discover')"><i class="fas fa-compass"></i>Discover</button>
+  <button class="nav-item" onclick="switchSection('event')"><i class="fas fa-calendar"></i>Events</button>
+  <button class="nav-item" onclick="switchSection('giving')"><i class="fas fa-hand-holding-heart"></i>Giving</button>
+</nav>
+
+<button class="fab" onclick="openModal('quickActionModal')"><i class="fas fa-plus"></i></button>
+
+<div class="modal-overlay" id="quickActionModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">Quick Actions</div>
+    <div class="grid-2">
+      <div class="mini-card mc-purple" onclick="closeModalDirect();openModal('askModal')"><i class="fas fa-question-circle"></i><div class="mc-title">Ask Question</div></div>
+      <div class="mini-card mc-green" onclick="closeModalDirect();openModal('prayerModal')"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer Request</div></div>
+      <div class="mini-card mc-gold" onclick="closeModalDirect();openModal('postModal')"><i class="fas fa-pen"></i><div class="mc-title">New Post</div></div>
+      <div class="mini-card mc-red" onclick="closeModalDirect();openModal('giveModal')"><i class="fas fa-hand-holding-heart"></i><div class="mc-title">Give</div></div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="askModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">❓ Ask a Question</div>
+    <div class="form-group">
+      <label class="form-label">Category</label>
+      <select class="form-select">
+        <option>Prayer Advice</option><option>Bible Help</option>
+        <option>Doubts</option><option>Clarification</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Your Question</label>
+      <textarea class="form-textarea" placeholder="Type your question..."></textarea>
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Attach media (optional)</span></div>
+    <button class="btn btn-primary btn-block">Submit Question</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="prayerModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🙏 Prayer Request</div>
+    <div class="form-group">
+      <textarea class="form-textarea" placeholder="Share your prayer..."></textarea>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Keep anonymous</span>
+      <div class="toggle" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <button class="btn btn-primary btn-block">Submit Prayer</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="postModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📝 Create Post</div>
+    <div class="form-group">
+      <textarea class="form-textarea" placeholder="What's on your heart?"></textarea>
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Add media (all formats)</span></div>
+    <button class="btn btn-primary btn-block">Post</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="planModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📅 Create Plan</div>
+    <div class="form-group">
+      <label class="form-label">Plan Type</label>
+      <select class="form-select">
+        <option>Personal (Private)</option>
+        <option>Personal (Public)</option>
+        <option>Community Plan</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Title</label>
+      <input class="form-input" placeholder="e.g. Morning Prayer Walk">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date & Time</label>
+      <input class="form-input" type="datetime-local">
+    </div>
+    <div class="gps-pin"><i class="fas fa-map-marker-alt"></i> 📍 Pin GPS location</div>
+    <button class="btn btn-primary btn-block">Create Plan</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deptPostModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📝 Post to Department</div>
+    <div style="font-size:0.75rem;color:var(--text-light);margin-bottom:10px">
+      <i class="fas fa-lock"></i> Only members of this department will see this post
+    </div>
+    <div class="form-group">
+      <textarea class="form-textarea" placeholder="Share with your department..."></textarea>
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Add media (all formats)</span></div>
+    <button class="btn btn-primary btn-block">Post to Department</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="updateWeeklyMeetingModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📅 Update Weekly Meeting</div>
+    <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">
+      Leaders can update meeting details weekly. Members will be notified.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Day of Week</label>
+      <select class="form-select">
+        <option>Saturday</option>
+        <option>Sunday</option>
+        <option>Monday</option>
+        <option>Tuesday</option>
+        <option>Wednesday</option>
+        <option>Thursday</option>
+        <option>Friday</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Date</label>
+      <input class="form-input" type="date" value="2026-09-07">
+    </div>
+    <div class="grid-2">
+      <div class="form-group">
+        <label class="form-label">Start Time</label>
+        <input class="form-input" type="time" value="16:00">
+      </div>
+      <div class="form-group">
+        <label class="form-label">End Time</label>
+        <input class="form-input" type="time" value="18:00">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Venue / Location</label>
+      <input class="form-input" placeholder="e.g. Main Sanctuary - Room 204">
+    </div>
+    <div class="gps-pin"><i class="fas fa-map-marker-alt"></i> 📍 Pin exact GPS location</div>
+    <div class="form-group">
+      <label class="form-label">Meeting Theme</label>
+      <input class="form-input" placeholder="e.g. Preparing Hearts for Sunday Worship">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Additional Notes</label>
+      <textarea class="form-textarea" placeholder="Any special instructions or announcements..."></textarea>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Notify all members</span>
+      <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Attach agenda or resources</span></div>
+    <button class="btn btn-primary btn-block">Update Meeting</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="manageTitlesModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏷️ Manage Official Titles</div>
+    <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">
+      Create custom titles for ushirika officials and department roles.
+    </div>
+    <div class="form-group">
+      <label class="form-label">Title Category</label>
+      <select class="form-select" id="titleCategory">
+        <option value="ushirika">Ushirika Officials</option>
+        <option value="department">Department Roles</option>
+        <option value="church">Church Leadership</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Add New Title</label>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="newTitleInput" placeholder="e.g. Youth Coordinator">
+        <button class="btn btn-primary" onclick="addCustomTitle()">
+          <i class="fas fa-plus"></i>
+        </button>
+      </div>
+    </div>
+    <div class="section-title" style="font-size:0.95rem;margin-top:16px">Current Titles</div>
+    <div class="title-list" id="titleList">
+      <div class="title-item">
+        <div class="title-item-icon"><i class="fas fa-crown"></i></div>
+        <div class="title-item-name">Senior Pastor</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon" style="background:var(--gradient-cool)"><i class="fas fa-user-tie"></i></div>
+        <div class="title-item-name">Associate Pastor</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon" style="background:var(--gradient-green)"><i class="fas fa-hands-helping"></i></div>
+        <div class="title-item-name">Deacon</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon" style="background:var(--gradient-warm)"><i class="fas fa-users"></i></div>
+        <div class="title-item-name">Ushirika Leader</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon"><i class="fas fa-star"></i></div>
+        <div class="title-item-name">Department Leader</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon" style="background:var(--gradient-cool)"><i class="fas fa-file-alt"></i></div>
+        <div class="title-item-name">Secretary</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+      <div class="title-item">
+        <div class="title-item-icon" style="background:var(--gradient-green)"><i class="fas fa-coins"></i></div>
+        <div class="title-item-name">Treasurer</div>
+        <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-block">Close</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="newChatModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💬 Start New Chat</div>
+    <div class="form-group">
+      <label class="form-label">Search Members or Leaders</label>
+      <div class="search-bar">
+        <i class="fas fa-search"></i>
+        <input placeholder="Type a name...">
+      </div>
+    </div>
+    <div class="user-picker" style="max-height:300px">
+      <div class="user-pick-item" onclick="startChatWith('pastor')">
+        <div class="post-avatar" style="width:40px;height:40px;font-size:0.85rem;background:var(--gradient-warm)">PP</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.88rem">Pastor Peter Ochieng</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Senior Pastor</div>
+        </div>
+      </div>
+      <div class="user-pick-item" onclick="startChatWith('mary')">
+        <div class="post-avatar" style="width:40px;height:40px;font-size:0.85rem;background:var(--gradient-cool)">MN</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.88rem">Pastor Mary Njeri</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Associate Pastor</div>
+        </div>
+      </div>
+      <div class="user-pick-item" onclick="startChatWith('ruth')">
+        <div class="post-avatar" style="width:40px;height:40px;font-size:0.85rem;background:var(--gradient-dept)">RW</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.88rem">Ruth Wanjiku</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Worship Team Leader</div>
+        </div>
+      </div>
+      <div class="user-pick-item" onclick="startChatWith('sarah')">
+        <div class="post-avatar" style="width:40px;height:40px;font-size:0.85rem;background:var(--gradient-green)">SK</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.88rem">Sarah Kamau</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Member</div>
+        </div>
+      </div>
+      <div class="user-pick-item" onclick="startChatWith('david')">
+        <div class="post-avatar" style="width:40px;height:40px;font-size:0.85rem;background:var(--gradient-cool)">DM</div>
+        <div style="flex:1">
+          <div style="font-weight:600;font-size:0.88rem">David Mwangi</div>
+          <div style="font-size:0.72rem;color:var(--text-light)">Media & Tech</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="chatAttachModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">📎 Attach Media</div>
+    <div class="grid-2">
+      <div class="mini-card mc-purple" onclick="attachMedia('image')">
+        <i class="fas fa-image"></i>
+        <div class="mc-title">Photo</div>
+        <div class="mc-sub">JPG, PNG, GIF</div>
+      </div>
+      <div class="mini-card mc-blue" onclick="attachMedia('video')">
+        <i class="fas fa-video"></i>
+        <div class="mc-title">Video</div>
+        <div class="mc-sub">MP4, MOV</div>
+      </div>
+      <div class="mini-card mc-green" onclick="attachMedia('audio')">
+        <i class="fas fa-music"></i>
+        <div class="mc-title">Audio</div>
+        <div class="mc-sub">MP3, WAV</div>
+      </div>
+      <div class="mini-card mc-gold" onclick="attachMedia('document')">
+        <i class="fas fa-file-pdf"></i>
+        <div class="mc-title">Document</div>
+        <div class="mc-sub">PDF, DOC, XLS</div>
+      </div>
+    </div>
+    <button class="btn btn-secondary btn-block" style="margin-top:12px">Cancel</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addDeptModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏛️ Create Department <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Department Name <span style="color:#EF4444">*</span></label>
+      <input class="form-input" placeholder="e.g. Praise & Worship, Intercessory, Pastors">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" placeholder="What does this department do?"></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Department Icon</label>
+      <select class="form-select">
+        <option>🎵 Music (Praise & Worship)</option>
+        <option>🙏 Prayer (Intercessory)</option>
+        <option>📖 Bible (Pastors)</option>
+        <option>🚪 Door (Ushering)</option>
+        <option>🔥 Fire (Youth)</option>
+        <option>📹 Video (Media)</option>
+        <option>👶 Children</option>
+        <option>🎤 Choir</option>
+        <option>📚 Teaching</option>
+        <option>🤝 Outreach</option>
+        <option>💝 Welfare</option>
+        <option>🎭 Drama</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Color Theme</label>
+      <select class="form-select">
+        <option>Purple/Pink (Default)</option>
+        <option>Orange/Warm</option>
+        <option>Blue/Cool</option>
+        <option>Green</option>
+        <option>Red/Heart</option>
+      </select>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Private (members only)</span>
+      <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Department banner (optional)</span></div>
+    <button class="btn btn-warm btn-block">Create Department</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addUshirikaModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏘️ Add Ushirika <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Ushirika Name <span style="color:#EF4444">*</span></label>
+      <input class="form-input" placeholder="e.g. Ushirika wa Kisumu">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Location / County</label>
+      <input class="form-input" placeholder="e.g. Kisumu County">
+    </div>
+    <div class="gps-pin"><i class="fas fa-map-marker-alt"></i> 📍 Pin meeting location GPS</div>
+    <div class="form-group">
+      <label class="form-label">Default Meeting Day</label>
+      <select class="form-select">
+        <option>Saturday</option>
+        <option>Sunday</option>
+        <option>Monday</option>
+        <option>Tuesday</option>
+        <option>Wednesday</option>
+        <option>Thursday</option>
+        <option>Friday</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Default Meeting Time</label>
+      <input class="form-input" type="time" value="10:00">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Default Venue</label>
+      <input class="form-input" placeholder="e.g. Community Hall - Main Room">
+    </div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Ushirika media (optional)</span></div>
+    <button class="btn btn-warm btn-block">Create Ushirika</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addOfficialModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👔 Add Official <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Pick from Registered Users</label>
+      <div class="user-picker">
+        <div class="user-pick-item" onclick="selectUser(this)">
+          <div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem">SK</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:0.82rem">Sarah Kamau</div></div>
+        </div>
+        <div class="user-pick-item" onclick="selectUser(this)">
+          <div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem;background:var(--gradient-green)">JM</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:0.82rem">John Mwangi</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Assign to</label>
+      <select class="form-select">
+        <optgroup label="Ushirikas">
+          <option>Ushirika wa Nairobi</option>
+          <option>Ushirika wa Nakuru</option>
+        </optgroup>
+        <optgroup label="Departments">
+          <option>Praise & Worship</option>
+          <option>Intercessory</option>
+          <option>Ushering</option>
+        </optgroup>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Official Title</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="form-select" style="flex:1">
+          <option>Senior Pastor</option>
+          <option>Associate Pastor</option>
+          <option>Deacon</option>
+          <option>Deaconess</option>
+          <option>Ushirika Leader</option>
+          <option>Department Leader</option>
+          <option>Secretary</option>
+          <option>Treasurer</option>
+          <option>Chairman</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" onclick="openModal('manageTitlesModal')" title="Manage Titles">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </div>
+    <button class="btn btn-warm btn-block">Assign Official</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addLeaderModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👨💼 Add Church Leader <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Pick from Registered Users</label>
+      <div class="user-picker">
+        <div class="user-pick-item" onclick="selectUser(this)">
+          <div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem">SK</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:0.82rem">Sarah Kamau</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Leadership Title</label>
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="form-select" style="flex:1">
+          <option>Senior Pastor</option>
+          <option>Associate Pastor</option>
+          <option>Head Deacon</option>
+          <option>Youth Pastor</option>
+          <option>Worship Director</option>
+          <option>Children's Ministry Director</option>
+        </select>
+        <button class="btn btn-sm btn-secondary" onclick="openModal('manageTitlesModal')" title="Manage Titles">
+          <i class="fas fa-cog"></i>
+        </button>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Contact Phone</label>
+      <input class="form-input" placeholder="+254...">
+    </div>
+    <button class="btn btn-warm btn-block">Add Leader</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="inviteAdminModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👑 Invite New Admin <span class="admin-only">Super Admin</span></div>
+    <div class="form-group">
+      <label class="form-label">Email Address</label>
+      <input class="form-input" type="email" placeholder="newadmin@example.com">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Admin Role</label>
+      <select class="form-select">
+        <option>Pastor</option><option>Deacon</option>
+        <option>Church Administrator</option>
+      </select>
+    </div>
+    <button class="btn btn-warm btn-block"><i class="fas fa-paper-plane"></i> Send Invite via Brevo</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addDeptMemberModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">👤 Add Member <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Pick from Registered Users</label>
+      <div class="search-bar" style="margin-bottom:8px"><i class="fas fa-search"></i><input placeholder="Search members..."></div>
+      <div class="user-picker">
+        <div class="user-pick-item" onclick="selectUser(this)">
+          <div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem">SK</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:0.82rem">Sarah Kamau</div><div style="font-size:0.68rem;color:var(--text-light)">Regular Member</div></div>
+        </div>
+        <div class="user-pick-item" onclick="selectUser(this)">
+          <div class="post-avatar" style="width:32px;height:32px;font-size:0.7rem;background:var(--gradient-green)">JM</div>
+          <div style="flex:1"><div style="font-weight:600;font-size:0.82rem">John Mwangi</div><div style="font-size:0.68rem;color:var(--text-light)">Regular Member</div></div>
+        </div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Initial Role</label>
+      <select class="form-select">
+        <option>Member (no role)</option>
+        <option>Leader</option>
+        <option>Chairman</option>
+        <option>Secretary</option>
+        <option>Treasurer</option>
+      </select>
+    </div>
+    <button class="btn btn-warm btn-block">Add to Department</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="assignDeptRoleModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏷️ Assign Role <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Select Member</label>
+      <select class="form-select">
+        <option>Ruth Wanjiku</option>
+        <option>David Mwangi</option>
+        <option>John Mwangi</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Assign Role</label>
+      <select class="form-select">
+        <option>Leader</option>
+        <option>Chairman</option>
+        <option>Secretary</option>
+        <option>Treasurer</option>
+        <option>Vice Chairman</option>
+        <option>Member (remove role)</option>
+      </select>
+    </div>
+    <button class="btn btn-warm btn-block">Assign Role</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="removeDeptMemberModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🚫 Remove Member <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Select Member to Remove</label>
+      <select class="form-select">
+        <option>Ruth Wanjiku (Leader)</option>
+        <option>David Mwangi (Secretary)</option>
+        <option>John Mwangi (Member)</option>
+      </select>
+    </div>
+    <button class="btn btn-danger btn-block">Remove from Department</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="deptPickerModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🏛️ Join Another Department</div>
+    <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">
+      You can serve in multiple departments. Select another to request joining.
+    </div>
+    <div class="user-picker" style="max-height:none">
+      <div class="user-pick-item" onclick="selectUser(this)">
+        <div class="post-avatar dept" style="width:36px;height:36px;font-size:0.85rem"><i class="fas fa-door-open"></i></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:0.85rem">Ushering</div><div style="font-size:0.68rem;color:var(--text-light)">24 members • Welcoming</div></div>
+      </div>
+      <div class="user-pick-item" onclick="selectUser(this)">
+        <div class="post-avatar" style="width:36px;height:36px;font-size:0.85rem;background:var(--gradient-warm)"><i class="fas fa-bible"></i></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:0.85rem">Pastors</div><div style="font-size:0.68rem;color:var(--text-light)">5 members • Shepherding</div></div>
+      </div>
+      <div class="user-pick-item" onclick="selectUser(this)">
+        <div class="post-avatar" style="width:36px;height:36px;font-size:0.85rem;background:var(--gradient-green)"><i class="fas fa-fire"></i></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:0.85rem">Youth Ministry</div><div style="font-size:0.68rem;color:var(--text-light)">42 members • Next generation</div></div>
+      </div>
+      <div class="user-pick-item" onclick="selectUser(this)">
+        <div class="post-avatar" style="width:36px;height:36px;font-size:0.85rem;background:linear-gradient(135deg,#F472B6,#A855F7)"><i class="fas fa-child"></i></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:0.85rem">Children's Ministry</div><div style="font-size:0.68rem;color:var(--text-light)">15 members • Sunday school</div></div>
+      </div>
+      <div class="user-pick-item" onclick="selectUser(this)">
+        <div class="post-avatar" style="width:36px;height:36px;font-size:0.85rem;background:linear-gradient(135deg,#10B981,#06B6D4)"><i class="fas fa-hand-holding-heart"></i></div>
+        <div style="flex:1"><div style="font-weight:600;font-size:0.85rem">Welfare</div><div style="font-size:0.68rem;color:var(--text-light)">20 members • Caring for members</div></div>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Why do you want to join? (optional)</label>
+      <textarea class="form-textarea" placeholder="Share your heart..."></textarea>
+    </div>
+    <button class="btn btn-dept btn-block" onclick="requestJoinDept()">
+      <i class="fas fa-paper-plane"></i> Send Request to Admin
+    </button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="eventModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🎉 Add Event <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Event Name</label>
+      <input class="form-input" placeholder="e.g. Christmas Carol Night">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" placeholder="Event details..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Start Date</label>
+      <input class="form-input" type="datetime-local">
+    </div>
+    <div class="form-group">
+      <label class="form-label">End Date</label>
+      <input class="form-input" type="datetime-local">
+    </div>
+    <div class="gps-pin"><i class="fas fa-map-marker-alt"></i> 📍 Pin GPS location</div>
+    <div class="media-upload"><i class="fas fa-cloud-upload-alt"></i><span>Event poster/media</span></div>
+    <button class="btn btn-warm btn-block">Create Event</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="givingModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💝 Rally a Cause <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Cause Title</label>
+      <input class="form-input" placeholder="e.g. Mission Trip Fund">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Description</label>
+      <textarea class="form-textarea" placeholder="Describe the cause..."></textarea>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Goal Amount (KES)</label>
+      <input class="form-input" type="number" placeholder="e.g. 500000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Payment Methods</label>
+      <div class="toggle-row"><span class="toggle-label">M-Pesa (Paybill)</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Bank Transfer</span><div class="toggle on" onclick="this.classList.toggle('on')"></div></div>
+      <div class="toggle-row"><span class="toggle-label">Cash</span><div class="toggle" onclick="this.classList.toggle('on')"></div></div>
+    </div>
+    <button class="btn btn-warm btn-block">Launch Cause</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="addPaymentMethodModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💳 Add Payment Method <span class="admin-only">Admin Only</span></div>
+    <div class="form-group">
+      <label class="form-label">Method Type</label>
+      <select class="form-select">
+        <option>M-Pesa Paybill</option><option>M-Pesa Till Number</option>
+        <option>Bank Transfer</option><option>Cash (Manual)</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Account / Paybill Number</label>
+      <input class="form-input" placeholder="e.g. 123456">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Account Name</label>
+      <input class="form-input" placeholder="e.g. Grace Church Building">
+    </div>
+    <button class="btn btn-warm btn-block">Add Payment Method</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="giveModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">💝 Give Now</div>
+    <div class="form-group">
+      <label class="form-label">Amount (KES)</label>
+      <input class="form-input" type="number" placeholder="e.g. 1000">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Payment Method</label>
+      <select class="form-select">
+        <option>M-Pesa (Paybill: 123456)</option>
+        <option>Bank Transfer</option>
+        <option>Cash (Give at church)</option>
+      </select>
+    </div>
+    <button class="btn btn-accent btn-block"><i class="fas fa-check"></i> Confirm Giving</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="searchModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-title">🔍 Search</div>
+    <div class="search-bar"><i class="fas fa-search"></i><input placeholder="Search anything..."></div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="profileModal" onclick="closeModal(event)">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div style="text-align:center;margin-bottom:14px">
+      <div class="post-avatar" style="width:64px;height:64px;font-size:1.4rem;margin:0 auto 8px">JM</div>
+      <div style="font-size:1.05rem;font-weight:700">John Mwangi</div>
+      <div style="font-size:0.8rem;color:var(--text-light)">Member • Ushirika wa Nairobi</div>
+      <div style="margin-top:8px;display:flex;gap:4px;flex-wrap:wrap;justify-content:center">
+        <span class="chip chip-dept"><i class="fas fa-music"></i> Praise & Worship</span>
+        <span class="chip chip-dept" style="background:#FEE2E2;color:#991B1B"><i class="fas fa-hands-praying"></i> Intercessory</span>
+        <span class="chip chip-dept" style="background:#D1FAE5;color:#065F46"><i class="fas fa-video"></i> Media & Tech</span>
+      </div>
+    </div>
+    <div class="streak-bar">
+      <div class="streak-fire">🔥</div>
+      <div class="streak-info">
+        <div class="streak-count">7 Days</div>
+        <div class="streak-label">Current Streak</div>
+      </div>
+    </div>
+    <div class="toggle-row">
+      <span class="toggle-label">Notifications</span>
+      <div class="toggle on" onclick="this.classList.toggle('on')"></div>
+    </div>
+    <button class="btn btn-secondary btn-block" style="margin-top:14px"><i class="fas fa-cog"></i> Settings</button>
+    <button class="btn btn-warm btn-block" style="margin-top:6px"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+  </div>
+</div>
+
+<script>
+let currentRole = 'admin';
+
+function toggleRole() {
+  currentRole = currentRole === 'admin' ? 'user' : 'admin';
+  updateRoleUI();
+}
+
+function updateRoleUI() {
+  const indicator = document.getElementById('roleIndicator');
+  const adminPanels = document.querySelectorAll('.admin-panel');
+  const adminBtns = ['adminEventBtn', 'adminGivingBtn', 'adminDeptBtn', 'adminPendingRequests', 'adminMainDeptControl', 'adminUshirikaGroupsBtn'];
+  
+  if (currentRole === 'admin') {
+    indicator.className = 'role-indicator role-admin';
+    indicator.innerHTML = '<i class="fas fa-crown"></i> ADMIN';
+    adminPanels.forEach(p => p.style.display = 'block');
+    adminBtns.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'block';
+    });
+    document.querySelectorAll('.post-delete').forEach(b => b.style.display = 'inline-block');
+  } else {
+    indicator.className = 'role-indicator role-user';
+    indicator.innerHTML = '<i class="fas fa-user"></i> MEMBER';
+    adminPanels.forEach(p => p.style.display = 'none');
+    adminBtns.forEach(id => {
+      const el = document.getElementById(id);
+      if (el) el.style.display = 'none';
+    });
+    document.querySelectorAll('.post-delete').forEach(b => b.style.display = 'none');
+  }
+}
+
+function startNewMember() {
+  document.getElementById('decisionOverlay').style.display = 'none';
+  document.getElementById('onboardingOverlay').classList.add('show');
+}
+
+function startExistingMember() {
+  document.getElementById('decisionOverlay').style.display = 'none';
+  document.getElementById('loginOverlay').classList.add('show');
+}
+
+function hideLogin() {
+  document.getElementById('loginOverlay').classList.remove('show');
+  document.getElementById('decisionOverlay').style.display = 'flex';
+}
+
+function showLeaderPrompt() {
+  document.getElementById('loginOverlay').classList.remove('show');
+  document.getElementById('leaderPromptOverlay').classList.add('show');
+}
+
+function requestLeaderVerification() {
+  alert('✅ Your request has been sent to the admin team for verification.');
+  completeLogin();
+}
+
+function completeLogin() {
+  document.getElementById('leaderPromptOverlay').classList.remove('show');
+  document.getElementById('loginOverlay').classList.remove('show');
+}
+
+let onboardingStep = 1;
+
+function nextOnboardingStep() {
+  if (onboardingStep === 2) {
+    const name = document.getElementById('ob-name').value.trim();
+    if (!name) { alert('Please enter your name (required)'); return; }
+  }
+  if (onboardingStep === 3) {
+    const ush = document.getElementById('ob-ushirika').value;
+    if (!ush) { alert('Please select your ushirika'); return; }
+  }
+  
+  document.querySelectorAll('.onboarding-step').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.progress-dot').forEach(d => d.classList.remove('active'));
+  
+  onboardingStep++;
+  document.querySelector(`.onboarding-step[data-step="${onboardingStep}"]`).classList.add('active');
+  document.querySelector(`.progress-dot[data-step="${onboardingStep}"]`).classList.add('active');
+}
+
+function completeOnboarding() {
+  document.getElementById('onboardingOverlay').classList.remove('show');
+  localStorage.setItem('onboarded', 'true');
+}
+
+if (localStorage.getItem('onboarded') === 'true') {
+  document.getElementById('decisionOverlay').style.display = 'none';
+}
+
+function updateGreeting() {
+  const now = new Date();
+  const hour = now.getHours();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  const dateStr = now.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' });
+
+  let greeting, emoji;
+  if (hour >= 5 && hour < 12) { greeting = 'Good Morning'; emoji = '🌅'; }
+  else if (hour >= 12 && hour < 17) { greeting = 'Good Afternoon'; emoji = '☀️'; }
+  else { greeting = 'Good Evening'; emoji = '🌙'; }
+
+  document.getElementById('greetingTime').textContent = `${dateStr} • ${timeStr}`;
+  document.getElementById('greetingText').textContent = `${emoji} ${greeting}, Beloved!`;
+}
+updateGreeting();
+setInterval(updateGreeting, 60000);
+
+const verseDatabase = {
+  grief: [
+    { text: "Blessed are those who mourn, for they will be comforted.", ref: "Matthew 5:4", encourage: "God sees your tears and promises comfort." },
+    { text: "The LORD is close to the brokenhearted.", ref: "Psalm 34:18", encourage: "In your grief, you are not alone." }
+  ],
+  joy: [
+    { text: "The joy of the LORD is your strength.", ref: "Nehemiah 8:10", encourage: "Let this joy overflow and strengthen you." }
+  ],
+  anxiety: [
+    { text: "Do not be anxious about anything, but in every situation, by prayer and petition, present your requests to God.", ref: "Philippians 4:6", encourage: "Trade your worry for worship." }
+  ],
+  loneliness: [
+    { text: "Never will I leave you; never will I forsake you.", ref: "Hebrews 13:5", encourage: "God is always with you." }
+  ],
+  fear: [
+    { text: "For God has not given us a spirit of fear, but of power, love, and a sound mind.", ref: "2 Timothy 1:7", encourage: "Fear is a liar. You are equipped with power, love, and clarity." }
+  ],
+  doubt: [
+    { text: "I do believe; help me overcome my unbelief!", ref: "Mark 9:24", encourage: "Honest doubt brought to Jesus is the beginning of deeper faith." }
+  ]
+};
+
+function setEmotional(keyword) {
+  document.getElementById('emotionalInput').value = keyword;
+  retrieveVerses();
+}
+
+function retrieveVerses() {
+  const input = document.getElementById('emotionalInput').value.trim().toLowerCase();
+  const container = document.getElementById('verseResults');
+  if (!input) { container.innerHTML = ''; return; }
+  
+  let matches = [];
+  for (const [key, verses] of Object.entries(verseDatabase)) {
+    if (input.includes(key)) { matches = verses; break; }
+  }
+  
+  if (matches.length === 0) {
+    container.innerHTML = `
+      <div class="verse-result">
+        <div class="verse-result-header"><i class="fas fa-heart"></i> God's Word for You</div>
+        <div class="verse-item">
+          <div class="verse-text">"For I know the plans I have for you," declares the LORD.</div>
+          <div class="verse-ref">— Jeremiah 29:11</div>
+          <div class="verse-encourage">Whatever you're facing, God has a plan and a hope for you.</div>
+        </div>
+      </div>
+    `;
+    return;
+  }
+  
+  let html = `<div class="verse-result"><div class="verse-result-header"><i class="fas fa-heart"></i> God's Word for "${input}"</div>`;
+  matches.forEach(v => {
+    html += `<div class="verse-item">
+      <div class="verse-text">"${v.text}"</div>
+      <div class="verse-ref">— ${v.ref}</div>
+      <div class="verse-encourage">💝 ${v.encourage}</div>
+    </div>`;
+  });
+  html += `</div>`;
+  container.innerHTML = html;
+}
+
+function switchSection(name) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-' + name).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function showSubPage(id) {
+  const section = document.querySelector('.section.active');
+  section.querySelectorAll('.sub-page').forEach(p => p.classList.remove('active'));
+  const target = document.getElementById(id);
+  if (target) target.classList.add('active');
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function switchUshirikaTab(el, tab) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['forum', 'plans', 'groups', 'departments'].forEach(t => {
+    const el = document.getElementById('ushirika-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+}
+
+function switchEventTab(el, tab) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['upcoming', 'ongoing', 'completed'].forEach(t => {
+    const el = document.getElementById('event-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+}
+
+function switchMainDeptTab(el, tab) {
+  el.parentElement.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  el.classList.add('active');
+  ['feed', 'members', 'roles'].forEach(t => {
+    const el = document.getElementById('mainDept-' + t);
+    if (el) el.style.display = t === tab ? 'block' : 'none';
+  });
+}
+
+const mainDeptData = {
+  worship: { name: 'Praise & Worship', icon: 'fa-music', desc: 'Private forum for worship team', members: '18 members', posts: '89 posts' },
+  intercessory: { name: 'Intercessory', icon: 'fa-hands-praying', desc: 'Prayer warriors', members: '30 members', posts: '178 posts' },
+  pastors: { name: 'Pastors', icon: 'fa-bible', desc: 'Shepherding the flock', members: '5 members', posts: '45 posts' },
+  ushering: { name: 'Ushering', icon: 'fa-door-open', desc: 'Welcoming & seating', members: '24 members', posts: '156 posts' },
+  youth: { name: 'Youth Ministry', icon: 'fa-fire', desc: 'Empowering next generation', members: '42 members', posts: '234 posts' },
+  media: { name: 'Media & Tech', icon: 'fa-video', desc: 'Sound, video, photography', members: '12 members', posts: '67 posts' },
+  children: { name: "Children's Ministry", icon: 'fa-child', desc: 'Sunday school & kids', members: '15 members', posts: '45 posts' },
+  welfare: { name: 'Welfare', icon: 'fa-hand-holding-heart', desc: 'Caring for members', members: '20 members', posts: '89 posts' }
+};
+
+function openMainDepartment(deptKey) {
+  const dept = mainDeptData[deptKey];
+  if (!dept) return;
+  document.getElementById('mainDeptName').textContent = dept.name;
+  document.getElementById('mainDeptDesc').textContent = dept.desc;
+  document.getElementById('mainDeptMembers').textContent = dept.members;
+  document.getElementById('mainDeptPosts').textContent = dept.posts;
+  document.getElementById('mainDeptIcon').innerHTML = `<i class="fas ${dept.icon}"></i>`;
+  showSubPage('home-mainDept');
+}
+
+function openModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
+function closeModal(e) { if (e.target.classList.contains('modal-overlay')) { e.target.classList.remove('show'); document.body.style.overflow = ''; } }
+function closeModalDirect() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show')); document.body.style.overflow = ''; }
+
+function showDeptPicker() { openModal('deptPickerModal'); }
+function requestJoinDept() {
+  alert('✅ Your request to join the department has been sent to the admin for approval.');
+  closeModalDirect();
+}
+
+let triviaScore = 0, triviaTotal = 0;
+function answerTrivia(el, correct) {
+  const btns = el.parentElement.querySelectorAll('button');
+  btns.forEach(b => { b.disabled = true; b.style.opacity = '0.6'; });
+  el.style.background = correct ? 'var(--gradient-green)' : '#FEE2E2';
+  el.style.color = correct ? 'white' : '#991B1B';
+  el.style.opacity = '1';
+  triviaTotal++;
+  if (correct) triviaScore++;
+  document.getElementById('triviaScore').textContent = `Score: ${triviaScore}/${triviaTotal}`;
+}
+
+function selectUser(el) {
+  el.parentElement.querySelectorAll('.user-pick-item').forEach(i => i.classList.remove('selected'));
+  el.classList.add('selected');
+}
+
+function deleteDeptPost(btn) {
+  if (confirm('Delete this post?')) {
+    btn.closest('.post').remove();
+  }
+}
+
+function approveRequest() {
+  if (confirm('Approve this request?')) {
+    event.target.closest('.request-card').remove();
+    alert('✅ Request approved!');
+  }
+}
+
+function addCustomTitle() {
+  const input = document.getElementById('newTitleInput');
+  const title = input.value.trim();
+  
+  if (!title) {
+    alert('Please enter a title name');
+    return;
+  }
+  
+  const titleList = document.getElementById('titleList');
+  const colors = ['var(--gradient)', 'var(--gradient-warm)', 'var(--gradient-cool)', 'var(--gradient-green)', 'var(--gradient-heart)'];
+  const randomColor = colors[Math.floor(Math.random() * colors.length)];
+  
+  const newItem = document.createElement('div');
+  newItem.className = 'title-item';
+  newItem.innerHTML = `
+    <div class="title-item-icon" style="background:${randomColor}"><i class="fas fa-tag"></i></div>
+    <div class="title-item-name">${title}</div>
+    <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
+  `;
+  
+  titleList.appendChild(newItem);
+  input.value = '';
+  alert(`✅ Title "${title}" added successfully!`);
+}
+
+function deleteTitle(btn) {
+  if (confirm('Delete this title?')) {
+    btn.closest('.title-item').remove();
+  }
+}
+
+const chatUsers = {
+  pastor: { name: 'Pastor Peter Ochieng', initials: 'PP', role: 'Senior Pastor', avatar: 'var(--gradient-warm)' },
+  mary: { name: 'Pastor Mary Njeri', initials: 'MN', role: 'Associate Pastor', avatar: 'var(--gradient-cool)' },
+  ruth: { name: 'Ruth Wanjiku', initials: 'RW', role: 'Worship Team Leader', avatar: 'var(--gradient-dept)' },
+  sarah: { name: 'Sarah Kamau', initials: 'SK', role: 'Member', avatar: 'var(--gradient-green)' },
+  david: { name: 'David Mwangi', initials: 'DM', role: 'Media & Tech', avatar: 'var(--gradient-cool)' }
+};
+
+function openChat(userId) {
+  const user = chatUsers[userId];
+  if (!user) return;
+  
+  document.getElementById('chatAvatar').textContent = user.initials;
+  document.getElementById('chatAvatar').style.background = user.avatar;
+  document.getElementById('chatName').textContent = user.name;
+  document.getElementById('chatStatus').textContent = `${user.role} • Online`;
+  
+  // Switch to discover section first if not there
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('section-discover').classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  document.querySelectorAll('.nav-item')[2].classList.add('active');
+  
+  showSubPage('discover-chat');
+}
+
+function startChatWith(userId) {
+  closeModalDirect();
+  openChat(userId);
+}
+
+function sendChatMessage() {
+  const input = document.getElementById('chatInput');
+  const message = input.value.trim();
+  
+  if (!message) return;
+  
+  const messagesContainer = document.getElementById('chatMessages');
+  const now = new Date();
+  const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+  
+  const messageDiv = document.createElement('div');
+  messageDiv.className = 'chat-message sent';
+  messageDiv.innerHTML = `
+    <div class="chat-message-avatar">JM</div>
+    <div>
+      <div class="chat-message-bubble">
+        <div class="chat-message-text">${message}</div>
+      </div>
+      <div class="chat-message-time">Today at ${timeStr}</div>
+    </div>
+  `;
+  
+  messagesContainer.appendChild(messageDiv);
+  input.value = '';
+  messagesContainer.scrollTop = messagesContainer.scrollHeight;
+}
+
+function attachMedia(type) {
+  alert(`📎 ${type.charAt(0).toUpperCase() + type.slice(1)} attachment feature - In production, this opens file picker`);
+  closeModalDirect();
+}
+
+updateRoleUI();
+
+console.log('✝️ GraceConnect v6 loaded!');
+console.log('✅ Custom Title Management added');
+console.log('✅ Weekly Meeting Updates for Leaders');
+console.log('✅ Private Chat System with media support');
+</script>
+
+</body>
+</html>

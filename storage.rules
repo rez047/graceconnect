@@ -1,0 +1,120 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    // Helper: Check if authenticated
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Helper: Check if admin
+    function isAdmin() {
+      return isAuthenticated() && 
+             firestore.get(/databases/(default)/documents/users/$(request.auth.uid))
+               .data.memberType in ['admin', 'superadmin'];
+    }
+
+    // Helper: Check file size (max 50MB)
+    function isValidSize() {
+      return request.resource.size < 50 * 1024 * 1024;
+    }
+
+    // Helper: Check valid content types
+    function isValidType() {
+      return request.resource.contentType.matches('image/.*') ||
+             request.resource.contentType.matches('video/.*') ||
+             request.resource.contentType.matches('audio/.*') ||
+             request.resource.contentType.matches('application/pdf') ||
+             request.resource.contentType.matches('application/msword') ||
+             request.resource.contentType.matches('application/vnd.openxmlformats.*');
+    }
+
+    // ═══════════════════════════════════════
+    // PROFILE PICTURES
+    // ═══════════════════════════════════════
+    match /profiles/{userId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAuthenticated() && 
+                       request.auth.uid == userId &&
+                       isValidSize() &&
+                       request.resource.contentType.matches('image/.*');
+      allow delete: if isAuthenticated() && 
+                        (request.auth.uid == userId || isAdmin());
+    }
+
+    // ═══════════════════════════════════════
+    // DEPARTMENT MEDIA (private to members)
+    // ═══════════════════════════════════════
+    match /departments/{deptId}/{allPaths=**} {
+      // Check if user is department member or admin
+      function isDeptMember() {
+        return isAuthenticated() && (
+          isAdmin() ||
+          firestore.exists(/databases/(default)/documents/departments/$(deptId)/members/$(request.auth.uid))
+        );
+      }
+
+      allow read: if isDeptMember();
+      allow create: if isDeptMember() && isValidSize() && isValidType();
+      allow update: if isDeptMember() && isValidSize() && isValidType();
+      allow delete: if isAdmin() || 
+                       (isDeptMember() && 
+                        resource.metadata.uploadedBy == request.auth.uid);
+    }
+
+    // ═══════════════════════════════════════
+    // USHIRIKA MEDIA (public to all members)
+    // ═══════════════════════════════════════
+    match /ushirikas/{ushirikaId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidSize() && isValidType();
+      allow update: if isAdmin() && isValidSize() && isValidType();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // EVENT MEDIA (public to all members)
+    // ═══════════════════════════════════════
+    match /events/{eventId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidSize() && isValidType();
+      allow update: if isAdmin() && isValidSize() && isValidType();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // GIVING CAUSES MEDIA (public to all)
+    // ═══════════════════════════════════════
+    match /giving/{causeId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin() && isValidSize() && isValidType();
+      allow update: if isAdmin() && isValidSize() && isValidType();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // POST MEDIA (community forum)
+    // ═══════════════════════════════════════
+    match /posts/{postId}/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated() && isValidSize() && isValidType();
+      allow delete: if isAdmin() || 
+                       resource.metadata.uploadedBy == request.auth.uid;
+    }
+
+    // ═══════════════════════════════════════
+    // CHURCH MEDIA (public gallery)
+    // ═══════════════════════════════════════
+    match /church/{allPaths=**} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin() && isValidSize() && isValidType();
+    }
+
+    // ═══════════════════════════════════════
+    // DENY ALL OTHER ACCESS
+    // ═══════════════════════════════════════
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "name": "graceconnect",
+  "version": "1.0.0",
+  "description": "GraceConnect Church App",
+  "private": true,
+  "dependencies": {
+    "@supabase/supabase-js": "^2.112.4"
+  }
+}

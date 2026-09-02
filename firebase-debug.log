@@ -1,0 +1,55 @@
+[debug] [2026-09-01T12:13:18.120Z] ----------------------------------------------------------------------
+[debug] [2026-09-01T12:13:18.139Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\PC\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js projects:create graceconnect
+[debug] [2026-09-01T12:13:18.139Z] CLI Version:   15.28.2
+[debug] [2026-09-01T12:13:18.140Z] Platform:      win32
+[debug] [2026-09-01T12:13:18.140Z] Node Version:  v24.18.0
+[debug] [2026-09-01T12:13:18.140Z] Detected Agent: unknown
+[debug] [2026-09-01T12:13:18.141Z] Time:          Tue Sep 01 2026 15:13:18 GMT+0300 (East Africa Time)
+[debug] [2026-09-01T12:13:18.141Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-09-01T12:13:18.222Z] >>> [apiv2][query] GET https://firebase-public.firebaseio.com/cli.json [none]
+[debug] [2026-09-01T12:13:19.786Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-09-01T12:13:19.787Z] > authorizing via signed-in user (ezztech88@gmail.com)
+[debug] [2026-09-01T12:13:20.626Z] <<< [apiv2][status] GET https://firebase-public.firebaseio.com/cli.json 200
+[debug] [2026-09-01T12:13:20.627Z] <<< [apiv2][body] GET https://firebase-public.firebaseio.com/cli.json {"cloudBuildErrorAfter":1594252800000,"cloudBuildWarnAfter":1590019200000,"defaultNode10After":1594252800000,"minVersion":"3.0.5","node8DeploysDisabledAfter":1613390400000,"node8RuntimeDisabledAfter":1615809600000,"node8WarnAfter":1600128000000}
+[debug] [2026-09-01T12:13:44.526Z] Checked if tokens are valid: false, expires at: 1788202551611
+[debug] [2026-09-01T12:13:44.529Z] Checked if tokens are valid: false, expires at: 1788202551611
+[debug] [2026-09-01T12:13:44.531Z] > refreshing access token with scopes: []
+[debug] [2026-09-01T12:13:44.547Z] >>> [apiv2][query] POST https://www.googleapis.com/oauth2/v3/token [none]
+[debug] [2026-09-01T12:13:44.547Z] >>> [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-01T12:13:45.048Z] <<< [apiv2][status] POST https://www.googleapis.com/oauth2/v3/token 200
+[debug] [2026-09-01T12:13:45.048Z] <<< [apiv2][body] POST https://www.googleapis.com/oauth2/v3/token [omitted]
+[debug] [2026-09-01T12:13:45.121Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects [none]
+[debug] [2026-09-01T12:13:45.122Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects {"projectId":"graceconnect","name":"graceconnect"}
+[debug] [2026-09-01T12:13:47.281Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects 409
+[debug] [2026-09-01T12:13:47.282Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects {"error":{"code":409,"message":"Requested entity already exists","status":"ALREADY_EXISTS"}}
+[debug] [2026-09-01T12:13:47.757Z] FirebaseError: Request to https://cloudresourcemanager.googleapis.com/v1/projects had HTTP Error: 409, Requested entity already exists
+    at responseToError (C:\Users\PC\AppData\Roaming\npm\node_modules\firebase-tools\lib\responseToError.js:53:12)
+    at RetryOperation._fn (C:\Users\PC\AppData\Roaming\npm\node_modules\firebase-tools\lib\apiv2.js:415:77)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+[error] 
+[error] Error: Failed to create project because there is already a project with ID graceconnect. Please try again with a unique project ID.
+[debug] [2026-09-01T12:14:09.339Z] ----------------------------------------------------------------------
+[debug] [2026-09-01T12:14:09.360Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\PC\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js init
+[debug] [2026-09-01T12:14:09.363Z] CLI Version:   15.28.2
+[debug] [2026-09-01T12:14:09.364Z] Platform:      win32
+[debug] [2026-09-01T12:14:09.365Z] Node Version:  v24.18.0
+[debug] [2026-09-01T12:14:09.365Z] Detected Agent: unknown
+[debug] [2026-09-01T12:14:09.365Z] Time:          Tue Sep 01 2026 15:14:09 GMT+0300 (East Africa Time)
+[debug] [2026-09-01T12:14:09.366Z] ----------------------------------------------------------------------
+[debug] 
+[info] 
+     ######## #### ########  ######## ########     ###     ######  ########
+     ##        ##  ##     ## ##       ##     ##  ##   ##  ##       ##
+     ######    ##  ########  ######   ########  #########  ######  ######
+     ##        ##  ##    ##  ##       ##     ## ##     ##       ## ##
+     ##       #### ##     ## ######## ########  ##     ##  ######  ########
+
+You're about to initialize a Firebase project in this directory:
+
+  C:\Users\PC\Desktop\church
+
+Before we get started, keep in mind:
+
+  * You are initializing within an existing Firebase project directory
+

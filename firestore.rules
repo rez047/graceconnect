@@ -1,0 +1,250 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ═══════════════════════════════════════
+    // HELPER FUNCTIONS
+    // ═══════════════════════════════════════
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.memberType in ['admin', 'superadmin'];
+    }
+
+    function isSuperAdmin() {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/users/$(request.auth.uid)).data.memberType == 'superadmin';
+    }
+
+    function isDeptMember(deptId) {
+      return isAuthenticated() && 
+             exists(/databases/$(database)/documents/departments/$(deptId)/members/$(request.auth.uid));
+    }
+
+    function isDeptAdmin(deptId) {
+      return isAuthenticated() && 
+             get(/databases/$(database)/documents/departments/$(deptId)/members/$(request.auth.uid)).data.role in ['leader', 'chairman'];
+    }
+
+    // ═══════════════════════════════════════
+    // USERS (SECURED AGAINST PRIVILEGE ESCALATION)
+    // ═══════════════════════════════════════
+    match /users/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      
+      // CREATE: User can only create their own document. 
+      // They CANNOT assign themselves an admin role during signup.
+      allow create: if isAuthenticated() && 
+                        request.auth.uid == userId && 
+                        (!('memberType' in request.resource.data) || request.resource.data.memberType == 'member');
+      
+      // UPDATE: Admins can update anything. 
+      // Owners can update their own profile (name, phone, etc) BUT 
+      // they CANNOT change their 'memberType' or 'status'.
+      allow update: if isAdmin() || (
+        isOwner(userId) && 
+        request.resource.data.memberType == resource.data.memberType &&
+        request.resource.data.status == resource.data.status
+      );
+      
+      // DELETE: Only Super Admins can delete users.
+      allow delete: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // DEPARTMENTS
+    // ═══════════════════════════════════════
+    match /departments/{deptId} {
+      // Read department info (public metadata)
+      allow read: if isAuthenticated();
+      
+      // Only admin can create/update/delete departments
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+
+      // Department members
+      match /members/{memberId} {
+        allow read: if isDeptMember(deptId) || isAdmin();
+        allow create: if isAdmin();
+        allow update: if isAdmin() || isDeptAdmin(deptId);
+        allow delete: if isAdmin();
+      }
+
+      // Department posts (PRIVATE - only members can see)
+      match /posts/{postId} {
+        allow read: if isDeptMember(deptId) || isAdmin();
+        allow create: if isDeptMember(deptId) || isAdmin();
+        allow update: if (isDeptMember(deptId) && resource.data.authorId == request.auth.uid) || isAdmin();
+        allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+
+        // Post comments
+        match /comments/{commentId} {
+          allow read: if isDeptMember(deptId) || isAdmin();
+          allow create: if isDeptMember(deptId) || isAdmin();
+          allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+        }
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // USHIRIKAS
+    // ═══════════════════════════════════════
+    match /ushirikas/{ushirikaId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isSuperAdmin();
+
+      match /officials/{officialId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+
+      match /posts/{postId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if resource.data.authorId == request.auth.uid || isAdmin();
+        allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // EVENTS (Admin only can create)
+    // ═══════════════════════════════════════
+    match /events/{eventId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /comments/{commentId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow delete: if isAdmin() || resource.data.authorId == request.auth.uid;
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // GIVING (Admin only can create causes)
+    // ═══════════════════════════════════════
+    match /givingCauses/{causeId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+
+      match /contributions/{contribId} {
+        allow read: if isAuthenticated();
+        allow create: if isAuthenticated();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // NOTIFICATIONS
+    // ═══════════════════════════════════════
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow create: if isAdmin() || isSuperAdmin();
+      allow update: if isAuthenticated() && resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.userId == request.auth.uid;
+    }
+
+    // ═══════════════════════════════════════
+    // PENDING REQUESTS
+    // ═══════════════════════════════════════
+    match /pendingRequests/{requestId} {
+      allow read: if isAdmin() || resource.data.userId == request.auth.uid;
+      allow create: if isAuthenticated();
+      allow update: if isAdmin();
+      allow delete: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // ADMIN INVITES (Super admin only)
+    // ═══════════════════════════════════════
+    match /adminInvites/{inviteId} {
+      allow read: if isSuperAdmin();
+      allow create: if isSuperAdmin();
+      allow update: if isSuperAdmin();
+      allow delete: if isSuperAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // PRAYERS
+    // ═══════════════════════════════════════
+    match /prayers/{prayerId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if resource.data.userId == request.auth.uid || isAdmin();
+      allow delete: if resource.data.userId == request.auth.uid || isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // QUESTIONS & ANSWERS
+    // ═══════════════════════════════════════
+    match /questions/{questionId} {
+      allow read: if isAuthenticated();
+      allow create: if isAuthenticated();
+      allow update: if resource.data.userId == request.auth.uid;
+      allow delete: if isAdmin() || resource.data.userId == request.auth.uid;
+
+      match /answers/{answerId} {
+        allow read: if isAuthenticated();
+        allow create: if isAdmin();
+        allow update: if isAdmin();
+        allow delete: if isAdmin();
+      }
+    }
+
+    // ═══════════════════════════════════════
+    // STREAKS (Admin can view all)
+    // ═══════════════════════════════════════
+    match /streaks/{userId} {
+      allow read: if isOwner(userId) || isAdmin();
+      allow write: if false; // Updated via Cloud Functions only
+    }
+
+    // ═══════════════════════════════════════
+    // VERSES (Read-only for users)
+    // ═══════════════════════════════════════
+    match /verses/{verseId} {
+      allow read: if isAuthenticated();
+      allow write: if isAdmin();
+    }
+
+    // ═══════════════════════════════════════
+    // ADMIN LOGS (Read-only for admins, write via Cloud Functions)
+    // ═══════════════════════════════════════
+    match /adminLogs/{logId} {
+      allow read: if isAdmin();
+      allow write: if false; // Only Cloud Functions can write logs
+    }
+
+    // ═══════════════════════════════════════
+    // MPESA TRANSACTIONS (Highly restricted)
+    // ═══════════════════════════════════════
+    match /mpesaTransactions/{transId} {
+      allow read: if isAdmin();
+      allow write: if false; // Only Cloud Functions (M-Pesa callback) can write
+    }
+
+    // ═══════════════════════════════════════
+    // DENY ALL OTHER ACCESS
+    // ═══════════════════════════════════════
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

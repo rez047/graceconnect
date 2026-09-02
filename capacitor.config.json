@@ -1,0 +1,20 @@
+{
+  "appId": "com.graceconnect.app",
+  "appName": "GraceConnect",
+  "webDir": "dist",
+  "bundledWebRuntime": false,
+  "server": {
+    "androidScheme": "https"
+  },
+  "plugins": {
+    "PushNotifications": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Geolocation": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    },
+    "Camera": {
+      "presentationOptions": ["badge", "sound", "alert"]
+    }
+  }
+}
