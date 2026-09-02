@@ -41,6 +41,7 @@ body {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--primary-light); border-radius: 3px; }
 
+/* HEADER */
 .app-header {
   position: fixed; top:0; left:0; right:0; z-index: 100;
   height: var(--header-height);
@@ -83,6 +84,7 @@ body {
 .role-admin { background: var(--gradient-warm); color: white; }
 .role-user { background: var(--gradient-cool); color: white; }
 
+/* BOTTOM NAV */
 .bottom-nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 100;
   height: var(--nav-height);
@@ -105,6 +107,7 @@ body {
 .nav-item.active { color: var(--primary); }
 .nav-item.active i { transform: scale(1.15); }
 
+/* MAIN */
 .main-content {
   padding-top: calc(var(--header-height) + 10px);
   padding-bottom: calc(var(--nav-height) + 20px);
@@ -117,6 +120,7 @@ body {
   to { opacity: 1; transform: translateY(0); }
 }
 
+/* CARDS */
 .card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -150,6 +154,7 @@ body {
 .card-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
 .card-subtitle { font-size: 0.8rem; color: var(--text-light); line-height: 1.5; }
 
+/* DECISION SCREEN */
 .decision-overlay {
   position: fixed; inset: 0; z-index: 400;
   background: var(--gradient);
@@ -198,6 +203,7 @@ body {
 .decision-option-title { font-weight: 700; font-size: 1rem; margin-bottom: 2px; }
 .decision-option-sub { font-size: 0.75rem; color: var(--text-light); }
 
+/* ONBOARDING */
 .onboarding-overlay {
   position: fixed; inset: 0; z-index: 300;
   background: rgba(0,0,0,0.7);
@@ -236,6 +242,7 @@ body {
 }
 .progress-dot.active { background: var(--primary); width: 24px; border-radius: 4px; }
 
+/* GREETING */
 .greeting-section {
   background: var(--gradient);
   border-radius: var(--radius);
@@ -252,6 +259,7 @@ body {
 .greeting-verse { font-size: 0.82rem; opacity: 0.9; font-style: italic; line-height: 1.5; margin-top: 10px; }
 .greeting-verse span { display: block; font-style: normal; font-weight: 600; margin-top: 4px; font-size: 0.72rem; }
 
+/* GRID */
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
 .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px; margin-bottom: 14px; }
 
@@ -275,6 +283,7 @@ body {
 .mc-blue i { color: #3B82F6; }
 .mc-pink i { color: #EC4899; }
 
+/* MY DEPARTMENTS */
 .my-depts-section {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -405,6 +414,7 @@ body {
   margin-top: 2px;
 }
 
+/* BUTTONS */
 .btn {
   padding: 10px 18px;
   border-radius: var(--radius-sm);
@@ -438,6 +448,7 @@ body {
   letter-spacing: 0.5px; margin-left: 6px;
 }
 
+/* TABS */
 .tabs { display: flex; gap: 4px; margin-bottom: 14px; overflow-x: auto; padding-bottom: 4px; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab {
@@ -450,6 +461,7 @@ body {
 }
 .tab.active { background: var(--primary); color: white; border-color: var(--primary); }
 
+/* POST */
 .post {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -494,6 +506,7 @@ body {
   background: none; border: none; padding: 4px 8px;
 }
 
+/* FORM */
 .form-group { margin-bottom: 12px; }
 .form-label { font-size: 0.78rem; font-weight: 600; margin-bottom: 5px; display: block; }
 .form-input, .form-textarea, .form-select {
@@ -509,6 +522,7 @@ body {
 .form-textarea { min-height: 90px; resize: vertical; }
 .form-hint { font-size: 0.7rem; color: var(--text-lighter); margin-top: 3px; }
 
+/* MODAL */
 .modal-overlay {
   position: fixed; inset: 0; z-index: 200;
   background: rgba(0,0,0,0.5);
@@ -532,6 +546,7 @@ body {
 }
 .modal-title { font-size: 1.05rem; font-weight: 700; margin-bottom: 14px; }
 
+/* CHIPS */
 .chip {
   display: inline-flex; align-items: center; gap: 4px;
   padding: 4px 10px; border-radius: 20px;
@@ -544,6 +559,7 @@ body {
 .chip-blue { background: #DBEAFE; color: #1E40AF; }
 .chip-dept { background: #F3E8FF; color: #6B21A8; }
 
+/* USHIRIKA CARD */
 .ushirika-card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -566,6 +582,7 @@ body {
 .ushirika-detail { font-size: 0.75rem; color: var(--text-light); }
 .ushirika-members { font-size: 0.7rem; color: var(--primary); font-weight: 600; margin-top: 2px; }
 
+/* OFFICIAL CARD */
 .official-card {
   display: flex; align-items: center; gap: 10px;
   padding: 10px; background: var(--bg);
@@ -581,6 +598,7 @@ body {
 .official-role { font-size: 0.7rem; color: var(--primary); font-weight: 600; }
 .official-contact { font-size: 0.7rem; color: var(--text-light); }
 
+/* DEPARTMENT CARD */
 .dept-card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -621,6 +639,7 @@ body {
 .dept-stats span { display: flex; align-items: center; gap: 4px; }
 .dept-stats i { color: var(--primary); }
 
+/* DEPARTMENT DETAIL */
 .dept-header {
   background: var(--gradient-dept);
   border-radius: var(--radius);
@@ -656,6 +675,7 @@ body {
 .dept-role-badge.chairman { background: var(--gradient); }
 .dept-role-badge.member { background: var(--bg); color: var(--text-light); border: 1px solid var(--border); }
 
+/* REQUEST CARD */
 .request-card {
   background: #FEF3C7;
   border: 2px solid #FCD34D;
@@ -673,6 +693,7 @@ body {
 }
 .request-actions { display: flex; gap: 6px; margin-top: 10px; }
 
+/* ADMIN PANEL */
 .admin-panel {
   background: linear-gradient(135deg, #FEF3C7, #FDE68A);
   border: 2px solid #F59E0B;
@@ -686,6 +707,7 @@ body {
   margin-bottom: 10px;
 }
 
+/* USER PICKER */
 .user-picker {
   display: flex; flex-direction: column; gap: 6px;
   max-height: 200px; overflow-y: auto;
@@ -703,6 +725,7 @@ body {
 .user-pick-item:hover { background: var(--bg); }
 .user-pick-item.selected { background: #EEF2FF; border: 1px solid var(--primary-light); }
 
+/* TOGGLE */
 .toggle-row {
   display: flex; align-items: center; justify-content: space-between;
   padding: 8px 0;
@@ -726,6 +749,7 @@ body {
 }
 .toggle.on::after { transform: translateX(20px); }
 
+/* MEDIA UPLOAD */
 .media-upload {
   border: 2px dashed var(--border);
   border-radius: var(--radius-sm);
@@ -737,6 +761,7 @@ body {
 .media-upload i { font-size: 1.3rem; color: var(--text-lighter); margin-bottom: 4px; display: block; }
 .media-upload span { font-size: 0.75rem; color: var(--text-light); }
 
+/* SUB-PAGES */
 .sub-page { display: none; }
 .sub-page.active { display: block; }
 .back-btn {
@@ -747,6 +772,7 @@ body {
   font-family: inherit;
 }
 
+/* FAB */
 .fab {
   position: fixed;
   bottom: calc(var(--nav-height) + 18px);
@@ -761,6 +787,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 
+/* SEARCH BAR */
 .search-bar {
   display: flex; align-items: center; gap: 8px;
   background: var(--bg);
@@ -774,6 +801,7 @@ body {
   font-size: 0.85rem; font-family: inherit; outline: none;
 }
 
+/* BIBLE READER */
 .bible-reader {
   background: #FFFBEB;
   border-radius: var(--radius);
@@ -792,6 +820,7 @@ body {
   color: #92400E; margin-top: 8px;
 }
 
+/* GPS PIN */
 .gps-pin {
   display: flex; align-items: center; gap: 8px;
   padding: 10px 12px;
@@ -803,6 +832,7 @@ body {
   cursor: pointer;
 }
 
+/* EMOTIONAL SUPPORT */
 .emotional-card {
   background: var(--gradient-heart);
   border-radius: var(--radius);
@@ -847,6 +877,7 @@ body {
   cursor: pointer; border: none; color: white;
 }
 
+/* VERSE RESULT */
 .verse-result {
   background: #FFFBEB;
   border-radius: var(--radius);
@@ -886,6 +917,7 @@ body {
   color: #78350F; line-height: 1.5;
 }
 
+/* STREAK */
 .streak-bar {
   display: flex; align-items: center; gap: 12px;
   background: linear-gradient(135deg, #FEF3C7, #FDE68A);
@@ -906,6 +938,7 @@ body {
 }
 .streak-dot.done { background: #F59E0B; color: white; }
 
+/* EVENT CARD */
 .event-card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -932,6 +965,7 @@ body {
 .event-title { font-size: 0.95rem; font-weight: 700; margin-bottom: 4px; }
 .event-date { font-size: 0.75rem; color: var(--text-light); }
 
+/* GIVING */
 .giving-cause {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -967,6 +1001,7 @@ body {
 }
 .pay-method.selected { border-color: var(--accent); background: #D1FAE5; }
 
+/* CHARACTER CARD */
 .character-card {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -992,6 +1027,7 @@ body {
 .character-name { font-size: 1rem; font-weight: 800; }
 .character-desc { font-size: 0.8rem; color: var(--text-light); line-height: 1.5; margin-top: 4px; }
 
+/* WEEKLY MEETING CARD */
 .weekly-meeting-card {
   background: linear-gradient(135deg, #DBEAFE 0%, #C7D2FE 100%);
   border-radius: var(--radius);
@@ -1059,6 +1095,7 @@ body {
   margin-top: 12px;
 }
 
+/* CHAT SYSTEM */
 .chat-container {
   background: var(--bg-card);
   border-radius: var(--radius);
@@ -1209,6 +1246,7 @@ body {
   transform: scale(1.05);
 }
 
+/* CHAT LIST */
 .chat-list {
   display: flex;
   flex-direction: column;
@@ -1280,6 +1318,7 @@ body {
   display: flex; align-items: center; justify-content: center;
 }
 
+/* TITLE MANAGER */
 .title-list {
   display: flex;
   flex-direction: column;
@@ -1319,6 +1358,7 @@ body {
   font-size: 0.75rem;
 }
 
+/* RESPONSIVE */
 @media (min-width: 768px) {
   .main-content { max-width: 600px; margin: 0 auto; }
   .bottom-nav { max-width: 600px; left: 50%; transform: translateX(-50%); border-radius: var(--radius) var(--radius) 0 0; }
@@ -1330,6 +1370,7 @@ body {
 </head>
 <body>
 
+<!-- DECISION SCREEN -->
 <div class="decision-overlay" id="decisionOverlay">
   <div class="decision-card">
     <div class="decision-logo"><i class="fas fa-cross"></i> GraceConnect</div>
@@ -1356,6 +1397,7 @@ body {
   </div>
 </div>
 
+<!-- ONBOARDING -->
 <div class="onboarding-overlay" id="onboardingOverlay">
   <div class="onboarding-card">
     <div class="progress-dots">
@@ -1364,12 +1406,14 @@ body {
       <div class="progress-dot" data-step="3"></div>
       <div class="progress-dot" data-step="4"></div>
     </div>
+
     <div class="onboarding-step active" data-step="1">
       <div class="onboarding-icon"><i class="fas fa-cross"></i></div>
       <div class="onboarding-title">Welcome to GraceConnect</div>
       <div class="onboarding-sub">Let's set up your profile.</div>
       <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Get Started <i class="fas fa-arrow-right"></i></button>
     </div>
+
     <div class="onboarding-step" data-step="2">
       <div class="onboarding-icon"><i class="fas fa-user"></i></div>
       <div class="onboarding-title">Your Details</div>
@@ -1379,12 +1423,16 @@ body {
         <input class="form-input" id="ob-name" placeholder="e.g. John Mwangi">
       </div>
       <div class="form-group">
-        <label class="form-label">Email (optional)</label>
-        <input class="form-input" type="email" placeholder="you@example.com">
+        <label class="form-label">Email <span style="color:#EF4444">*</span></label>
+        <input class="form-input" id="ob-email" type="email" placeholder="you@example.com">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password <span style="color:#EF4444">*</span></label>
+        <input class="form-input" id="ob-password" type="password" placeholder="Create password (6+ chars)">
       </div>
       <div class="form-group">
         <label class="form-label">Phone (optional)</label>
-        <input class="form-input" type="tel" placeholder="+254 7XX XXX XXX">
+        <input class="form-input" id="ob-phone" type="tel" placeholder="+254 7XX XXX XXX">
       </div>
       <div class="form-group">
         <label class="form-label">Profile Picture (optional)</label>
@@ -1392,6 +1440,7 @@ body {
       </div>
       <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Continue <i class="fas fa-arrow-right"></i></button>
     </div>
+
     <div class="onboarding-step" data-step="3">
       <div class="onboarding-icon"><i class="fas fa-people-group"></i></div>
       <div class="onboarding-title">Choose Your Ushirika</div>
@@ -1407,6 +1456,7 @@ body {
       </div>
       <button class="btn btn-primary btn-block" onclick="nextOnboardingStep()">Continue <i class="fas fa-arrow-right"></i></button>
     </div>
+
     <div class="onboarding-step" data-step="4">
       <div class="onboarding-icon" style="background:var(--gradient-green)"><i class="fas fa-check"></i></div>
       <div class="onboarding-title">You're All Set! 🎉</div>
@@ -1421,26 +1471,28 @@ body {
   </div>
 </div>
 
+<!-- LOGIN -->
 <div class="onboarding-overlay" id="loginOverlay">
   <div class="onboarding-card">
     <div class="onboarding-icon" style="background:var(--gradient-warm)"><i class="fas fa-sign-in-alt"></i></div>
     <div class="onboarding-title">Welcome Back!</div>
     <div class="onboarding-sub">Sign in to continue</div>
     <div class="form-group">
-      <label class="form-label">Email or Phone</label>
-      <input class="form-input" placeholder="you@example.com">
+      <label class="form-label">Email</label>
+      <input class="form-input" id="login-email" placeholder="you@example.com">
     </div>
     <div class="form-group">
       <label class="form-label">Password</label>
-      <input class="form-input" type="password" placeholder="••••••••">
+      <input class="form-input" id="login-password" type="password" placeholder="••••••••">
     </div>
-    <button class="btn btn-primary btn-block" onclick="showLeaderPrompt()">Sign In</button>
+    <button class="btn btn-primary btn-block" onclick="doLogin()">Sign In</button>
     <div style="text-align:center;margin-top:14px">
       <button class="btn btn-ghost btn-sm" onclick="hideLogin()">← Back</button>
     </div>
   </div>
 </div>
 
+<!-- LEADER PROMPT -->
 <div class="onboarding-overlay" id="leaderPromptOverlay">
   <div class="onboarding-card">
     <div class="onboarding-icon" style="background:var(--gradient-cool)"><i class="fas fa-user-tie"></i></div>
@@ -1455,6 +1507,7 @@ body {
   </div>
 </div>
 
+<!-- HEADER -->
 <header class="app-header">
   <div class="logo"><i class="fas fa-cross"></i> GraceConnect</div>
   <div class="header-actions">
@@ -1469,11 +1522,14 @@ body {
   </div>
 </header>
 
+<!-- MAIN -->
 <main class="main-content">
 
+  <!-- HOME -->
   <div id="section-home" class="section active">
     <div id="home-main" class="sub-page active">
 
+      <!-- Greeting -->
       <div class="greeting-section">
         <div class="greeting-time" id="greetingTime"></div>
         <div class="greeting-text" id="greetingText"></div>
@@ -1483,6 +1539,7 @@ body {
         </div>
       </div>
 
+      <!-- Streak -->
       <div class="streak-bar">
         <div class="streak-fire">🔥</div>
         <div class="streak-info">
@@ -1497,11 +1554,13 @@ body {
         </div>
       </div>
 
+      <!-- MY DEPARTMENTS -->
       <div class="my-depts-section">
         <div class="my-depts-header">
           <div class="my-depts-title"><i class="fas fa-briefcase"></i> My Departments</div>
           <div class="my-depts-count" id="myDeptsCount">3 serving</div>
         </div>
+        
         <div class="my-depts-scroll" id="myDeptsScroll">
           <div class="my-dept-mini" onclick="openMainDepartment('worship')">
             <div class="my-dept-mini-icon"><i class="fas fa-music"></i></div>
@@ -1514,6 +1573,7 @@ body {
               <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 89</div>
             </div>
           </div>
+
           <div class="my-dept-mini alt1" onclick="openMainDepartment('intercessory')">
             <div class="my-dept-mini-icon"><i class="fas fa-hands-praying"></i></div>
             <div class="my-dept-mini-name">Intercessory</div>
@@ -1525,6 +1585,7 @@ body {
               <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 178</div>
             </div>
           </div>
+
           <div class="my-dept-mini alt2" onclick="openMainDepartment('media')">
             <div class="my-dept-mini-icon"><i class="fas fa-video"></i></div>
             <div class="my-dept-mini-name">Media & Tech</div>
@@ -1536,6 +1597,7 @@ body {
               <div class="my-dept-mini-stat"><i class="fas fa-comments"></i> 67</div>
             </div>
           </div>
+
           <div class="my-dept-join-more" onclick="showDeptPicker()">
             <i class="fas fa-plus-circle"></i>
             <div class="jd-title">Join Another</div>
@@ -1544,6 +1606,7 @@ body {
         </div>
       </div>
 
+      <!-- Emotional Support -->
       <div class="section-title">💝 How are you feeling?</div>
       <div class="emotional-card">
         <div class="emotional-title">Share your heart</div>
@@ -1563,6 +1626,7 @@ body {
       </div>
       <div id="verseResults"></div>
 
+      <!-- Quick Actions -->
       <div class="section-title">⚡ Quick Actions</div>
       <div class="grid-3">
         <div class="mini-card mc-purple" onclick="showSubPage('home-trivia')">
@@ -1585,6 +1649,7 @@ body {
         </div>
       </div>
 
+      <!-- Bible Trivia -->
       <div class="section-title">📖 Bible Trivia</div>
       <div class="card" style="padding:16px;border:2px solid var(--primary-light)">
         <div style="font-size:0.72rem;color:var(--primary);font-weight:700;margin-bottom:6px">Question 1 of 5</div>
@@ -1599,6 +1664,7 @@ body {
       </div>
     </div>
 
+    <!-- MAIN DEPARTMENT DETAIL -->
     <div id="home-mainDept" class="sub-page">
       <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back to Home</button>
       
@@ -1616,6 +1682,7 @@ body {
         </div>
       </div>
 
+      <!-- WEEKLY MEETING CARD -->
       <div class="weekly-meeting-card">
         <div class="weekly-meeting-header">
           <div class="weekly-meeting-title">
@@ -1652,6 +1719,7 @@ body {
         </div>
       </div>
 
+      <!-- Admin controls -->
       <div class="admin-panel" id="adminMainDeptControl">
         <div class="admin-panel-title"><i class="fas fa-crown"></i> Department Admin Controls</div>
         <div class="grid-3" style="margin-bottom:0">
@@ -1673,10 +1741,12 @@ body {
         <div class="tab" onclick="switchMainDeptTab(this,'roles')">Leadership</div>
       </div>
 
+      <!-- Feed -->
       <div id="mainDept-feed">
         <button class="btn btn-primary btn-block" onclick="openModal('deptPostModal')" style="margin-bottom:14px">
           <i class="fas fa-pen"></i> Post to Department
         </button>
+
         <div class="post">
           <div class="post-header">
             <div class="post-avatar dept">RW</div>
@@ -1702,6 +1772,7 @@ body {
         </div>
       </div>
 
+      <!-- Members -->
       <div id="mainDept-members" style="display:none">
         <div class="search-bar"><i class="fas fa-search"></i><input placeholder="Search members..."></div>
         <div class="official-card">
@@ -1737,6 +1808,7 @@ body {
         </div>
       </div>
 
+      <!-- Leadership -->
       <div id="mainDept-roles" style="display:none">
         <div class="card">
           <div class="card-title">👑 Department Leadership</div>
@@ -1761,6 +1833,7 @@ body {
       </div>
     </div>
 
+    <!-- Other sub-pages -->
     <div id="home-trivia" class="sub-page">
       <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
       <div class="section-title">🧠 Bible Trivia Challenge</div>
@@ -1845,10 +1918,12 @@ body {
     </div>
   </div>
 
+  <!-- USHIRIKA -->
   <div id="section-ushirika" class="section">
     <div id="ushirika-main" class="sub-page active">
       <div class="section-title">🤝 Ushirika (Community)</div>
 
+      <!-- ADMIN PANEL -->
       <div class="admin-panel" id="adminUshirikaPanel">
         <div class="admin-panel-title"><i class="fas fa-crown"></i> Admin Controls</div>
         <div class="grid-2" style="margin-bottom:8px">
@@ -1910,6 +1985,7 @@ body {
         </div>
       </div>
 
+      <!-- USHIRIKAS TAB -->
       <div id="ushirika-groups" style="display:none">
         <div id="adminUshirikaGroupsBtn">
           <button class="btn btn-warm btn-block" onclick="openModal('addUshirikaModal')" style="margin-bottom:14px">
@@ -1917,6 +1993,7 @@ body {
           </button>
         </div>
 
+        <!-- WEEKLY MEETING CARD FOR USHIRIKA -->
         <div class="weekly-meeting-card">
           <div class="weekly-meeting-header">
             <div class="weekly-meeting-title">
@@ -1995,6 +2072,7 @@ body {
         </div>
       </div>
 
+      <!-- DEPARTMENTS TAB -->
       <div id="ushirika-departments" style="display:none">
         <div id="adminDeptBtn">
           <button class="btn btn-warm btn-block" onclick="openModal('addDeptModal')" style="margin-bottom:14px">
@@ -2090,6 +2168,7 @@ body {
     </div>
   </div>
 
+  <!-- DISCOVER -->
   <div id="section-discover" class="section">
     <div id="discover-main" class="sub-page active">
       <div class="section-title">🔍 Discover</div>
@@ -2106,6 +2185,7 @@ body {
         </div>
       </div>
 
+      <!-- CHAT INBOX -->
       <div class="section-title" style="font-size:1.1rem">💬 Messages</div>
       <div class="card" style="padding:12px">
         <div class="chat-list">
@@ -2163,7 +2243,7 @@ body {
         </div>
       </div>
 
-      <div class="section-title" style="font-size:1.05rem">👨💼 Servants of God</div>
+      <div class="section-title" style="font-size:1.05rem">👨‍💼 Servants of God</div>
       <div class="official-card">
         <div class="official-avatar">PP</div>
         <div style="flex:1">
@@ -2188,6 +2268,7 @@ body {
       </div>
     </div>
 
+    <!-- CHAT VIEW -->
     <div id="discover-chat" class="sub-page">
       <button class="back-btn" onclick="showSubPage('discover-main')"><i class="fas fa-arrow-left"></i> Back</button>
       
@@ -2254,6 +2335,7 @@ body {
     </div>
   </div>
 
+  <!-- EVENTS -->
   <div id="section-event" class="section">
     <div id="event-main" class="sub-page active">
       <div class="section-title">🎉 Events</div>
@@ -2310,6 +2392,7 @@ body {
     </div>
   </div>
 
+  <!-- GIVING -->
   <div id="section-giving" class="section">
     <div id="giving-main" class="sub-page active">
       <div class="section-title">💝 Giving</div>
@@ -2350,6 +2433,7 @@ body {
 
 </main>
 
+<!-- BOTTOM NAV -->
 <nav class="bottom-nav">
   <button class="nav-item active" onclick="switchSection('home')"><i class="fas fa-home"></i>Home</button>
   <button class="nav-item" onclick="switchSection('ushirika')"><i class="fas fa-people-group"></i>Ushirika</button>
@@ -2360,6 +2444,9 @@ body {
 
 <button class="fab" onclick="openModal('quickActionModal')"><i class="fas fa-plus"></i></button>
 
+<!-- MODALS -->
+
+<!-- Quick Action -->
 <div class="modal-overlay" id="quickActionModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2373,6 +2460,7 @@ body {
   </div>
 </div>
 
+<!-- Ask Question -->
 <div class="modal-overlay" id="askModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2393,6 +2481,7 @@ body {
   </div>
 </div>
 
+<!-- Prayer -->
 <div class="modal-overlay" id="prayerModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2408,6 +2497,7 @@ body {
   </div>
 </div>
 
+<!-- Post -->
 <div class="modal-overlay" id="postModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2420,6 +2510,7 @@ body {
   </div>
 </div>
 
+<!-- Plan -->
 <div class="modal-overlay" id="planModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2445,6 +2536,7 @@ body {
   </div>
 </div>
 
+<!-- Department Post -->
 <div class="modal-overlay" id="deptPostModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2460,6 +2552,7 @@ body {
   </div>
 </div>
 
+<!-- UPDATE WEEKLY MEETING MODAL -->
 <div class="modal-overlay" id="updateWeeklyMeetingModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2515,6 +2608,7 @@ body {
   </div>
 </div>
 
+<!-- MANAGE TITLES MODAL -->
 <div class="modal-overlay" id="manageTitlesModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2522,6 +2616,7 @@ body {
     <div style="font-size:0.78rem;color:var(--text-light);margin-bottom:12px">
       Create custom titles for ushirika officials and department roles.
     </div>
+
     <div class="form-group">
       <label class="form-label">Title Category</label>
       <select class="form-select" id="titleCategory">
@@ -2530,6 +2625,7 @@ body {
         <option value="church">Church Leadership</option>
       </select>
     </div>
+
     <div class="form-group">
       <label class="form-label">Add New Title</label>
       <div style="display:flex;gap:8px">
@@ -2539,7 +2635,9 @@ body {
         </button>
       </div>
     </div>
+
     <div class="section-title" style="font-size:0.95rem;margin-top:16px">Current Titles</div>
+    
     <div class="title-list" id="titleList">
       <div class="title-item">
         <div class="title-item-icon"><i class="fas fa-crown"></i></div>
@@ -2577,10 +2675,12 @@ body {
         <button class="title-item-delete" onclick="deleteTitle(this)"><i class="fas fa-times"></i></button>
       </div>
     </div>
+
     <button class="btn btn-secondary btn-block">Close</button>
   </div>
 </div>
 
+<!-- NEW CHAT MODAL -->
 <div class="modal-overlay" id="newChatModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2632,6 +2732,7 @@ body {
   </div>
 </div>
 
+<!-- CHAT ATTACH MODAL -->
 <div class="modal-overlay" id="chatAttachModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2662,6 +2763,7 @@ body {
   </div>
 </div>
 
+<!-- ADD DEPARTMENT -->
 <div class="modal-overlay" id="addDeptModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2710,6 +2812,7 @@ body {
   </div>
 </div>
 
+<!-- ADD USHIRIKA -->
 <div class="modal-overlay" id="addUshirikaModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2748,6 +2851,7 @@ body {
   </div>
 </div>
 
+<!-- ADD OFFICIAL -->
 <div class="modal-overlay" id="addOfficialModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2802,10 +2906,11 @@ body {
   </div>
 </div>
 
+<!-- ADD CHURCH LEADER -->
 <div class="modal-overlay" id="addLeaderModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
-    <div class="modal-title">👨💼 Add Church Leader <span class="admin-only">Admin Only</span></div>
+    <div class="modal-title">👨‍💼 Add Church Leader <span class="admin-only">Admin Only</span></div>
     <div class="form-group">
       <label class="form-label">Pick from Registered Users</label>
       <div class="user-picker">
@@ -2839,6 +2944,7 @@ body {
   </div>
 </div>
 
+<!-- INVITE ADMIN -->
 <div class="modal-overlay" id="inviteAdminModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2858,6 +2964,7 @@ body {
   </div>
 </div>
 
+<!-- ADD DEPARTMENT MEMBER -->
 <div class="modal-overlay" id="addDeptMemberModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2890,6 +2997,7 @@ body {
   </div>
 </div>
 
+<!-- ASSIGN DEPT ROLE -->
 <div class="modal-overlay" id="assignDeptRoleModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2917,6 +3025,7 @@ body {
   </div>
 </div>
 
+<!-- REMOVE DEPT MEMBER -->
 <div class="modal-overlay" id="removeDeptMemberModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2933,6 +3042,7 @@ body {
   </div>
 </div>
 
+<!-- DEPARTMENT PICKER -->
 <div class="modal-overlay" id="deptPickerModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2972,6 +3082,7 @@ body {
   </div>
 </div>
 
+<!-- EVENT -->
 <div class="modal-overlay" id="eventModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -2998,6 +3109,7 @@ body {
   </div>
 </div>
 
+<!-- GIVING RALLY -->
 <div class="modal-overlay" id="givingModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -3024,6 +3136,7 @@ body {
   </div>
 </div>
 
+<!-- ADD PAYMENT METHOD -->
 <div class="modal-overlay" id="addPaymentMethodModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -3047,6 +3160,7 @@ body {
   </div>
 </div>
 
+<!-- GIVE (User) -->
 <div class="modal-overlay" id="giveModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -3067,6 +3181,7 @@ body {
   </div>
 </div>
 
+<!-- Search -->
 <div class="modal-overlay" id="searchModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -3075,6 +3190,7 @@ body {
   </div>
 </div>
 
+<!-- Profile -->
 <div class="modal-overlay" id="profileModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
@@ -3100,12 +3216,63 @@ body {
       <div class="toggle on" onclick="this.classList.toggle('on')"></div>
     </div>
     <button class="btn btn-secondary btn-block" style="margin-top:14px"><i class="fas fa-cog"></i> Settings</button>
-    <button class="btn btn-warm btn-block" style="margin-top:6px"><i class="fas fa-sign-out-alt"></i> Log Out</button>
+    <button class="btn btn-warm btn-block" style="margin-top:6px" onclick="doLogout()"><i class="fas fa-sign-out-alt"></i> Log Out</button>
   </div>
 </div>
 
+<!-- ═══════════════════════════════════════════════════════════════
+     SUPABASE SDK + CONFIG + REAL AUTH
+     ═══════════════════════════════════════════════════════════════ -->
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script>
-let currentRole = 'admin';
+// 🔑🔑🔑 EDIT HERE: Supabase Dashboard → Settings → API 🔑🔑🔑
+const SUPABASE_URL = 'https://amnskvvpwobxfdgnuvdc.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImFtbnNrdnZwd29ieGZkZ251dmRjIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODgyNjI0NDEsImV4cCI6MjEwMzgzODQ0MX0.K1rgEYRI_KDREgEWJZvt8XpVXp_ap19oaABmuBvO6YQ';
+const sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// ---- REAL AUTH SYSTEM ----
+async function refreshRole() {
+  const { data: { user } } = await sb.auth.getUser();
+  if (!user) { currentRole = 'member'; updateRoleUI(); return; }
+  const { data: profile } = await sb.from('profiles')
+    .select('role, name').eq('id', user.id).single();
+  currentRole = (profile && (profile.role === 'admin' || profile.role === 'superadmin')) ? 'admin' : 'member';
+  updateRoleUI();
+}
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const password = document.getElementById('login-password').value;
+  try {
+    const { error } = await sb.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+    document.getElementById('loginOverlay').classList.remove('show');
+    document.getElementById('decisionOverlay').style.display = 'none';
+    await refreshRole();
+  } catch (e) { alert('Login failed: ' + e.message); }
+}
+
+async function doLogout() {
+  await sb.auth.signOut();
+  localStorage.removeItem('onboarded');
+  location.reload();
+}
+
+// Auto-login if already signed in
+(async () => {
+  try {
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      document.getElementById('decisionOverlay').style.display = 'none';
+      await refreshRole();
+    }
+  } catch (e) { console.log('Supabase not configured yet:', e.message); }
+})();
+</script>
+
+<script>
+// ROLE MANAGEMENT
+let currentRole = 'member';
 
 function toggleRole() {
   currentRole = currentRole === 'admin' ? 'user' : 'admin';
@@ -3138,6 +3305,7 @@ function updateRoleUI() {
   }
 }
 
+// DECISION FLOW
 function startNewMember() {
   document.getElementById('decisionOverlay').style.display = 'none';
   document.getElementById('onboardingOverlay').classList.add('show');
@@ -3168,6 +3336,7 @@ function completeLogin() {
   document.getElementById('loginOverlay').classList.remove('show');
 }
 
+// ONBOARDING
 let onboardingStep = 1;
 
 function nextOnboardingStep() {
@@ -3188,15 +3357,34 @@ function nextOnboardingStep() {
   document.querySelector(`.progress-dot[data-step="${onboardingStep}"]`).classList.add('active');
 }
 
-function completeOnboarding() {
-  document.getElementById('onboardingOverlay').classList.remove('show');
-  localStorage.setItem('onboarded', 'true');
+// REAL SIGNUP (Supabase)
+async function completeOnboarding() {
+  const name = document.getElementById('ob-name').value.trim();
+  const email = document.getElementById('ob-email').value.trim();
+  const password = document.getElementById('ob-password').value;
+  const phone = document.getElementById('ob-phone').value.trim();
+  if (!name || !email || !password) { alert('Name, email and password are required'); return; }
+  try {
+    const { data, error } = await sb.auth.signUp({
+      email, password,
+      options: { data: { name } }
+    });
+    if (error) throw error;
+    if (data.user && phone) {
+      await sb.from('profiles').update({ phone }).eq('id', data.user.id);
+    }
+    document.getElementById('onboardingOverlay').classList.remove('show');
+    localStorage.setItem('onboarded', 'true');
+    alert('🎉 Account created! Welcome to GraceConnect.');
+    await refreshRole();
+  } catch (e) { alert('Sign up failed: ' + e.message); }
 }
 
 if (localStorage.getItem('onboarded') === 'true') {
   document.getElementById('decisionOverlay').style.display = 'none';
 }
 
+// GREETING
 function updateGreeting() {
   const now = new Date();
   const hour = now.getHours();
@@ -3214,6 +3402,7 @@ function updateGreeting() {
 updateGreeting();
 setInterval(updateGreeting, 60000);
 
+// EMOTIONAL SUPPORT
 const verseDatabase = {
   grief: [
     { text: "Blessed are those who mourn, for they will be comforted.", ref: "Matthew 5:4", encourage: "God sees your tears and promises comfort." },
@@ -3277,6 +3466,7 @@ function retrieveVerses() {
   container.innerHTML = html;
 }
 
+// NAVIGATION
 function switchSection(name) {
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('section-' + name).classList.add('active');
@@ -3320,6 +3510,7 @@ function switchMainDeptTab(el, tab) {
   });
 }
 
+// MAIN DEPARTMENT DETAIL
 const mainDeptData = {
   worship: { name: 'Praise & Worship', icon: 'fa-music', desc: 'Private forum for worship team', members: '18 members', posts: '89 posts' },
   intercessory: { name: 'Intercessory', icon: 'fa-hands-praying', desc: 'Prayer warriors', members: '30 members', posts: '178 posts' },
@@ -3342,16 +3533,19 @@ function openMainDepartment(deptKey) {
   showSubPage('home-mainDept');
 }
 
+// MODALS
 function openModal(id) { document.getElementById(id).classList.add('show'); document.body.style.overflow = 'hidden'; }
 function closeModal(e) { if (e.target.classList.contains('modal-overlay')) { e.target.classList.remove('show'); document.body.style.overflow = ''; } }
 function closeModalDirect() { document.querySelectorAll('.modal-overlay').forEach(m => m.classList.remove('show')); document.body.style.overflow = ''; }
 
+// DEPT PICKER
 function showDeptPicker() { openModal('deptPickerModal'); }
 function requestJoinDept() {
   alert('✅ Your request to join the department has been sent to the admin for approval.');
   closeModalDirect();
 }
 
+// TRIVIA
 let triviaScore = 0, triviaTotal = 0;
 function answerTrivia(el, correct) {
   const btns = el.parentElement.querySelectorAll('button');
@@ -3382,6 +3576,7 @@ function approveRequest() {
   }
 }
 
+// CUSTOM TITLE MANAGEMENT
 function addCustomTitle() {
   const input = document.getElementById('newTitleInput');
   const title = input.value.trim();
@@ -3414,6 +3609,7 @@ function deleteTitle(btn) {
   }
 }
 
+// CHAT SYSTEM
 const chatUsers = {
   pastor: { name: 'Pastor Peter Ochieng', initials: 'PP', role: 'Senior Pastor', avatar: 'var(--gradient-warm)' },
   mary: { name: 'Pastor Mary Njeri', initials: 'MN', role: 'Associate Pastor', avatar: 'var(--gradient-cool)' },
@@ -3430,12 +3626,6 @@ function openChat(userId) {
   document.getElementById('chatAvatar').style.background = user.avatar;
   document.getElementById('chatName').textContent = user.name;
   document.getElementById('chatStatus').textContent = `${user.role} • Online`;
-  
-  // Switch to discover section first if not there
-  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
-  document.getElementById('section-discover').classList.add('active');
-  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
-  document.querySelectorAll('.nav-item')[2].classList.add('active');
   
   showSubPage('discover-chat');
 }
@@ -3477,12 +3667,10 @@ function attachMedia(type) {
   closeModalDirect();
 }
 
+// Initialize
 updateRoleUI();
 
-console.log('✝️ GraceConnect v6 loaded!');
-console.log('✅ Custom Title Management added');
-console.log('✅ Weekly Meeting Updates for Leaders');
-console.log('✅ Private Chat System with media support');
+console.log('✝️ GraceConnect v6 (Supabase-connected) loaded!');
 </script>
 
 </body>
