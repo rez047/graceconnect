@@ -7,8 +7,8 @@ export default async function handler(req, res) {
   let nr = parseInt(book, 10);
   if (isNaN(nr)) nr = BOOKS.findIndex(b => b.toLowerCase() === book.toLowerCase()) + 1;
   if (!nr || nr < 1 || nr > 66) return res.status(400).json({ error: 'Bad book' });
-  res.setHeader('Cache-Control', 'public, s-maxage=86400, stale-while-revalidate=604800');
-  if (translation === 'swahili' || translation === 'swa' || translation === 'swv') {
+  res.setHeader('Cache-Control', 'public, s-maxage=86400');
+  if (['swahili','swa','swv'].includes(translation)) {
     try {
       const r = await fetch('https://api.getbible.net/v2/swahili/' + nr + '/' + chapter + '.json');
       if (r.ok) { const d = await r.json(); return res.status(200).json({ reference: (d.name || book + ' ' + chapter) + ' (Swahili)', verses: (d.verses || []).map(v => ({ verse: v.verse, text: v.text })) }); }
