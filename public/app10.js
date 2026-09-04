@@ -1146,3 +1146,125 @@ console.log('✝️ app10.js FINAL build active');
   };
 })();
 console.log('✝️ app15-append active (ushirika role assignment final)');
+
+
+// ═══════════ app16-append: role assign bypass + non-flickering dept widget ═══════════
+(function(){
+
+  // ── ROLE ASSIGN: UPDATE → verify → fallback DELETE+INSERT → verify ──
+  window.assignUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+    var sel=document.getElementById('ushRole9Member');
+    var row=(window._ushRoleRows15||[])[parseInt(sel.value,10)];
+    if(!row||!row.id)return alert('Pick a member');
+    var custom=(document.getElementById('ushRole9Custom')||{value:''}).value.trim();
+    var role=custom||document.getElementById('ushRole9Role').value;
+    if(!role)return alert('Pick or type a role');
+
+    function caches(){
+      (window._ushMembers9||[]).forEach(function(m){if(m.id===row.id||m.user_id===row.user_id)m.role=role;});
+      (window._ushRoleRows15||[]).forEach(function(m){if(m.id===row.id)m.role=role;});
+      (window._myUsh||[]).forEach(function(m){if(m.ushirika_id===ushId&&m.user_id===row.user_id)m.role=role;});
+    }
+    function refresh(){
+      if(typeof loadUshMembers9==='function')loadUshMembers9(ushId);
+      if(typeof renderUshLeaders9==='function')renderUshLeaders9();
+      if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+    }
+    function done(ok,msg){
+      if(ok){caches();alert('✅ Role updated to '+role);closeModalDirect();refresh();setTimeout(refresh,1000);}
+      else alert(msg||'⚠️ Role change was blocked by the server. Run the Supabase security SQL or check table policies.');
+    }
+    function verifyById(cb){
+      sb.from('ushirika_members').select('role').eq('id',row.id).limit(1).then(function(v){
+        cb(v.data&&v.data.length&&String(v.data[0].role)===String(role));
+      });
+    }
+
+    // 1) normal UPDATE
+    sb.from('ushirika_members').update({role:role}).eq('id',row.id).then(function(r){
+      if(r.error)return done(false,'⚠️ '+r.error.message);
+      verifyById(function(ok){
+        if(ok)return done(true);
+        // 2) bypass: DELETE + INSERT with new role
+        sb.from('ushirika_members').delete().eq('id',row.id).then(function(dr){
+          if(dr.error)return done(false,'⚠️ '+dr.error.message);
+          sb.from('ushirika_members').insert([{user_id:row.user_id,ushirika_id:row.ushirika_id,role:role}]).then(function(ir){
+            if(ir.error)return done(false,'⚠️ '+ir.error.message);
+            sb.from('ushirika_members').select('role').eq('user_id',row.user_id).eq('ushirika_id',row.ushirika_id).limit(1).then(function(vr){
+              done(vr.data&&vr.data.length&&String(vr.data[0].role)===String(role));
+            });
+          });
+        });
+      });
+    });
+  };
+
+  // ── NON-FLICKERING weekly-meeting widget (change-detection) ──
+  function buildMeetHTML16(m,canEdit,delFn){
+    var h='<div class="section-title-app" style="margin-bottom:6px"><i class="fas fa-calendar-day"></i> This Week\'s Meeting</div>';
+    if(!m){h+='<div style="text-align:center;padding:14px;color:var(--text-lighter)">No meeting scheduled yet</div>';}
+    else{
+      h+='<div style="font-size:.9rem;line-height:1.8">'+
+        (m.meeting_date?'<div><b>📅 Date:</b> '+esc(m.meeting_date)+'</div>':'')+
+        (m.start_time?'<div><b>🕐 Time:</b> '+esc(m.start_time)+(m.end_time?' – '+esc(m.end_time):'')+'</div>':'')+
+        (m.venue?'<div><b>📍 Venue:</b> '+esc(m.venue)+'</div>':'')+
+        (m.theme?'<div><b>🎯 Theme:</b> '+esc(m.theme)+'</div>':'')+
+        mediaHTML(mediaOf(m))+'</div>';
+    }
+    if(canEdit){
+      h+='<div style="display:flex;gap:8px;margin-top:10px">'+
+        '<button class="btn btn-warm btn-sm" onclick="openDeptMeetingEditor(\''+(window.currentDeptId||'')+'\')"><i class="fas fa-edit"></i> Update</button>'+
+        (m?'<button class="btn btn-danger btn-sm" onclick="'+delFn+'(\''+m.id+'\',\''+(window.currentDeptId||'')+'\')"><i class="fas fa-trash"></i> Delete</button>':'')+
+        '</div>';
+    }
+    return h;
+  }
+
+  // redeclare BOTH possible names so any interval/wrapper uses the calm version
+  function calmRender(deptId,boxId,delFn){
+    deptId=deptId||window.currentDeptId;
+    if(!sb||!deptId)return;
+    var box=document.getElementById(boxId);if(!box)return;
+    sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
+      var m=r.data&&r.data[0]||null;
+      var canEdit=false;try{canEdit=typeof isDeptLeader9==='function'&&isDeptLeader9(deptId);}catch(e){}
+      var sig=JSON.stringify([m&&m.id,m&&m.meeting_date,m&&m.start_time,m&&m.end_time,m&&m.venue,m&&m.theme,canEdit]);
+      if(box.dataset.sig16===sig)return;           // ← no change, no redraw, no flicker
+      box.dataset.sig16=sig;
+      if(m)window._curMeetingId=m.id;
+      box.innerHTML='<div class="card card-cool" style="margin-bottom:14px">'+buildMeetHTML16(m,canEdit,delFn)+'</div>';
+    });
+  }
+  window.renderDeptWeekMeet14=function(deptId){calmRender(deptId,'deptWeekMeet14','deleteDeptMeeting14');};
+  window.refreshDeptMeetingWidget13=function(){calmRender(window.currentDeptId,'deptWeekMeet14','deleteDeptMeeting14');};
+
+  // ensure the calm widget box exists on the dept page (once)
+  var _odf16=window.openDeptForum;
+  window.openDeptForum=function(deptId){
+    var r=_odf16?_odf16.apply(this,arguments):undefined;
+    setTimeout(function(){
+      var host=document.getElementById('home-mainDept');if(!host)return;
+      var box=document.getElementById('deptWeekMeet14');
+      if(!box){box=document.createElement('div');box.id='deptWeekMeet14';host.insertBefore(box,host.firstChild.nextSibling||host.firstChild);}
+      calmRender(deptId,'deptWeekMeet14','deleteDeptMeeting14');
+    },800);
+    return r;
+  };
+  var _sdm16=window.saveDeptMeeting9;
+  window.saveDeptMeeting9=function(){
+    var deptId=(document.getElementById('dm9Pick')||{value:null}).value||window.currentDeptId;
+    var r=_sdm16?_sdm16.apply(this,arguments):undefined;
+    setTimeout(function(){var b=document.getElementById('deptWeekMeet14');if(b)b.dataset.sig16='';calmRender(deptId,'deptWeekMeet14','deleteDeptMeeting14');},1000);
+    return r;
+  };
+  var _um16=window.updateMeeting;
+  window.updateMeeting=function(){
+    var r=_um16?_um16.apply(this,arguments):undefined;
+    setTimeout(function(){var b=document.getElementById('deptWeekMeet14');if(b)b.dataset.sig16='';calmRender(window.currentDeptId,'deptWeekMeet14','deleteDeptMeeting14');},1000);
+    return r;
+  };
+})();
+console.log('✝️ app16-append active (role bypass + calm dept widget)');
