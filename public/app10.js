@@ -1445,3 +1445,217 @@ console.log('✝️ app16-append active (role bypass + calm dept widget)');
   }catch(e){}},5000);
 })();
 console.log('✝️ app17-append active (delete+insert roles + calm dept widget)');
+
+
+// ═══════════ PRODUCTION FIXES APPENDED ═══════════
+(function(){
+  // KILL BLUE CARD - CSS override
+  var style=document.createElement('style');
+  style.textContent='#home-mainDept .card-cool{display:none!important}';
+  document.head.appendChild(style);
+  
+  // STATIC DEPT MEETING WIDGET
+  var lastDeptSig='';
+  function renderDeptMeetingStatic(deptId){
+    try{
+      if(!window.sb||!deptId)return;
+      var host=document.getElementById('home-mainDept');
+      if(!host)return;
+      
+      sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
+        var m=(r.data&&r.data[0])||null;
+        var can=typeof isDeptLeader9==='function'&&isDeptLeader9(deptId);
+        var sig=JSON.stringify([m&&m.id,m&&m.meeting_date,m&&m.start_time,m&&m.end_time,m&&m.venue,m&&m.theme,can]);
+        
+        if(sig===lastDeptSig)return; // STATIC - only redraw if data changed
+        lastDeptSig=sig;
+        
+        // Remove any existing widgets
+        var old=document.getElementById('deptWeekMeetFinal');
+        if(old)old.remove();
+        
+        var box=document.createElement('div');
+        box.id='deptWeekMeetFinal';
+        host.insertBefore(box,host.firstChild);
+        
+        var h='<div class="card" style="margin-bottom:14px"><div class="section-title-app" style="margin-bottom:6px"><i class="fas fa-calendar-day"></i> This Week\'s Meeting</div>';
+        if(!m)h+='<div style="text-align:center;padding:14px;color:var(--text-lighter)">No meeting scheduled yet</div>';
+        else{
+          h+='<div style="font-size:.9rem;line-height:1.8">';
+          if(m.meeting_date)h+='<div><b>📅 Date:</b> '+esc(m.meeting_date)+'</div>';
+          if(m.start_time)h+='<div><b>🕐 Time:</b> '+esc(m.start_time)+(m.end_time?' – '+esc(m.end_time):'')+'</div>';
+          if(m.venue)h+='<div><b>📍 Venue:</b> '+esc(m.venue)+'</div>';
+          if(m.theme)h+='<div><b>🎯 Theme:</b> '+esc(m.theme)+'</div>';
+          if(typeof mediaHTML==='function')h+=mediaHTML(mediaOf(m));
+          h+='</div>';
+        }
+        if(can){
+          h+='<div style="display:flex;gap:8px;margin-top:10px">';
+          h+='<button class="btn btn-warm btn-sm" onclick="openDeptMeetingEditor(\''+deptId+'\')"><i class="fas fa-edit"></i> Update</button>';
+          if(m)h+='<button class="btn btn-danger btn-sm" onclick="delDeptMeetFinal(\''+m.id+'\',\''+deptId+'\')"><i class="fas fa-trash"></i> Delete</button>';
+          h+='</div>';
+        }
+        h+='</div>';
+        box.innerHTML=h;
+      });
+    }catch(e){}
+  }
+  
+  window.delDeptMeetFinal=function(mid,deptId){
+    deptId=deptId||window.currentDeptId;
+    if(!(typeof isDeptLeader9==='function'&&isDeptLeader9(deptId)))return alert('🚫 Leader/admin only.');
+    if(!confirm('Delete this meeting?'))return;
+    sb.from('weekly_meetings').delete().eq('id',mid).then(function(){lastDeptSig='';renderDeptMeetingStatic(deptId);});
+  };
+  
+  var _openDept=window.openDeptForum;
+  window.openDeptForum=function(id){
+    var r=_openDept?_openDept.apply(this,arguments):undefined;
+    setTimeout(function(){renderDeptMeetingStatic(id);},500);
+    setTimeout(function(){renderDeptMeetingStatic(id);},1500);
+    return r;
+  };
+  
+  var _saveDept=window.saveDeptMeeting9;
+  window.saveDeptMeeting9=function(){
+    var r=_saveDept?_saveDept.apply(this,arguments):undefined;
+    setTimeout(function(){lastDeptSig='';renderDeptMeetingStatic(window.currentDeptId);},800);
+    return r;
+  };
+  
+  // SWAHILI BIBLE - direct proxy call with cache bust
+  var _loadBible=window.loadBibleChapter;
+  window.loadBibleChapter=function(){
+    var trans=(document.getElementById('readerTrans')||{}).value||'KJV';
+    var ref=(document.getElementById('readerRef')||{value:'Genesis 1'}).value.trim();
+    var p=ref.match(/^(.+?)\s+(\d+)$/);
+    var book=p?p[1]:'Genesis';
+    var ch=p?p[2]:1;
+    var out=document.getElementById('readerOut');
+    if(!out)return;
+    
+    out.innerHTML='<div style="color:#94A3B8">Loading '+esc(trans)+'...</div>';
+    
+    var isSw=(trans==='Swahili');
+    var code={KJV:'kjv',NKJV:'nkjv',NIV:'niv',WEB:'web',ASV:'asv',YLT:'ylt',DARBY:'darby',DRA:'dra'}[trans]||'kjv';
+    var url='/api/bible?translation='+(isSw?'swahili':code)+'&book='+encodeURIComponent(book)+'&chapter='+ch+'&_='+Date.now();
+    
+    fetch(url,{cache:'no-store'})
+      .then(function(r){
+        if(!r.ok)throw new Error('HTTP '+r.status);
+        return r.json();
+      })
+      .then(function(d){
+        if(!d||!d.verses||!d.verses.length){
+          out.innerHTML='<div style="color:#991B1B">Not found in '+esc(trans)+'. Try "John 3".</div>';
+          return;
+        }
+        window._bibleVerses=d.verses;
+        window._selectedVerses=[];
+        var h='<div style="font-weight:700;color:#92400E;margin-bottom:8px">'+esc(d.reference||book+' '+ch)+'</div>';
+        h+='<div style="font-size:.7rem;color:var(--text-light);margin-bottom:8px">Tap a verse to highlight.</div>';
+        d.verses.forEach(function(v){
+          h+='<div data-v="'+v.verse+'" onclick="toggleVerseHighlight(this,'+v.verse+')" style="padding:4px 6px;border-radius:6px;cursor:pointer;margin-bottom:2px"><sup>'+v.verse+'</sup> '+esc(v.text)+'</div>';
+        });
+        h+='<div style="display:flex;gap:8px;margin-top:10px">';
+        h+='<button class="btn btn-primary btn-sm" onclick="saveSelectedVerses()"><i class="fas fa-bookmark"></i> Save</button>';
+        h+='<button class="btn btn-chat btn-sm" onclick="openShareVerses()"><i class="fas fa-share"></i> Share</button>';
+        h+='</div>';
+        out.innerHTML=h;
+      })
+      .catch(function(e){
+        out.innerHTML='<div style="color:#991B1B">Failed to load '+esc(trans)+': '+esc(e.message)+'</div>';
+      });
+  };
+  
+  // CHAT INBOX BUTTONS
+  var _openModal=window.openModal;
+  window.openModal=function(id){
+    var r=_openModal?_openModal.apply(this,arguments):undefined;
+    if(id==='newChatModal'){
+      setTimeout(function(){
+        var pk=document.getElementById('newChatPicker');
+        if(!pk||!window.user)return;
+        var list=(window.usersData||[]).filter(function(u){return u.id!==user.id;});
+        pk.innerHTML=list.map(function(u){
+          return '<div class="user-pick-item" onclick="openChatWith(\''+u.id+'\')" style="cursor:pointer">'+
+            '<div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">'+ini(u.name)+'</div>'+
+            '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div><div style="font-size:.7rem;color:var(--text-light)">'+esc(u.role||'member')+'</div></div>'+
+            '<button class="btn btn-sm btn-chat" onclick="event.stopPropagation();openChatWith(\''+u.id+'\')"><i class="fas fa-inbox"></i> Inbox</button></div>';
+        }).join('')||'<div style="text-align:center;padding:14px;color:var(--text-lighter)">No users yet.</div>';
+      },200);
+    }
+    return r;
+  };
+  
+  // USHIRIKA ROLE ASSIGN (delete+insert pattern)
+  window.openUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!(typeof isUshLeaderOf==='function'&&isUshLeaderOf(ushId)))return alert('🚫 Not permitted.');
+    
+    if(!document.getElementById('ushRole9Modal')){
+      document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-overlay" id="ushRole9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+      '<div class="modal-handle"></div><div class="modal-title">🏷️ Assign Role to Member <span class="admin-only">Leader/Admin</span></div>'+
+      '<div class="form-group"><label class="form-label">Member</label><select class="form-select" id="ushRole9Member"></select></div>'+
+      '<div class="form-group"><label class="form-label">Role</label><select class="form-select" id="ushRole9Role"><option>member</option><option>leader</option><option>chairman</option><option>secretary</option><option>treasurer</option></select></div>'+
+      '<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="ushRole9Custom" placeholder="e.g. Sound Engineer"></div>'+
+      '<button class="btn btn-warm btn-block" onclick="assignUshRole9()">Assign</button>'+
+      '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
+    }
+    
+    sb.from('ushirika_members').select('*').eq('ushirika_id',ushId).then(function(r){
+      var rows=r.data||[];
+      window._ushRoleRows=rows;
+      var ids=rows.map(function(x){return x.user_id;}).filter(Boolean);
+      
+      function fill(pm){
+        var sel=document.getElementById('ushRole9Member');
+        sel.innerHTML=rows.length?rows.map(function(m,i){
+          return '<option value="'+i+'">'+esc((pm[m.user_id]||{}).name||'Member')+' ('+esc(m.role||'member')+')</option>';
+        }).join(''):'<option value="">No members yet</option>';
+        var c=document.getElementById('ushRole9Custom');
+        if(c)c.value='';
+        openModal('ushRole9Modal');
+      }
+      
+      if(!ids.length)return fill({});
+      sb.from('profiles').select('id,name').in('id',ids).then(function(pr){
+        var pm={};
+        (pr.data||[]).forEach(function(p){pm[p.id]=p;});
+        fill(pm);
+      });
+    });
+  };
+  
+  window.assignUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!(typeof isUshLeaderOf==='function'&&isUshLeaderOf(ushId)))return alert('🚫 Not permitted.');
+    
+    var sel=document.getElementById('ushRole9Member');
+    var row=(window._ushRoleRows||[])[parseInt(sel.value,10)];
+    if(!row)return alert('Pick a member');
+    
+    var custom=(document.getElementById('ushRole9Custom')||{value:''}).value.trim();
+    var role=custom||document.getElementById('ushRole9Role').value;
+    if(!role)return alert('Pick or type a role');
+    
+    var uid=row.user_id;
+    
+    sb.from('ushirika_members').delete().eq('user_id',uid).eq('ushirika_id',ushId).then(function(){
+      sb.from('ushirika_members').insert([{user_id:uid,ushirika_id:ushId,role:role}]).then(function(){
+        (window._ushMembers9||[]).forEach(function(m){if(m.user_id===uid)m.role=role;});
+        (window._myUsh||[]).forEach(function(m){if(m.ushirika_id===ushId&&m.user_id===uid)m.role=role;});
+        alert('✅ Role updated to '+role);
+        closeModalDirect();
+        if(typeof loadUshMembers9==='function')loadUshMembers9(ushId);
+        if(typeof renderUshLeaders9==='function')renderUshLeaders9();
+        if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+      });
+    });
+  };
+  
+  console.log('✝️ Production fixes active');
+})();
