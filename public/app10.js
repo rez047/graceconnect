@@ -1,11 +1,11 @@
-// app9.js — FIXED build v3 (meetings schema-accurate + strict permissions + media)
-console.log('✝️ app9.js (fixed build v3) loading...');
+// app9.js — FIXED build v4 (roles + officials + comments media + meetings constraint)
+console.log('✝️ app9.js (fixed build v4) loading...');
 
 /* LIVE-SCHEMA FACTS:
- - posts: media_urls (NOT media_url) | department_members: NO id column
- - notifications: body | weekly_meetings: meeting_date + media_urls (NO day/date/media_url)
- - BACK button walks in-app pages first
- - PERMISSIONS: leaders/admins only see & use meeting editors; others see NOTHING */
+ - posts: media_urls | department_members: NO id col | notifications: body
+ - weekly_meetings: meeting_date+media_urls, CHECK = exactly ONE of ushirika_id/department_id
+ - post_comments media: try media_urls, fallback link-in-content
+ - assignOfficial original bug fixed (undefined userId + null ushirika_id) */
 
 // ═══════════ HELPERS ═══════════
 function ext(o,extra){var n={};for(var k in o)n[k]=o[k];for(var k2 in extra)n[k2]=extra[k2];return n;}
@@ -43,6 +43,7 @@ function insertPostSafe(payload,done){
   });
 }
 function insertMeetingSafe(payload,done){
+  if(payload.ushirika_id&&payload.department_id)delete payload.ushirika_id; // CHECK: exactly one parent
   var hasMedia=('media_urls' in payload)&&payload.media_urls;
   var base={};for(var k in payload){if(k!=='media_urls')base[k]=payload[k];}
   if(!hasMedia){sb.from('weekly_meetings').insert([base]).then(done);return;}
@@ -87,7 +88,7 @@ window.switchSection=function(n){var r=_sw9?_sw9.apply(this,arguments):undefined
 var _sp9=window.showSubPage;
 window.showSubPage=function(id){var r=_sp9?_sp9.apply(this,arguments):undefined;var sec=document.querySelector('.section.active');gcPush(sec?sec.id:null,id);return r;};
 
-// ═══════════ PERMISSIONS ═══════════
+// ═══════════ PERMISSIONS (multiple leaders allowed) ═══════════
 function isUshLeaderOf(id){
   if(isAdmin())return true;
   for(var i=0;i<officialsData.length;i++){var o=officialsData[i];if(o.user_id===user.id&&o.ushirika_id===id)return true;}
@@ -101,26 +102,36 @@ function leadsAnyUsh(){
 function isDeptLeader9(deptId){
   if(isAdmin())return true;
   var list=window._myDepts||[];
-  for(var i=0;i<list.length;i++){if(list[i].department_id===deptId&&['leader','chairman'].indexOf(String(list[i].role||'').toLowerCase())>-1)return true;}
+  for(var i=0;i<list.length;i++){
+    if(list[i].department_id!==deptId)continue;
+    var r=String(list[i].role||'').toLowerCase();
+    if(r.indexOf('leader')>-1||r==='chairman')return true;
+  }
   return false;
 }
 function leadsAnyDept(){
   if(isAdmin())return true;
   var list=window._myDepts||[];
-  for(var i=0;i<list.length;i++){if(['leader','chairman'].indexOf(String(list[i].role||'').toLowerCase())>-1)return true;}
+  for(var i=0;i<list.length;i++){var r=String(list[i].role||'').toLowerCase();if(r.indexOf('leader')>-1||r==='chairman')return true;}
   return false;
 }
 function ushLedByMe(){return (ushirikasData||[]).filter(function(u){return isUshLeaderOf(u.id);});}
 function deptLedByMe(){return (depts||[]).filter(function(d){return isDeptLeader9(d.id);});}
 
-// hide ALL meeting-edit buttons from users without permission (show NOTHING)
+// hide meeting controls from users without permission (show NOTHING)
 function sweepMeetingButtons(){
   if(!user)return;
   var canUsh=leadsAnyUsh();
+  var canAny=canUsh||leadsAnyDept();
   var btns=document.querySelectorAll('button');
   for(var i=0;i<btns.length;i++){
     var t=(btns[i].textContent||'').trim();
     if(/Edit Ushirika Weekly Meeting/i.test(t)||/Edit Ushirika Meeting/i.test(t)){btns[i].style.display=canUsh?'':'none';}
+    else if(/^Edit Weekly Meeting$/i.test(t)){btns[i].style.display=canAny?'':'none';}
+  }
+  if(!canAny){
+    var mb=document.querySelectorAll('.weekly-meeting-card button');
+    for(var j=0;j<mb.length;j++)mb[j].style.display='none';
   }
 }
 
@@ -180,7 +191,6 @@ window.saveUshMeeting9=function(){
   };
   if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
 };
-// old callers stay safe
 window.loadUshMeeting=window.loadUshMeeting9;
 window.saveUshMeeting=window.saveUshMeeting9;
 
@@ -241,19 +251,28 @@ window.saveDeptMeeting9=function(){
   };
   if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
 };
-// old generic "Update" modal made safe + permissioned
+// old "Update" button fixed: attaches current dept/ushirika (satisfies CHECK constraint)
 window.updateMeeting=function(){
   if(!user||!sb)return alert('Log in');
-  if(!(leadsAnyUsh()||leadsAnyDept()))return alert('🚫 You are not permitted to edit weekly meetings.');
+  var deptId=currentDeptId||null;
+  var ushId=window._curUshForumId||null;
+  if(!deptId&&!ushId){
+    if(leadsAnyDept())deptId=deptLedByMe()[0].id;
+    else if(leadsAnyUsh())ushId=ushLedByMe()[0].id;
+  }
+  if(!deptId&&!ushId)return alert('Open a department or ushirika first.');
+  var can=deptId?isDeptLeader9(deptId):isUshLeaderOf(ushId);
+  if(!can)return alert('🚫 You are not permitted to edit weekly meetings.');
   var payload={meeting_date:document.getElementById('meetingDate').value||nextDateForDay(document.getElementById('meetingDay').value),
     start_time:document.getElementById('meetingStart').value,end_time:document.getElementById('meetingEnd').value,
     venue:document.getElementById('meetingVenue').value,theme:document.getElementById('meetingTheme').value};
-  sb.from('weekly_meetings').insert([payload]).then(function(r){
-    if(r.error)return alert('⚠️ '+r.error.message);
-    window._curMeetingId=r.data[0].id;alert('✅ Updated!');closeModalDirect();
+  if(deptId)payload.department_id=deptId;else payload.ushirika_id=ushId;
+  insertMeetingSafe(payload,function(r){
+    if(r&&r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Updated!');closeModalDirect();
+    if(deptId)loadDeptMeeting9(deptId);
   });
 };
-// "Edit Department Weekly Meeting" button on the Departments tab (leaders/admins ONLY)
 function injectDeptTabMeetBtn(){
   var host=document.getElementById('ushirika-departments');if(!host||!user)return;
   var old=document.getElementById('deptTabMeetBtn9');
@@ -265,6 +284,142 @@ function injectDeptTabMeetBtn(){
   b.onclick=function(){openDeptMeetingEditor();};
   host.insertBefore(b,host.firstChild);
 }
+
+// ═══════════ FREE ROLES + OFFICIALS FIX (admin assigns any role, any ushirika/dept) ═══════════
+function addCustomOptions9(sel){
+  if(!sel)return;
+  var have={};for(var i=0;i<sel.options.length;i++)have[sel.options[i].value.toLowerCase()]=1;
+  (titlesData||[]).forEach(function(t){
+    var n=t.name;if(!have[String(n).toLowerCase()]){
+      var o=document.createElement('option');o.value=n;o.textContent=n;sel.appendChild(o);have[String(n).toLowerCase()]=1;
+    }
+  });
+}
+function saveRoleBtn9(inputId){
+  return '<button class="btn btn-secondary-alt btn-sm" style="margin-top:6px" onclick="saveReusableRole9(\''+inputId+'\')"><i class="fas fa-save"></i> Save role for reuse</button>';
+}
+window.saveReusableRole9=function(inputId){
+  if(!isAdmin())return alert('Admin only');
+  var v=(document.getElementById(inputId).value||'').trim();if(!v)return alert('Type a role first');
+  sb.from('titles').insert([{name:v,category:'general',created_by:user.id}]).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Role "'+v+'" saved for reuse');if(typeof loadTitles==='function')loadTitles();
+  });
+};
+function getRole9(selId,customId){
+  var c=(document.getElementById(customId)||{value:''}).value;
+  if(c&&c.trim())return c.trim();
+  return document.getElementById(selId).value;
+}
+function enhanceRoleModals(){
+  if(!user)return;
+  var m1=document.getElementById('addDeptMemberModal');
+  if(m1&&!document.getElementById('adm9Wrap')){
+    var sel=m1.querySelector('#deptMemberRole');
+    if(sel){
+      addCustomOptions9(sel);
+      var wrap=document.createElement('div');wrap.id='adm9Wrap';
+      wrap.innerHTML='<div class="form-group"><label class="form-label">Or type ANY role (e.g. Sound Engineer)</label><input class="form-input" id="adm9Custom" placeholder="Custom role for this department"></div>'+saveRoleBtn9('adm9Custom');
+      sel.closest('.form-group').insertAdjacentElement('afterend',wrap);
+    }
+  }
+  var m2=document.getElementById('assignDeptRoleModal');
+  if(m2&&!document.getElementById('adr9Wrap')){
+    var sel2=m2.querySelector('#assignRoleValue');
+    if(sel2){
+      addCustomOptions9(sel2);
+      var w2=document.createElement('div');w2.id='adr9Wrap';
+      w2.innerHTML='<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="adr9Custom" placeholder="Custom role"></div>'+saveRoleBtn9('adr9Custom');
+      sel2.closest('.form-group').insertAdjacentElement('afterend',w2);
+    }
+  }
+  var m3=document.getElementById('addOfficialModal');
+  if(m3&&!document.getElementById('off9Wrap')){
+    addCustomOptions9(m3.querySelector('#officialTitle'));
+    var w3=document.createElement('div');w3.id='off9Wrap';
+    w3.innerHTML='<div class="form-group"><label class="form-label">Assign to Ushirika *</label><select class="form-select" id="off9Ush"></select></div>'+
+      '<div class="form-group"><label class="form-label">Or custom title</label><input class="form-input" id="off9Custom" placeholder="e.g. Ushirika Sound Engineer"></div>'+saveRoleBtn9('off9Custom');
+    m3.querySelector('#officialTitle').closest('.form-group').insertAdjacentElement('afterend',w3);
+  }
+  var off9Ush=document.getElementById('off9Ush');
+  if(off9Ush&&(ushirikasData||[]).length){
+    off9Ush.innerHTML=ushirikasData.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+'</option>';}).join('');
+  }
+}
+// FIXED: correct user_id + real ushirika_id + any title
+window.assignOfficial=function(){
+  if(!user||!sb)return alert('Log in');
+  var sel=document.querySelector('#officialUserPicker .user-pick-item.selected');
+  if(!sel)return alert('Select user');
+  var uid=sel.dataset.userId;
+  var ushId=(document.getElementById('off9Ush')||{value:''}).value;
+  if(!ushId)return alert('Pick a ushirika');
+  var custom=(document.getElementById('off9Custom')||{value:''}).value;
+  var title=(custom&&custom.trim())?custom.trim():document.getElementById('officialTitle').value;
+  sb.from('ushirika_officials').insert([{user_id:uid,ushirika_id:ushId,title:title,created_by:user.id}]).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ '+title+' assigned!');closeModalDirect();
+    if(typeof loadOfficials==='function')loadOfficials();
+  });
+};
+// FIXED: custom roles on add/assign department member
+window.addDeptMember=function(){
+  if(!user||!currentDeptId||!sb)return alert('Open a dept');
+  var sel=document.querySelector('#deptMemberPicker .user-pick-item.selected');
+  if(!sel)return alert('Select user');
+  var uid=sel.dataset.userId;
+  var role=getRole9('deptMemberRole','adm9Custom');
+  sb.from('department_members').insert([{user_id:uid,department_id:currentDeptId,role:role}]).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Added as '+role+'!');closeModalDirect();
+    loadDeptMembers(currentDeptId);if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+  });
+};
+window.assignDeptRole=function(){
+  if(!user||!currentDeptId||!sb)return alert('Open a dept');
+  var memberId=document.getElementById('assignRoleMember').value;
+  var role=getRole9('assignRoleValue','adr9Custom');
+  sb.from('department_members').update({role:role}).eq('id',memberId).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Role updated to '+role);closeModalDirect();
+    loadDeptMembers(currentDeptId);if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+  });
+};
+
+// ═══════════ COMMENTS WITH OPTIONAL MEDIA (all users, all forums) ═══════════
+window.loadPostComments=function(postId){
+  var c=document.getElementById('comments-'+postId);if(!c||!sb)return;
+  sb.from('post_comments').select('*, profiles(name)').eq('post_id',postId).order('created_at').then(function(r){
+    var list=r.data||[];
+    var h=list.map(function(x){
+      var mine=user&&x.user_id===user.id;
+      return '<div class="comment-item"><div class="comment-header"><span class="comment-name">'+esc((x.profiles||{}).name)+(x.is_anonymous?' <span class="anon-badge">Anonymous</span>':'')+'</span><span class="comment-time">'+ago(x.created_at)+'</span>'+(isAdmin()||mine?'<button class="comment-delete" onclick="deletePostComment(\''+x.id+'\',\''+postId+'\')"><i class="fas fa-times"></i></button>':'')+'</div><div class="comment-text">'+esc(x.content)+'</div>'+mediaHTML(mediaOf(x))+'</div>';
+    }).join('');
+    h+='<div style="margin-top:8px"><div class="media-upload" style="padding:8px;margin-bottom:6px" onclick="attachMediaTo(\'cmt'+postId+'\')"><i class="fas fa-paperclip"></i><span>Attach media to comment (optional)</span></div>'+
+       '<div style="display:flex;gap:6px"><input class="form-input" id="pcc-'+postId+'" placeholder="Comment..." style="margin:0"><button class="btn btn-sm btn-primary" onclick="addPostComment(\''+postId+'\')">Send</button></div></div>';
+    c.innerHTML=h;
+  }).catch(function(){});
+};
+window.addPostComment=function(postId){
+  if(!user||!sb)return alert('Log in');
+  var inp=document.getElementById('pcc-'+postId);
+  var v=inp?inp.value.trim():'';if(!v)return;
+  var media=window._pm&&window._pm['cmt'+postId];
+  var after=function(){inp.value='';delete window._pm['cmt'+postId];setTimeout(function(){loadPostComments(postId);},300);};
+  var doIt=function(url){
+    var payload={post_id:postId,user_id:user.id,content:v,is_anonymous:false};
+    if(url)payload.media_urls=url;
+    sb.from('post_comments').insert([payload]).then(function(r){
+      if(r.error&&/media_urls/.test(r.error.message)&&url){
+        sb.from('post_comments').insert([{post_id:postId,user_id:user.id,content:v+'\n📎 '+url,is_anonymous:false}]).then(after);
+        return;
+      }
+      if(r.error)return alert('⚠️ '+r.error.message);
+      after();
+    });
+  };
+  if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
+};
 
 // ═══════════ DEPARTMENT JOIN REQUEST ═══════════
 window.requestJoinDept=function(){
@@ -438,7 +593,7 @@ window.ushLike=function(pid){
 };
 window.ushDeletePost=function(pid){if(!confirm('Delete this post?'))return;sb.from('posts').delete().eq('id',pid).then(function(){loadUshForumPosts(window._curUshForumId);});};
 
-// ═══════════ MAIN + DEPT FORUM POSTS (media_urls) ═══════════
+// ═══════════ MAIN + DEPT FORUM POSTS ═══════════
 window.submitPost=function(){
   if(!user||!sb)return alert('Log in');
   var txt=document.getElementById('postText');var t=txt?txt.value.trim():'';if(!t)return alert('Write something');
@@ -519,7 +674,7 @@ function renderMyDepts(){
 }
 
 // ═══════════ LOOPS & HOOKS ═══════════
-setInterval(function(){bindDeptCards();ensureUshForumPage();injectDeptTabMeetBtn();sweepMeetingButtons();},2000);
+setInterval(function(){bindDeptCards();ensureUshForumPage();injectDeptTabMeetBtn();sweepMeetingButtons();enhanceRoleModals();},2000);
 setInterval(function(){if(user)loadMyMemberships9();if(isAdmin()&&typeof loadPending==='function')loadPending();},10000);
 if(user)setTimeout(loadMyMemberships9,1500);
 var _origLoadAll=window.loadAll;
@@ -528,4 +683,4 @@ window.loadAll=function(){
   setTimeout(loadMyMemberships9,1200);
   return p;
 };
-console.log('✝️ app9.js FIXED build v3 active (meetings fixed + strict permissions + media)');
+console.log('✝️ app9.js FIXED build v4 active (roles + officials + comments media + meetings constraint)');
