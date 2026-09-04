@@ -442,15 +442,7 @@ console.log('✝️ app14.js loading...');
     return r;
   };
 
-  // Keep dept meeting widget alive while on department page.
-  setInterval(function(){
-    try{
-      var host=q('home-mainDept');
-      if(host&&host.classList.contains('active')&&window.currentDeptId){
-        renderDeptWeekMeet14(window.currentDeptId);
-      }
-    }catch(e){}
-  },3000);
+
 
 })();
 console.log('✝️ app14.js active');
