@@ -1,11 +1,11 @@
-// app9.js — FIXED build v4 (roles + officials + comments media + meetings constraint)
-console.log('✝️ app9.js (fixed build v4) loading...');
+// app9.js — FIXED build v5 (real member counts + ushirika detail page + inbox)
+console.log('✝️ app9.js (fixed build v5) loading...');
 
 /* LIVE-SCHEMA FACTS:
  - posts: media_urls | department_members: NO id col | notifications: body
- - weekly_meetings: meeting_date+media_urls, CHECK = exactly ONE of ushirika_id/department_id
- - post_comments media: try media_urls, fallback link-in-content
- - assignOfficial original bug fixed (undefined userId + null ushirika_id) */
+ - weekly_meetings: meeting_date+media_urls, CHECK exactly ONE parent
+ - ushirika_members: id,user_id,ushirika_id,role
+ - member_count column is stale -> counts computed from membership tables */
 
 // ═══════════ HELPERS ═══════════
 function ext(o,extra){var n={};for(var k in o)n[k]=o[k];for(var k2 in extra)n[k2]=extra[k2];return n;}
@@ -43,7 +43,7 @@ function insertPostSafe(payload,done){
   });
 }
 function insertMeetingSafe(payload,done){
-  if(payload.ushirika_id&&payload.department_id)delete payload.ushirika_id; // CHECK: exactly one parent
+  if(payload.ushirika_id&&payload.department_id)delete payload.ushirika_id;
   var hasMedia=('media_urls' in payload)&&payload.media_urls;
   var base={};for(var k in payload){if(k!=='media_urls')base[k]=payload[k];}
   if(!hasMedia){sb.from('weekly_meetings').insert([base]).then(done);return;}
@@ -71,7 +71,6 @@ window.addEventListener('popstate',function(e){
   window._noPush=true;activateSection(v.sec,subId,null);window._noPush=false;
 });
 try{history.replaceState({gc:gcCurrentView()},'');}catch(e){}
-
 function activateSection(sectionId,subPageId,navMatch){
   var secs=document.querySelectorAll('.section');for(var i=0;i<secs.length;i++)secs[i].classList.remove('active');
   var sec=document.getElementById(sectionId);if(!sec)return;
@@ -88,16 +87,60 @@ window.switchSection=function(n){var r=_sw9?_sw9.apply(this,arguments):undefined
 var _sp9=window.showSubPage;
 window.showSubPage=function(id){var r=_sp9?_sp9.apply(this,arguments):undefined;var sec=document.querySelector('.section.active');gcPush(sec?sec.id:null,id);return r;};
 
-// ═══════════ PERMISSIONS (multiple leaders allowed) ═══════════
+// ═══════════ INBOX (works from ANY section) ═══════════
+window.openChatWith=function(id){
+  if(!user||id===user.id||!sb)return;
+  currentChatUserId=id;
+  var u=null;for(var i=0;i<usersData.length;i++){if(usersData[i].id===id){u=usersData[i];break;}}
+  if(!u)return;
+  var a=document.getElementById('chatAvatar');if(a)a.textContent=ini(u.name);
+  var n=document.getElementById('chatName');if(n)n.textContent=u.name;
+  var s=document.getElementById('chatStatus');if(s)s.textContent=esc(u.role||'Member')+' • Online';
+  activateSection('section-discover','discover-chat','discover');
+  closeModalDirect();
+  loadChatMessages();
+  if(chatSub&&sb.removeChannel){sb.removeChannel(chatSub);chatSub=null;}
+  try{chatSub=sb.channel('chat-'+user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(){loadChatMessages();loadChatInbox();}).subscribe();}catch(e){}
+};
+
+// ═══════════ REAL MEMBER COUNTS ═══════════
+window._deptCounts={};window._ushCounts={};
+function loadMemberCounts9(){
+  if(!sb)return;
+  sb.from('department_members').select('department_id').then(function(r){
+    var m={};(r.data||[]).forEach(function(x){m[x.department_id]=(m[x.department_id]||0)+1;});
+    window._deptCounts=m;updateCountLabels();
+  });
+  sb.from('ushirika_members').select('ushirika_id').then(function(r){
+    var m={};(r.data||[]).forEach(function(x){m[x.ushirika_id]=(m[x.ushirika_id]||0)+1;});
+    window._ushCounts=m;updateCountLabels();
+  });
+}
+function updateCountLabels(){
+  var cards=document.querySelectorAll('.dept-card');
+  cards.forEach(function(card){
+    var id=card.dataset.deptId;if(!id)return;
+    var n=window._deptCounts[id]||0;
+    var els=card.querySelectorAll('div,span');
+    for(var i=0;i<els.length;i++){
+      if(/\d+\s*members?/i.test(els[i].innerHTML)&&els[i].querySelectorAll('div').length===0){
+        els[i].innerHTML=els[i].innerHTML.replace(/\d+(\s*)members?/i,n+' members');
+      }
+    }
+  });
+}
+
+// ═══════════ PERMISSIONS ═══════════
 function isUshLeaderOf(id){
   if(isAdmin())return true;
   for(var i=0;i<officialsData.length;i++){var o=officialsData[i];if(o.user_id===user.id&&o.ushirika_id===id)return true;}
-  return false;
+  var l=(window._myUsh||[]).filter(function(m){return m.ushirika_id===id&&String(m.role||'').toLowerCase().indexOf('leader')>-1;});
+  return l.length>0;
 }
 function leadsAnyUsh(){
   if(isAdmin())return true;
-  for(var i=0;i<officialsData.length;i++){if(officialsData[i].user_id===user.id)return true;}
-  return false;
+  if(officialsData.some(function(o){return o.user_id===user.id;}))return true;
+  return (window._myUsh||[]).some(function(m){return String(m.role||'').toLowerCase().indexOf('leader')>-1;});
 }
 function isDeptLeader9(deptId){
   if(isAdmin())return true;
@@ -117,8 +160,6 @@ function leadsAnyDept(){
 }
 function ushLedByMe(){return (ushirikasData||[]).filter(function(u){return isUshLeaderOf(u.id);});}
 function deptLedByMe(){return (depts||[]).filter(function(d){return isDeptLeader9(d.id);});}
-
-// hide meeting controls from users without permission (show NOTHING)
 function sweepMeetingButtons(){
   if(!user)return;
   var canUsh=leadsAnyUsh();
@@ -135,7 +176,7 @@ function sweepMeetingButtons(){
   }
 }
 
-// ═══════════ USHIRIKA MEETING EDITOR (leader/admin ONLY + media) ═══════════
+// ═══════════ MEETING EDITORS (leader/admin only + media) ═══════════
 function ensureUshMeetModal9(){
   if(document.getElementById('ushMeetModal9'))return;
   document.body.insertAdjacentHTML('beforeend',
@@ -158,7 +199,6 @@ window.openUshirikaMeetingEditor=function(){
   if(!led.length)return alert('🚫 You are not permitted to edit ushirika weekly meetings.');
   ensureUshMeetModal9();
   document.getElementById('um9Pick').innerHTML=led.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+'</option>';}).join('');
-  window._curUshMeetId=led[0].id;
   openModal('ushMeetModal9');
   loadUshMeeting9(led[0].id);
 };
@@ -187,6 +227,7 @@ window.saveUshMeeting9=function(){
     insertMeetingSafe(payload,function(r){
       if(r&&r.error)return alert('⚠️ '+r.error.message);
       alert('✅ Meeting saved!');delete window._pm.ushMeet9;closeModalDirect();
+      renderUshWeekMeet9(ushId);
     });
   };
   if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
@@ -194,7 +235,6 @@ window.saveUshMeeting9=function(){
 window.loadUshMeeting=window.loadUshMeeting9;
 window.saveUshMeeting=window.saveUshMeeting9;
 
-// ═══════════ DEPARTMENT MEETING EDITOR (leader/admin ONLY + media) ═══════════
 function ensureDeptMeetModal9(){
   if(document.getElementById('deptMeetModal9'))return;
   document.body.insertAdjacentHTML('beforeend',
@@ -251,7 +291,6 @@ window.saveDeptMeeting9=function(){
   };
   if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
 };
-// old "Update" button fixed: attaches current dept/ushirika (satisfies CHECK constraint)
 window.updateMeeting=function(){
   if(!user||!sb)return alert('Log in');
   var deptId=currentDeptId||null;
@@ -270,7 +309,6 @@ window.updateMeeting=function(){
   insertMeetingSafe(payload,function(r){
     if(r&&r.error)return alert('⚠️ '+r.error.message);
     alert('✅ Updated!');closeModalDirect();
-    if(deptId)loadDeptMeeting9(deptId);
   });
 };
 function injectDeptTabMeetBtn(){
@@ -285,7 +323,7 @@ function injectDeptTabMeetBtn(){
   host.insertBefore(b,host.firstChild);
 }
 
-// ═══════════ FREE ROLES + OFFICIALS FIX (admin assigns any role, any ushirika/dept) ═══════════
+// ═══════════ FREE ROLES + OFFICIALS ═══════════
 function addCustomOptions9(sel){
   if(!sel)return;
   var have={};for(var i=0;i<sel.options.length;i++)have[sel.options[i].value.toLowerCase()]=1;
@@ -316,22 +354,18 @@ function enhanceRoleModals(){
   var m1=document.getElementById('addDeptMemberModal');
   if(m1&&!document.getElementById('adm9Wrap')){
     var sel=m1.querySelector('#deptMemberRole');
-    if(sel){
-      addCustomOptions9(sel);
+    if(sel){addCustomOptions9(sel);
       var wrap=document.createElement('div');wrap.id='adm9Wrap';
       wrap.innerHTML='<div class="form-group"><label class="form-label">Or type ANY role (e.g. Sound Engineer)</label><input class="form-input" id="adm9Custom" placeholder="Custom role for this department"></div>'+saveRoleBtn9('adm9Custom');
-      sel.closest('.form-group').insertAdjacentElement('afterend',wrap);
-    }
+      sel.closest('.form-group').insertAdjacentElement('afterend',wrap);}
   }
   var m2=document.getElementById('assignDeptRoleModal');
   if(m2&&!document.getElementById('adr9Wrap')){
     var sel2=m2.querySelector('#assignRoleValue');
-    if(sel2){
-      addCustomOptions9(sel2);
+    if(sel2){addCustomOptions9(sel2);
       var w2=document.createElement('div');w2.id='adr9Wrap';
       w2.innerHTML='<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="adr9Custom" placeholder="Custom role"></div>'+saveRoleBtn9('adr9Custom');
-      sel2.closest('.form-group').insertAdjacentElement('afterend',w2);
-    }
+      sel2.closest('.form-group').insertAdjacentElement('afterend',w2);}
   }
   var m3=document.getElementById('addOfficialModal');
   if(m3&&!document.getElementById('off9Wrap')){
@@ -342,11 +376,8 @@ function enhanceRoleModals(){
     m3.querySelector('#officialTitle').closest('.form-group').insertAdjacentElement('afterend',w3);
   }
   var off9Ush=document.getElementById('off9Ush');
-  if(off9Ush&&(ushirikasData||[]).length){
-    off9Ush.innerHTML=ushirikasData.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+'</option>';}).join('');
-  }
+  if(off9Ush&&(ushirikasData||[]).length){off9Ush.innerHTML=ushirikasData.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+'</option>';}).join('');}
 }
-// FIXED: correct user_id + real ushirika_id + any title
 window.assignOfficial=function(){
   if(!user||!sb)return alert('Log in');
   var sel=document.querySelector('#officialUserPicker .user-pick-item.selected');
@@ -362,7 +393,6 @@ window.assignOfficial=function(){
     if(typeof loadOfficials==='function')loadOfficials();
   });
 };
-// FIXED: custom roles on add/assign department member
 window.addDeptMember=function(){
   if(!user||!currentDeptId||!sb)return alert('Open a dept');
   var sel=document.querySelector('#deptMemberPicker .user-pick-item.selected');
@@ -372,12 +402,13 @@ window.addDeptMember=function(){
   sb.from('department_members').insert([{user_id:uid,department_id:currentDeptId,role:role}]).then(function(r){
     if(r.error)return alert('⚠️ '+r.error.message);
     alert('✅ Added as '+role+'!');closeModalDirect();
-    loadDeptMembers(currentDeptId);if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+    loadDeptMembers(currentDeptId);loadMemberCounts9();if(typeof loadMyMemberships9==='function')loadMyMemberships9();
   });
 };
 window.assignDeptRole=function(){
   if(!user||!currentDeptId||!sb)return alert('Open a dept');
   var memberId=document.getElementById('assignRoleMember').value;
+  if(!memberId)return alert('Pick a member');
   var role=getRole9('assignRoleValue','adr9Custom');
   sb.from('department_members').update({role:role}).eq('id',memberId).then(function(r){
     if(r.error)return alert('⚠️ '+r.error.message);
@@ -385,167 +416,205 @@ window.assignDeptRole=function(){
     loadDeptMembers(currentDeptId);if(typeof loadMyMemberships9==='function')loadMyMemberships9();
   });
 };
-
-// ═══════════ COMMENTS WITH OPTIONAL MEDIA (all users, all forums) ═══════════
-window.loadPostComments=function(postId){
-  var c=document.getElementById('comments-'+postId);if(!c||!sb)return;
-  sb.from('post_comments').select('*, profiles(name)').eq('post_id',postId).order('created_at').then(function(r){
-    var list=r.data||[];
-    var h=list.map(function(x){
-      var mine=user&&x.user_id===user.id;
-      return '<div class="comment-item"><div class="comment-header"><span class="comment-name">'+esc((x.profiles||{}).name)+(x.is_anonymous?' <span class="anon-badge">Anonymous</span>':'')+'</span><span class="comment-time">'+ago(x.created_at)+'</span>'+(isAdmin()||mine?'<button class="comment-delete" onclick="deletePostComment(\''+x.id+'\',\''+postId+'\')"><i class="fas fa-times"></i></button>':'')+'</div><div class="comment-text">'+esc(x.content)+'</div>'+mediaHTML(mediaOf(x))+'</div>';
-    }).join('');
-    h+='<div style="margin-top:8px"><div class="media-upload" style="padding:8px;margin-bottom:6px" onclick="attachMediaTo(\'cmt'+postId+'\')"><i class="fas fa-paperclip"></i><span>Attach media to comment (optional)</span></div>'+
-       '<div style="display:flex;gap:6px"><input class="form-input" id="pcc-'+postId+'" placeholder="Comment..." style="margin:0"><button class="btn btn-sm btn-primary" onclick="addPostComment(\''+postId+'\')">Send</button></div></div>';
-    c.innerHTML=h;
-  }).catch(function(){});
-};
-window.addPostComment=function(postId){
-  if(!user||!sb)return alert('Log in');
-  var inp=document.getElementById('pcc-'+postId);
-  var v=inp?inp.value.trim():'';if(!v)return;
-  var media=window._pm&&window._pm['cmt'+postId];
-  var after=function(){inp.value='';delete window._pm['cmt'+postId];setTimeout(function(){loadPostComments(postId);},300);};
-  var doIt=function(url){
-    var payload={post_id:postId,user_id:user.id,content:v,is_anonymous:false};
-    if(url)payload.media_urls=url;
-    sb.from('post_comments').insert([payload]).then(function(r){
-      if(r.error&&/media_urls/.test(r.error.message)&&url){
-        sb.from('post_comments').insert([{post_id:postId,user_id:user.id,content:v+'\n📎 '+url,is_anonymous:false}]).then(after);
-        return;
-      }
-      if(r.error)return alert('⚠️ '+r.error.message);
-      after();
-    });
-  };
-  if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
+// populate Member dropdowns from REAL members when modals open
+var _om9=window.openModal;
+window.openModal=function(id){
+  var r=_om9?_om9.apply(this,arguments):undefined;
+  if(id==='assignDeptRoleModal'){
+    var s=document.getElementById('assignRoleMember');
+    if(s){s.innerHTML=(deptMembersData||[]).map(function(m){return '<option value="'+m.id+'">'+esc((m.profiles||{}).name||'Member')+' ('+esc(m.role)+')</option>';}).join('');}
+  }
+  if(id==='removeDeptMemberModal'){
+    var s2=document.getElementById('removeMemberSelect');
+    if(s2){s2.innerHTML=(deptMembersData||[]).map(function(m){return '<option value="'+m.id+'">'+esc((m.profiles||{}).name||'Member')+'</option>';}).join('');}
+  }
+  return r;
 };
 
-// ═══════════ DEPARTMENT JOIN REQUEST ═══════════
-window.requestJoinDept=function(){
-  if(!user||!sb)return alert('Log in');
-  var sel=document.querySelector('#deptPickerList .user-pick-item.selected');
-  if(!sel)return alert('Select a department');
-  var deptId=sel.dataset.deptId;
-  var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
-  sb.from('pending_requests').insert([{user_id:user.id,type:'join_department',target_id:deptId,target_name:dept?dept.name:'',status:'pending'}]).then(function(r){
-    if(r.error){alert('⚠️ '+r.error.message);return;}
-    alert('✅ Request sent!');closeModalDirect();
-    if(typeof loadPending==='function')loadPending();
+// ═══════════ DEPT MEMBERS/LEADERSHIP WITH INBOX ═══════════
+window.renderDeptMembers=function(){
+  var c=document.getElementById('mainDept-members');if(!c)return;
+  var d=document.getElementById('dyn-dept-members');
+  if(!d){d=document.createElement('div');d.id='dyn-dept-members';c.appendChild(d);}
+  if(!deptMembersData.length){d.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No members yet.</div>';return;}
+  var h='';deptMembersData.forEach(function(m){var p=m.profiles||{};
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+esc(m.role)+'">'+esc(m.role)+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
   });
+  d.innerHTML=h;
+};
+window.renderDeptLeaders=function(){
+  var c=document.getElementById('mainDept-roles');if(!c)return;
+  var d=document.getElementById('dyn-dept-leaders');
+  if(!d){d=document.createElement('div');d.id='dyn-dept-leaders';c.appendChild(d);}
+  var L=(deptMembersData||[]).filter(function(m){return String(m.role||'').toLowerCase().indexOf('leader')>-1||['chairman','secretary','treasurer'].indexOf(String(m.role||'').toLowerCase())>-1;});
+  d.innerHTML=L.length?L.map(function(m){var p=m.profiles||{};
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+esc(m.role)+'">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+  }).join(''):'<div style="text-align:center;padding:20px;color:var(--text-lighter)">No leaders yet.</div>';
 };
 
-// ═══════════ PENDING REQUESTS + APPROVE ═══════════
-window.renderPending=function(){
-  var p=document.getElementById('adminPendingRequests');if(!p)return;
-  if(isAdmin())p.style.display='block';
-  var c=document.getElementById('dyn-pending');
-  if(!c){c=document.createElement('div');c.id='dyn-pending';p.appendChild(c);}
-  if(!pendingData||!pendingData.length){c.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No pending requests</div>';return;}
-  c.innerHTML=pendingData.map(function(r){
-    var uname=r.user_name||'';
-    if(!uname&&window.usersData){var u=usersData.find(function(x){return x.id===r.user_id;});if(u)uname=u.name;}
-    return '<div class="card" style="border-left:4px solid var(--primary)">'+
-      '<div style="font-weight:700;margin-bottom:6px">'+esc(uname||'A member')+' wants to join</div>'+
-      '<div style="font-size:.85rem;color:var(--text-light);margin-bottom:10px"><i class="fas fa-building"></i> '+esc(r.target_name||'Department')+'</div>'+
-      '<div style="display:flex;gap:8px">'+
-      '<button class="btn btn-accent btn-sm" onclick="approvePendingRequest(\''+r.id+'\')"><i class="fas fa-check"></i> Approve</button>'+
-      '<button class="btn btn-danger btn-sm" onclick="declinePendingRequest(\''+r.id+'\')"><i class="fas fa-times"></i> Decline</button>'+
-      '</div></div>';
-  }).join('');
-};
-window.approvePendingRequest=function(id){
-  if(!sb||!isAdmin())return alert('Admin only');
-  var req=null;for(var i=0;i<pendingData.length;i++){if(pendingData[i].id===id){req=pendingData[i];break;}}
-  if(!req)return alert('Request not found');
-  sb.from('pending_requests').update({status:'approved'}).eq('id',id).then(function(r){
-    if(r.error)return alert('⚠️ '+r.error.message);
-    return sb.from('department_members').insert([{user_id:req.user_id,department_id:req.target_id,role:'member'}]).then(function(ins){
-      if(ins&&ins.error)return alert('⚠️ '+ins.error.message);
-      sb.from('notifications').insert([{user_id:req.user_id,title:'Department Request Approved',body:'You joined '+(req.target_name||'the department')+' — open its forum now!'}]).then(function(){});
-      alert('✅ Approved! Member added to department.');
-      loadPending();if(typeof loadMyMemberships9==='function')loadMyMemberships9();
-    });
-  });
-};
-window.declinePendingRequest=function(id){
-  if(!sb||!isAdmin())return;
-  if(!confirm('Decline this request?'))return;
-  sb.from('pending_requests').update({status:'declined'}).eq('id',id).then(function(){alert('Declined');loadPending();});
-};
-
-// ═══════════ DEPARTMENT FORUM ═══════════
-window.openDeptForum=function(deptId){
-  if(!user)return alert('Please log in first');
-  var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
-  if(!dept)return alert('Department not found');
-  sb.from('department_members').select('user_id,department_id,role').eq('user_id',user.id).eq('department_id',deptId).limit(1).then(function(r){
-    var isMember=(r.data&&r.data.length>0)||(window._myDepts||[]).some(function(m){return m.department_id===deptId;});
-    if(!isMember&&!isAdmin()){
-      if(confirm('You are not a member of '+dept.name+' yet. Send a request to join now?')){
-        sb.from('pending_requests').insert([{user_id:user.id,type:'join_department',target_id:deptId,target_name:dept.name,status:'pending'}]).then(function(rr){
-          alert(rr.error?('⚠️ '+rr.error.message):'✅ Request sent! Awaiting admin approval.');
-        });
-      }
-      return;
-    }
-    currentDeptId=deptId;
-    var n=document.getElementById('mainDeptName');if(n)n.textContent=dept.name;
-    var d=document.getElementById('mainDeptDesc');if(d)d.textContent=dept.description||'';
-    var m=document.getElementById('mainDeptMembers');if(m)m.textContent=(dept.member_count||0)+' members';
-    var ic=document.getElementById('mainDeptIcon');if(ic)ic.innerHTML='<i class="fas '+(dept.icon||'fa-users')+'"></i>';
-    activateSection('section-home','home-mainDept','home');
-    var oldB=document.getElementById('deptEditMeetBtn');if(oldB)oldB.remove();
-    if(isDeptLeader9(deptId)){
-      var host=document.getElementById('home-mainDept');
-      var b=document.createElement('button');b.id='deptEditMeetBtn';b.className='btn btn-warm btn-block';b.style.marginBottom='12px';
-      b.innerHTML='<i class="fas fa-calendar-alt"></i> Edit Weekly Meeting (Leader/Admin)';
-      b.onclick=function(){openDeptMeetingEditor(deptId);};
-      if(host)host.insertBefore(b,host.firstChild);
-    }
-    loadDeptPosts(deptId);loadDeptMembers(deptId);
-  });
-};
-window._gcOpenDept=window.openDeptForum;
-function bindDeptCards(){
-  var cards=document.querySelectorAll('.dept-card');
-  cards.forEach(function(card){
-    if(card.dataset.bound9)return;card.dataset.bound9='1';
-    var id=card.dataset.deptId;
-    if(!id){var oc=card.getAttribute('onclick')||'';var mm=oc.match(/['"]([0-9a-fA-F-]{36})['"]/);if(mm)id=mm[1];}
-    if(!id){var txt=card.textContent||'';var dd=depts.find(function(x){return txt.indexOf(x.name)>-1;});if(dd)id=dd.id;}
-    if(id){card.style.cursor='pointer';card.onclick=function(ev){ev.preventDefault();ev.stopPropagation();openDeptForum(id);};}
-  });
-}
-
-// ═══════════ USHIRIKA FORUM ═══════════
-function ensureUshForumPage(){
-  if(document.getElementById('ush-forum-page'))return;
+// ═══════════ USHIRIKA DETAIL PAGE (Feed / Members / Leadership + meeting widget) ═══════════
+function ensureUshDetailPage(){
+  if(document.getElementById('ush-detail-page'))return;
   var sec=document.getElementById('section-ushirika');if(!sec)return;
-  var div=document.createElement('div');div.id='ush-forum-page';div.className='sub-page';
-  div.innerHTML='<button class="back-btn" onclick="closeUshForum()"><i class="fas fa-arrow-left"></i> Back</button>'+
-    '<div class="section-title-app" id="ushForumTitle">💬 Ushirika Forum</div>'+
-    '<div class="card"><div class="form-group"><textarea class="form-textarea" id="ushPostText" placeholder="Share with your ushirika..."></textarea></div>'+
-    '<div class="media-upload" id="ushForumUpload" onclick="attachMediaTo(\'ushForum\')"><i class="fas fa-cloud-upload-alt"></i><span>Add media (optional)</span></div>'+
-    '<button class="btn btn-primary btn-block" onclick="submitUshPost()"><i class="fas fa-paper-plane"></i> Post</button></div>'+
-    '<div id="ushForumPosts"></div>';
+  var div=document.createElement('div');div.id='ush-detail-page';div.className='sub-page';
+  div.innerHTML=
+   '<button class="back-btn" onclick="closeUshForum()"><i class="fas fa-arrow-left"></i> Back</button>'+
+   '<div class="dept-banner" style="border-radius:var(--radius);margin-bottom:14px"><div class="dept-icon" id="ushDetailIcon"><i class="fas fa-people-group"></i></div><div><div style="font-weight:800;font-size:1.2rem" id="ushDetailName">Ushirika</div><div id="ushDetailMeta" style="font-size:.8rem;opacity:.9"></div></div></div>'+
+   '<div id="ushWeekMeet9"></div>'+
+   '<div class="admin-panel" id="ushAdminControls9" style="display:none"><div class="admin-panel-title">Ushirika Controls</div><div class="grid-3">'+
+   '<button class="btn btn-warm btn-block btn-sm" onclick="openUshAdd9()"><i class="fas fa-user-plus"></i> Add</button>'+
+   '<button class="btn btn-warm btn-block btn-sm" onclick="openUshRole9()"><i class="fas fa-tag"></i> Role</button>'+
+   '<button class="btn btn-warm btn-block btn-sm" onclick="openUshRemove9()"><i class="fas fa-user-minus"></i> Remove</button></div></div>'+
+   '<div class="tabs"><div class="tab active" onclick="switchUshDetailTab(this,\'feed\')">Feed</div><div class="tab" onclick="switchUshDetailTab(this,\'members\')">Members</div><div class="tab" onclick="switchUshDetailTab(this,\'leadership\')">Leadership</div></div>'+
+   '<div id="ushd-feed"><div class="card"><div class="form-group"><textarea class="form-textarea" id="ushPostText" placeholder="Share with your ushirika..."></textarea></div>'+
+   '<div class="media-upload" id="ushForumUpload" onclick="attachMediaTo(\'ushForum\')"><i class="fas fa-cloud-upload-alt"></i><span>Add media (optional)</span></div>'+
+   '<button class="btn btn-primary btn-block" onclick="submitUshPost()"><i class="fas fa-paper-plane"></i> Post</button></div><div id="ushForumPosts"></div></div>'+
+   '<div id="ushd-members" style="display:none"><div id="ushMembers9"></div></div>'+
+   '<div id="ushd-leadership" style="display:none"><div id="ushLeaders9"></div></div>';
   sec.appendChild(div);
 }
+window.switchUshDetailTab=function(el,t){
+  var tabs=el.parentElement.querySelectorAll('.tab');for(var i=0;i<tabs.length;i++)tabs[i].classList.remove('active');
+  el.classList.add('active');
+  ['feed','members','leadership'].forEach(function(x){var e=document.getElementById('ushd-'+x);if(e)e.style.display=(x===t)?'block':'none';});
+};
 window.closeUshForum=function(){activateSection('section-ushirika','ushirika-main','ushirika');};
 window.openUshirikaForum=function(ushId){
   if(!user)return alert('Please log in first');
   var u=null;for(var i=0;i<ushirikasData.length;i++){if(ushirikasData[i].id===ushId){u=ushirikasData[i];break;}}
   if(!u)return alert('Ushirika not found');
-  sb.from('ushirika_members').select('id').eq('user_id',user.id).eq('ushirika_id',ushId).limit(1).then(function(r){
+  sb.from('ushirika_members').select('*').eq('user_id',user.id).eq('ushirika_id',ushId).limit(1).then(function(r){
     var member=r.data&&r.data.length>0;
     if(!member&&!isAdmin())return alert('You are not a member of this Ushirika. Join first.');
     window._curUshForumId=ushId;
-    ensureUshForumPage();
-    activateSection('section-ushirika','ush-forum-page','ushirika');
-    var t=document.getElementById('ushForumTitle');if(t)t.textContent='💬 '+u.name+' — Forum';
+    ensureUshDetailPage();
+    activateSection('section-ushirika','ush-detail-page','ushirika');
+    var n=document.getElementById('ushDetailName');if(n)n.textContent=u.name;
+    var meta=document.getElementById('ushDetailMeta');if(meta)meta.textContent=(window._ushCounts[ushId]||0)+' members • '+(u.location||'');
+    var ac=document.getElementById('ushAdminControls9');if(ac)ac.style.display=(isUshLeaderOf(ushId))?'':'none';
+    renderUshWeekMeet9(ushId);
     loadUshForumPosts(ushId);
+    loadUshMembers9(ushId);
+    loadUshLeaders9(ushId);
   });
 };
+function renderUshWeekMeet9(ushId){
+  var box=document.getElementById('ushWeekMeet9');if(!box)return;
+  sb.from('weekly_meetings').select('*').eq('ushirika_id',ushId).order('created_at',{ascending:false}).limit(1).then(function(r){
+    var m=r.data&&r.data[0];
+    var html='<div class="card card-cool" style="margin-bottom:14px"><div class="section-title-app" style="margin-bottom:6px"><i class="fas fa-calendar-day"></i> This Week\'s Meeting</div>';
+    if(!m){html+='<div style="text-align:center;padding:14px;color:var(--text-lighter)">No meeting scheduled yet</div>';}
+    else{
+      html+='<div style="font-size:.9rem;line-height:1.8">'+
+        (m.meeting_date?'<div><b>📅 Date:</b> '+esc(m.meeting_date)+'</div>':'')+
+        (m.start_time?'<div><b>🕐 Time:</b> '+esc(m.start_time)+(m.end_time?' – '+esc(m.end_time):'')+'</div>':'')+
+        (m.venue?'<div><b>📍 Venue:</b> '+esc(m.venue)+'</div>':'')+
+        (m.theme?'<div><b>🎯 Theme:</b> '+esc(m.theme)+'</div>':'')+
+        mediaHTML(mediaOf(m))+'</div>';
+    }
+    if(isUshLeaderOf(ushId))html+='<button class="btn btn-warm btn-sm" style="margin-top:8px" onclick="openUshirikaMeetingEditor()"><i class="fas fa-edit"></i> Update</button>';
+    html+='</div>';
+    box.innerHTML=html;
+  });
+}
+function loadUshMembers9(ushId){
+  if(!sb)return;
+  sb.from('ushirika_members').select('*, profiles(name,role)').eq('ushirika_id',ushId).then(function(r){
+    window._ushMembers9=r.data||[];
+    var box=document.getElementById('ushMembers9');if(!box)return;
+    if(!window._ushMembers9.length){box.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No members yet.</div>';return;}
+    box.innerHTML=window._ushMembers9.map(function(m){var p=m.profiles||{};
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge">'+esc(m.role||'member')+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+    }).join('');
+  });
+}
+function loadUshLeaders9(ushId){
+  if(!sb)return;
+  var box=document.getElementById('ushLeaders9');if(!box)return;
+  var officials=(officialsData||[]).filter(function(o){return o.ushirika_id===ushId;});
+  var leadMembers=(window._ushMembers9||[]).filter(function(m){return String(m.role||'').toLowerCase().indexOf('leader')>-1;});
+  var html='';
+  officials.forEach(function(o){var p=o.profiles||{};
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div class="official-name">'+esc(p.name)+'</div><div class="official-role">'+esc(o.title)+'</div></div>'+(o.user_id&&o.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+o.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+  });
+  leadMembers.forEach(function(m){var p=m.profiles||{};
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+  });
+  box.innerHTML=html||'<div style="text-align:center;padding:20px;color:var(--text-lighter)">No leadership yet.</div>';
+}
+// Ushirika admin: add / role / remove members
+function ensureUshModals9(){
+  if(document.getElementById('ushAdd9Modal'))return;
+  document.body.insertAdjacentHTML('beforeend',
+  '<div class="modal-overlay" id="ushAdd9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+  '<div class="modal-handle"></div><div class="modal-title">👤 Add Ushirika Member <span class="admin-only">Leader/Admin</span></div>'+
+  '<div class="user-picker" id="ushAdd9Picker"></div>'+
+  '<div class="form-group"><label class="form-label">Role</label><select class="form-select" id="ushAdd9Role"><option>member</option><option>leader</option><option>chairman</option><option>secretary</option><option>treasurer</option></select></div>'+
+  '<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="ushAdd9Custom" placeholder="Custom role"></div>'+
+  '<button class="btn btn-warm btn-block" onclick="addUshMember9()">Add</button></div></div>'+
+  '<div class="modal-overlay" id="ushRole9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+  '<div class="modal-handle"></div><div class="modal-title">🏷️ Assign Ushirika Role <span class="admin-only">Leader/Admin</span></div>'+
+  '<div class="form-group"><label class="form-label">Member</label><select class="form-select" id="ushRole9Member"></select></div>'+
+  '<div class="form-group"><label class="form-label">Role</label><select class="form-select" id="ushRole9Role"><option>member</option><option>leader</option><option>chairman</option><option>secretary</option><option>treasurer</option></select></div>'+
+  '<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="ushRole9Custom" placeholder="Custom role"></div>'+
+  '<button class="btn btn-warm btn-block" onclick="assignUshRole9()">Assign</button></div></div>'+
+  '<div class="modal-overlay" id="ushRemove9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+  '<div class="modal-handle"></div><div class="modal-title">🚫 Remove Ushirika Member <span class="admin-only">Leader/Admin</span></div>'+
+  '<div class="form-group"><label class="form-label">Member</label><select class="form-select" id="ushRemove9Member"></select></div>'+
+  '<button class="btn btn-danger btn-block" onclick="removeUshMember9()">Remove</button></div></div>');
+  addCustomOptions9(document.getElementById('ushAdd9Role'));
+  addCustomOptions9(document.getElementById('ushRole9Role'));
+}
+window.openUshAdd9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  ensureUshModals9();
+  var pk=document.getElementById('ushAdd9Picker');
+  pk.innerHTML=(usersData||[]).map(function(u){return '<div class="user-pick-item" onclick="selectUser(this)" data-user-id="'+u.id+'"><div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">'+ini(u.name)+'</div><div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div></div></div>';}).join('');
+  openModal('ushAdd9Modal');
+};
+window.addUshMember9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  var sel=document.querySelector('#ushAdd9Picker .user-pick-item.selected');
+  if(!sel)return alert('Select user');
+  var role=getRole9('ushAdd9Role','ushAdd9Custom');
+  sb.from('ushirika_members').insert([{user_id:sel.dataset.userId,ushirika_id:ushId,role:role}]).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Added as '+role+'!');closeModalDirect();
+    loadUshMembers9(ushId);loadUshLeaders9(ushId);loadMemberCounts9();loadMyMemberships9();
+  });
+};
+window.openUshRole9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  ensureUshModals9();
+  document.getElementById('ushRole9Member').innerHTML=(window._ushMembers9||[]).map(function(m){return '<option value="'+m.id+'">'+esc((m.profiles||{}).name||'Member')+' ('+esc(m.role||'member')+')</option>';}).join('');
+  openModal('ushRole9Modal');
+};
+window.assignUshRole9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  var mid=document.getElementById('ushRole9Member').value;if(!mid)return alert('Pick a member');
+  var role=getRole9('ushRole9Role','ushRole9Custom');
+  sb.from('ushirika_members').update({role:role}).eq('id',mid).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    alert('✅ Role updated to '+role);closeModalDirect();
+    loadUshMembers9(ushId);loadUshLeaders9(ushId);loadMyMemberships9();
+  });
+};
+window.openUshRemove9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  ensureUshModals9();
+  document.getElementById('ushRemove9Member').innerHTML=(window._ushMembers9||[]).map(function(m){return '<option value="'+m.id+'">'+esc((m.profiles||{}).name||'Member')+'</option>';}).join('');
+  openModal('ushRemove9Modal');
+};
+window.removeUshMember9=function(){
+  var ushId=window._curUshForumId;if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+  var mid=document.getElementById('ushRemove9Member').value;if(!mid)return alert('Pick a member');
+  sb.from('ushirika_members').delete().eq('id',mid).then(function(){
+    alert('✅ Removed');closeModalDirect();
+    loadUshMembers9(ushId);loadUshLeaders9(ushId);loadMemberCounts9();loadMyMemberships9();
+  });
+};
+
+// ═══════════ USHIRIKA FORUM POSTS ═══════════
 window.loadUshForumPosts=function(ushId){
   if(!sb)return;var box=document.getElementById('ushForumPosts');if(!box)return;
   box.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">Loading...</div>';
@@ -593,7 +662,138 @@ window.ushLike=function(pid){
 };
 window.ushDeletePost=function(pid){if(!confirm('Delete this post?'))return;sb.from('posts').delete().eq('id',pid).then(function(){loadUshForumPosts(window._curUshForumId);});};
 
-// ═══════════ MAIN + DEPT FORUM POSTS ═══════════
+// ═══════════ COMMENTS WITH MEDIA ═══════════
+window.loadPostComments=function(postId){
+  var c=document.getElementById('comments-'+postId);if(!c||!sb)return;
+  sb.from('post_comments').select('*, profiles(name)').eq('post_id',postId).order('created_at').then(function(r){
+    var list=r.data||[];
+    var h=list.map(function(x){
+      var mine=user&&x.user_id===user.id;
+      return '<div class="comment-item"><div class="comment-header"><span class="comment-name">'+esc((x.profiles||{}).name)+(x.is_anonymous?' <span class="anon-badge">Anonymous</span>':'')+'</span><span class="comment-time">'+ago(x.created_at)+'</span>'+(isAdmin()||mine?'<button class="comment-delete" onclick="deletePostComment(\''+x.id+'\',\''+postId+'\')"><i class="fas fa-times"></i></button>':'')+'</div><div class="comment-text">'+esc(x.content)+'</div>'+mediaHTML(mediaOf(x))+'</div>';
+    }).join('');
+    h+='<div style="margin-top:8px"><div class="media-upload" style="padding:8px;margin-bottom:6px" onclick="attachMediaTo(\'cmt'+postId+'\')"><i class="fas fa-paperclip"></i><span>Attach media to comment (optional)</span></div>'+
+       '<div style="display:flex;gap:6px"><input class="form-input" id="pcc-'+postId+'" placeholder="Comment..." style="margin:0"><button class="btn btn-sm btn-primary" onclick="addPostComment(\''+postId+'\')">Send</button></div></div>';
+    c.innerHTML=h;
+  }).catch(function(){});
+};
+window.addPostComment=function(postId){
+  if(!user||!sb)return alert('Log in');
+  var inp=document.getElementById('pcc-'+postId);
+  var v=inp?inp.value.trim():'';if(!v)return;
+  var media=window._pm&&window._pm['cmt'+postId];
+  var after=function(){inp.value='';delete window._pm['cmt'+postId];setTimeout(function(){loadPostComments(postId);},300);};
+  var doIt=function(url){
+    var payload={post_id:postId,user_id:user.id,content:v,is_anonymous:false};
+    if(url)payload.media_urls=url;
+    sb.from('post_comments').insert([payload]).then(function(r){
+      if(r.error&&/media_urls/.test(r.error.message)&&url){
+        sb.from('post_comments').insert([{post_id:postId,user_id:user.id,content:v+'\n📎 '+url,is_anonymous:false}]).then(after);
+        return;
+      }
+      if(r.error)return alert('⚠️ '+r.error.message);
+      after();
+    });
+  };
+  if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
+};
+
+// ═══════════ DEPT JOIN / PENDING / FORUM ═══════════
+window.requestJoinDept=function(){
+  if(!user||!sb)return alert('Log in');
+  var sel=document.querySelector('#deptPickerList .user-pick-item.selected');
+  if(!sel)return alert('Select a department');
+  var deptId=sel.dataset.deptId;
+  var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
+  sb.from('pending_requests').insert([{user_id:user.id,type:'join_department',target_id:deptId,target_name:dept?dept.name:'',status:'pending'}]).then(function(r){
+    if(r.error){alert('⚠️ '+r.error.message);return;}
+    alert('✅ Request sent!');closeModalDirect();
+    if(typeof loadPending==='function')loadPending();
+  });
+};
+window.renderPending=function(){
+  var p=document.getElementById('adminPendingRequests');if(!p)return;
+  if(isAdmin())p.style.display='block';
+  var c=document.getElementById('dyn-pending');
+  if(!c){c=document.createElement('div');c.id='dyn-pending';p.appendChild(c);}
+  if(!pendingData||!pendingData.length){c.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No pending requests</div>';return;}
+  c.innerHTML=pendingData.map(function(r){
+    var uname=r.user_name||'';
+    if(!uname&&window.usersData){var u=usersData.find(function(x){return x.id===r.user_id;});if(u)uname=u.name;}
+    return '<div class="card" style="border-left:4px solid var(--primary)">'+
+      '<div style="font-weight:700;margin-bottom:6px">'+esc(uname||'A member')+' wants to join</div>'+
+      '<div style="font-size:.85rem;color:var(--text-light);margin-bottom:10px"><i class="fas fa-building"></i> '+esc(r.target_name||'Department')+'</div>'+
+      '<div style="display:flex;gap:8px">'+
+      '<button class="btn btn-accent btn-sm" onclick="approvePendingRequest(\''+r.id+'\')"><i class="fas fa-check"></i> Approve</button>'+
+      '<button class="btn btn-danger btn-sm" onclick="declinePendingRequest(\''+r.id+'\')"><i class="fas fa-times"></i> Decline</button>'+
+      '</div></div>';
+  }).join('');
+};
+window.approvePendingRequest=function(id){
+  if(!sb||!isAdmin())return alert('Admin only');
+  var req=null;for(var i=0;i<pendingData.length;i++){if(pendingData[i].id===id){req=pendingData[i];break;}}
+  if(!req)return alert('Request not found');
+  sb.from('pending_requests').update({status:'approved'}).eq('id',id).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    return sb.from('department_members').insert([{user_id:req.user_id,department_id:req.target_id,role:'member'}]).then(function(ins){
+      if(ins&&ins.error)return alert('⚠️ '+ins.error.message);
+      sb.from('notifications').insert([{user_id:req.user_id,title:'Department Request Approved',body:'You joined '+(req.target_name||'the department')+' — open its forum now!'}]).then(function(){});
+      alert('✅ Approved! Member added to department.');
+      loadPending();loadMemberCounts9();if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+    });
+  });
+};
+window.declinePendingRequest=function(id){
+  if(!sb||!isAdmin())return;
+  if(!confirm('Decline this request?'))return;
+  sb.from('pending_requests').update({status:'declined'}).eq('id',id).then(function(){alert('Declined');loadPending();});
+};
+window.openDeptForum=function(deptId){
+  if(!user)return alert('Please log in first');
+  var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
+  if(!dept)return alert('Department not found');
+  sb.from('department_members').select('user_id,department_id,role').eq('user_id',user.id).eq('department_id',deptId).limit(1).then(function(r){
+    var isMember=(r.data&&r.data.length>0)||(window._myDepts||[]).some(function(m){return m.department_id===deptId;});
+    if(!isMember&&!isAdmin()){
+      if(confirm('You are not a member of '+dept.name+' yet. Send a request to join now?')){
+        sb.from('pending_requests').insert([{user_id:user.id,type:'join_department',target_id:deptId,target_name:dept.name,status:'pending'}]).then(function(rr){
+          alert(rr.error?('⚠️ '+rr.error.message):'✅ Request sent! Awaiting admin approval.');
+        });
+      }
+      return;
+    }
+    currentDeptId=deptId;
+    var n=document.getElementById('mainDeptName');if(n)n.textContent=dept.name;
+    var d=document.getElementById('mainDeptDesc');if(d)d.textContent=dept.description||'';
+    var ic=document.getElementById('mainDeptIcon');if(ic)ic.innerHTML='<i class="fas '+(dept.icon||'fa-users')+'"></i>';
+    activateSection('section-home','home-mainDept','home');
+    var oldB=document.getElementById('deptEditMeetBtn');if(oldB)oldB.remove();
+    if(isDeptLeader9(deptId)){
+      var host=document.getElementById('home-mainDept');
+      var b=document.createElement('button');b.id='deptEditMeetBtn';b.className='btn btn-warm btn-block';b.style.marginBottom='12px';
+      b.innerHTML='<i class="fas fa-calendar-alt"></i> Edit Weekly Meeting (Leader/Admin)';
+      b.onclick=function(){openDeptMeetingEditor(deptId);};
+      if(host)host.insertBefore(b,host.firstChild);
+    }
+    loadDeptPosts(deptId);
+    loadDeptMembers(deptId).then(function(){
+      var m=document.getElementById('mainDeptMembers');if(m)m.textContent=(deptMembersData.length)+' members';
+    });
+  });
+};
+window._gcOpenDept=window.openDeptForum;
+function bindDeptCards(){
+  var cards=document.querySelectorAll('.dept-card');
+  cards.forEach(function(card){
+    if(card.dataset.bound9)return;card.dataset.bound9='1';
+    var id=card.dataset.deptId;
+    if(!id){var oc=card.getAttribute('onclick')||'';var mm=oc.match(/['"]([0-9a-fA-F-]{36})['"]/);if(mm)id=mm[1];}
+    if(!id){var txt=card.textContent||'';var dd=depts.find(function(x){return txt.indexOf(x.name)>-1;});if(dd)id=dd.id;}
+    if(id){card.dataset.deptId=id;card.style.cursor='pointer';card.onclick=function(ev){ev.preventDefault();ev.stopPropagation();openDeptForum(id);};}
+  });
+  updateCountLabels();
+}
+
+// ═══════════ MAIN + DEPT POSTS ═══════════
 window.submitPost=function(){
   if(!user||!sb)return alert('Log in');
   var txt=document.getElementById('postText');var t=txt?txt.value.trim():'';if(!t)return alert('Write something');
@@ -674,13 +874,16 @@ function renderMyDepts(){
 }
 
 // ═══════════ LOOPS & HOOKS ═══════════
-setInterval(function(){bindDeptCards();ensureUshForumPage();injectDeptTabMeetBtn();sweepMeetingButtons();enhanceRoleModals();},2000);
-setInterval(function(){if(user)loadMyMemberships9();if(isAdmin()&&typeof loadPending==='function')loadPending();},10000);
-if(user)setTimeout(loadMyMemberships9,1500);
+setInterval(function(){bindDeptCards();ensureUshDetailPage();injectDeptTabMeetBtn();sweepMeetingButtons();enhanceRoleModals();},2000);
+setInterval(function(){
+  if(user){loadMyMemberships9();loadMemberCounts9();}
+  if(isAdmin()&&typeof loadPending==='function')loadPending();
+},10000);
+if(user){setTimeout(loadMyMemberships9,1500);setTimeout(loadMemberCounts9,1800);}
 var _origLoadAll=window.loadAll;
 window.loadAll=function(){
   var p=_origLoadAll?_origLoadAll():Promise.resolve();
-  setTimeout(loadMyMemberships9,1200);
+  setTimeout(function(){loadMyMemberships9();loadMemberCounts9();},1200);
   return p;
 };
-console.log('✝️ app9.js FIXED build v4 active (roles + officials + comments media + meetings constraint)');
+console.log('✝️ app9.js FIXED build v5 active (counts + ushirika detail + inbox)');
