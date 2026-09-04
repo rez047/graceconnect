@@ -1,5 +1,5 @@
-// app17.js — FINAL v3: branding editor in Discover, static meeting, 7-day selects, bible fixed
-console.log('✝️ app17.js v3 loading...');
+// app17.js — FINAL v4: v3 + event editor + delete plans + delete messages
+console.log('✝️ app17.js v4 loading...');
 (function () {
   function g(id) { return document.getElementById(id); }
   function E(x) { return (typeof esc === 'function') ? esc(x) : String(x == null ? '' : x).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -93,25 +93,38 @@ console.log('✝️ app17.js v3 loading...');
     });
   }, 2500);
 
-  /* ══ 3) Delete own inbox messages ══ */
-  window.deleteChatMessage = function (msgId, chatId) {
+  /* ══ 3) Delete own inbox messages (table: messages, not chat_messages) ══ */
+  window.deleteChatMessage = function (msgId) {
     if (!confirm('Delete this message?')) return;
-    sb.from('chat_messages').delete().eq('id', msgId).eq('sender_id', user.id).then(function (r) {
+    sb.from('messages').delete().eq('id', msgId).eq('sender_id', user.id).then(function (r) {
       if (r.error) return alert('⚠️ ' + r.error.message);
-      if (typeof loadChatMessages === 'function') loadChatMessages(chatId);
+      if (typeof loadChatMessages === 'function') loadChatMessages();
+      if (typeof loadChatInbox === 'function') loadChatInbox();
     });
   };
-  var _rc = window.renderChatMessages;
-  window.renderChatMessages = function (chatId) {
-    var r = _rc ? _rc.apply(this, arguments) : undefined;
+  /* Re-render chat after delete to refresh bubbles */
+  var _lcm = window.loadChatMessages;
+  window.loadChatMessages = function () {
+    var r = _lcm ? _lcm.apply(this, arguments) : undefined;
     setTimeout(function () {
-      var list = document.querySelector('#chatMessages, .chat-messages'); if (!list || !user) return;
-      list.querySelectorAll('.chat-message, .chat-msg').forEach(function (m) {
+      var list = g('chatMessages'); if (!list || !user) return;
+      list.querySelectorAll('.chat-message').forEach(function (m) {
         if (m.dataset.delBound) return;
-        var id = m.dataset.id || m.getAttribute('data-id');
-        var mine = m.dataset.mine === '1' || m.classList.contains('mine');
-        if (!id || !mine) return;
-        m.dataset.delBound = '1'; var b = document.createElement('button'); b.className = 'post-delete'; b.style.marginLeft = 'auto'; b.innerHTML = '<i class="fas fa-trash"></i>'; b.onclick = function (e) { e.stopPropagation(); deleteChatMessage(id, chatId); }; m.appendChild(b);
+        var mine = m.classList.contains('sent');
+        if (!mine) return;
+        var id = m.dataset.id || m.getAttribute('data-id') || '';
+        if (!id && m.textContent) {
+          /* try to find id from rendered time stamp */
+          var t = m.querySelector('.chat-message-time');
+          if (t) id = (t.dataset.id || '').trim();
+        }
+        if (!id) return;
+        m.dataset.delBound = '1';
+        var btn = document.createElement('button');
+        btn.style.cssText = 'background:none;border:none;color:#EF4444;font-size:.7rem;cursor:pointer;padding:2px 4px;margin-top:2px;display:block';
+        btn.innerHTML = '<i class="fas fa-trash"></i> Delete';
+        btn.onclick = function (e) { e.stopPropagation(); deleteChatMessage(id); };
+        m.appendChild(btn);
       });
     }, 400); return r;
   };
@@ -178,13 +191,23 @@ console.log('✝️ app17.js v3 loading...');
   window.beSave = function () {
     var p = { id: 1 };
     ['church_name', 'tagline', 'welcome_message', 'location', 'pastor_name', 'hero_image', 'pastor_image', 'church_photo_url'].forEach(function (k) { var el = g('be_' + k); if (el) p[k] = el.value.trim() || null; });
-    sb.from('church_settings').upsert(p).then(function (r) {
-      if (r.error) return alert('⚠️ ' + r.error.message);
-      alert('✅ Branding saved!'); closeModalDirect();
-      if (window.loadChurchBranding) loadChurchBranding().then(function () { if (window.renderPublicLanding) renderPublicLanding(); });
-    });
+    var keys = Object.keys(p);
+    function attempt() {
+      var q = {}; keys.forEach(function (k) { q[k] = p[k]; });
+      sb.from('church_settings').upsert(q).then(function (r) {
+        if (!r.error) {
+          alert('✅ Branding saved!'); closeModalDirect();
+          if (window.loadChurchBranding) loadChurchBranding().then(function () { if (window.renderPublicLanding) renderPublicLanding(); });
+          return;
+        }
+        var mm = String(r.error.message || '').match(/'([a-zA-Z_]+)' column|column\s+'?"?([a-zA-Z_]+)/);
+        var col = mm && (mm[1] || mm[2]);
+        if (col && keys.indexOf(col) > -1) { keys = keys.filter(function (k) { return k !== col; }); return attempt(); }
+        alert('⚠️ ' + r.error.message + '\n\nRun the SQL from the guide once in Supabase SQL Editor to add missing columns.');
+      });
+    }
+    attempt();
   };
-  /* put the button ONLY in Discover, remove old header/landing buttons */
   setInterval(function () {
     document.querySelectorAll('.app-header button, #editLandingBtn').forEach(function (b) { if (/Edit \/ Remove Media|Edit Landing/i.test(b.textContent || '')) b.remove(); });
     var panel = g('adminDiscoverPanel'); if (!panel || !isAdmin()) return;
@@ -232,5 +255,206 @@ console.log('✝️ app17.js v3 loading...');
       out.innerHTML = '<div style="color:#991B1B">Could not load ' + E(trans) + '. <button class="btn btn-primary btn-sm" onclick="loadBibleChapter()"><i class="fas fa-rotate-right"></i> Retry</button></div>';
     });
   };
+
+  /* ══════════════════════════════════════════════════════
+     6) FULL EVENT EDITOR (admin) — every field editable,
+        image editable/deletable, date, theme, venue,
+        description, status — all fields of `events` table
+  ══════════════════════════════════════════════════════ */
+  if (!g('editEventModal21')) document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-overlay" id="editEventModal21" onclick="if(event.target===this)closeModalDirect()">' +
+    '<div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
+    '<div class="modal-title">🎉 Edit Event <span class="admin-only">Admin</span></div>' +
+    '<div class="form-group"><label class="form-label">Title</label><input class="form-input" id="ev_title"></div>' +
+    '<div class="form-group"><label class="form-label">Theme</label><input class="form-input" id="ev_theme" placeholder="Main theme / theme verse"></div>' +
+    '<div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="ev_desc" rows="3"></textarea></div>' +
+    '<div class="form-group"><label class="form-label">Venue</label><input class="form-input" id="ev_venue" placeholder="e.g. Main Auditorium"></div>' +
+    '<div class="grid-2"><div class="form-group"><label class="form-label">Start</label><input class="form-input" id="ev_start" type="datetime-local"></div>' +
+    '<div class="form-group"><label class="form-label">End</label><input class="form-input" id="ev_end" type="datetime-local"></div></div>' +
+    '<div class="form-group"><label class="form-label">Status</label><select class="form-select" id="ev_status"><option value="upcoming">Upcoming</option><option value="ongoing">Ongoing</option><option value="completed">Completed</option></select></div>' +
+    '<div class="form-group"><label class="form-label">Poster / Media</label>' +
+    '<div style="display:flex;gap:6px;align-items:center"><input class="form-input" id="ev_media" placeholder="Image URL or upload">' +
+    '<button class="btn btn-secondary-alt" onclick="evUploadMedia()"><i class="fas fa-upload"></i></button>' +
+    '<button class="btn btn-danger" onclick="evClearMedia()"><i class="fas fa-trash"></i></button></div>' +
+    '<div id="ev_media_preview" style="margin-top:6px"></div></div>' +
+    '<div class="grid-2">' +
+    '<button class="btn btn-primary btn-block" onclick="saveEventEdit21()"><i class="fas fa-save"></i> Save</button>' +
+    '<button class="btn btn-danger btn-block" onclick="delEvent21()"><i class="fas fa-trash"></i> Delete Event</button>' +
+    '</div>' +
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button>' +
+    '</div></div>');
+
+  window.openEventEdit = function (id) {
+    if (!isAdmin()) return alert('🚫 Admin only.');
+    var e = (window.eventsData || []).find(function (x) { return x.id === id; });
+    if (!e) { alert('Event not found — try refreshing the page.'); return; }
+    window._editingEventId = id;
+    g('ev_title').value = e.title || '';
+    g('ev_theme').value = e.theme || '';
+    g('ev_desc').value = e.description || '';
+    g('ev_venue').value = e.venue || '';
+    var fmt = function (v) { if (!v) return ''; try { return new Date(v).toISOString().slice(0, 16); } catch (e) { return ''; } };
+    g('ev_start').value = fmt(e.start_date);
+    g('ev_end').value = fmt(e.end_date);
+    g('ev_status').value = e.status || 'upcoming';
+    var murl = e.media_url || (Array.isArray(e.media_urls) && e.media_urls[0]) || (typeof e.media_urls === 'string' ? e.media_urls : '');
+    g('ev_media').value = murl || '';
+    evShowMediaPreview(murl);
+    openModal('editEventModal21');
+  };
+  window.evUploadMedia = function () {
+    var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*,video/*';
+    i.onchange = function () {
+      if (i.files && i.files[0] && typeof uploadMediaFile === 'function') {
+        uploadMediaFile(i.files[0]).then(function (url) {
+          g('ev_media').value = url;
+          evShowMediaPreview(url);
+          alert('✅ Uploaded — press Save to keep it');
+        }).catch(function (e) { alert('⚠️ Upload failed: ' + e.message); });
+      }
+    };
+    i.click();
+  };
+  window.evClearMedia = function () { g('ev_media').value = ''; evShowMediaPreview(''); };
+  function evShowMediaPreview(url) {
+    var box = g('ev_media_preview'); if (!box) return;
+    if (!url) { box.innerHTML = '<div style="color:var(--text-lighter);font-size:.8rem">No media</div>'; return; }
+    var isImg = /\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url) || !/\.([a-z0-9]+)(\?|$)/i.test(url);
+    box.innerHTML = isImg ? '<img src="' + url + '" style="max-width:100%;max-height:180px;border-radius:8px">' : '<a href="' + url + '" target="_blank">📎 Open media</a>';
+  }
+  window.saveEventEdit21 = function () {
+    var id = window._editingEventId; if (!id) return alert('No event');
+    var payload = {
+      title: g('ev_title').value.trim(),
+      theme: g('ev_theme').value.trim(),
+      description: g('ev_desc').value.trim(),
+      venue: g('ev_venue').value.trim(),
+      start_date: g('ev_start').value ? new Date(g('ev_start').value).toISOString() : null,
+      end_date: g('ev_end').value ? new Date(g('ev_end').value).toISOString() : null,
+      status: g('ev_status').value
+    };
+    var mediaUrl = g('ev_media').value.trim() || null;
+    payload.media_url = mediaUrl;
+    if (!payload.title) return alert('Title required');
+    sb.from('events').update(payload).eq('id', id).then(function (r) {
+      if (r.error) return alert('⚠️ ' + r.error.message);
+      alert('✅ Event saved');
+      closeModalDirect();
+      if (typeof loadEvents === 'function') loadEvents();
+    });
+  };
+  window.delEvent21 = function () {
+    var id = window._editingEventId; if (!id) return;
+    if (!confirm('Delete this event permanently?')) return;
+    sb.from('events').delete().eq('id', id).then(function (r) {
+      if (r.error) return alert('⚠️ ' + r.error.message);
+      alert('✅ Event deleted');
+      closeModalDirect();
+      if (typeof loadEvents === 'function') loadEvents();
+    });
+  };
+
+  /* Hook into the existing renderEvents so each event card has Edit button (admin) */
+  var _re = window.renderEvents;
+  window.renderEvents = function () {
+    var r = _re ? _re.apply(this, arguments) : undefined;
+    setTimeout(function () {
+      if (!isAdmin()) return;
+      document.querySelectorAll('.event-card').forEach(function (c) {
+        if (c.dataset.editBound) return;
+        var title = (c.querySelector('.event-title') || {}).textContent || '';
+        var e = (window.eventsData || []).find(function (x) { return x.title === title; });
+        if (!e) return;
+        c.dataset.editBound = '1';
+        var btn = document.createElement('button');
+        btn.className = 'btn btn-warm btn-sm'; btn.style.marginTop = '8px';
+        btn.innerHTML = '<i class="fas fa-edit"></i> Edit / Delete';
+        btn.onclick = function (ev) { ev.stopPropagation(); openEventEdit(e.id); };
+        (c.querySelector('.event-info') || c).appendChild(btn);
+      });
+    }, 300);
+    return r;
+  };
+
+  /* ══════════════════════════════════════════════════════
+     7) DELETE PLANS (table: plans — shown next to forum,
+        both personal and community)
+        • own plan — anyone can delete
+        • community / admin plan — admin can delete
+  ══════════════════════════════════════════════════════ */
+  window.deletePlan = function (id) {
+    if (!confirm('Delete this plan?')) return;
+    sb.from('plans').delete().eq('id', id).then(function (r) {
+      if (r.error) return alert('⚠️ ' + r.error.message);
+      alert('✅ Plan deleted');
+      if (typeof loadPlans === 'function') loadPlans();
+    });
+  };
+  /* Rebuild plans list with delete buttons for each card */
+  var _rp = window.renderPlans;
+  window.renderPlans = function () {
+    var r = _rp ? _rp.apply(this, arguments) : undefined;
+    setTimeout(function () {
+      var c = g('dyn-plans') || document.querySelector('#ushirika-plans .sub-page.active');
+      if (!c) return;
+      var plans = window.plansData || [];
+      if (!plans.length) return;
+      /* replace each card's innerHTML to add delete button */
+      var cards = c.querySelectorAll('.card');
+      cards.forEach(function (card, i) {
+        var p = plans[i]; if (!p) return;
+        var mine = (window.user && p.created_by === window.user.id);
+        var admin = typeof isAdmin === 'function' && isAdmin();
+        if (!mine && !admin) return;
+        if (card.dataset.delBound) return;
+        card.dataset.delBound = '1';
+        var btn = document.createElement('button');
+        btn.className = 'post-delete';
+        btn.innerHTML = '<i class="fas fa-trash"></i>';
+        btn.onclick = function (e) { e.stopPropagation(); deletePlan(p.id); };
+        card.style.position = 'relative';
+        card.appendChild(btn);
+      });
+    }, 200);
+    return r;
+  };
+  /* Also hook loadPlans to force re-render */
+  var _lp = window.loadPlans;
+  window.loadPlans = function () {
+    var r = _lp ? _lp.apply(this, arguments) : undefined;
+    setTimeout(function () { if (window.renderPlans) renderPlans(); }, 200);
+    return r;
+  };
+
+  /* ══════════════════════════════════════════════════════
+     8) DELETE OWN MESSAGES (inbox list — Discover)
+        long-press any own message in a chat to delete it
+  ══════════════════════════════════════════════════════ */
+  /* Also inject trash icons on each chat bubble as a visual fallback */
+  var _lcm2 = window.loadChatMessages;
+  window.loadChatMessages = function () {
+    var r = _lcm2 ? _lcm2.apply(this, arguments) : undefined;
+    setTimeout(function () {
+      var list = g('chatMessages'); if (!list || !user) return;
+      list.querySelectorAll('.chat-message').forEach(function (m) {
+        if (m.dataset.trashBound) return;
+        var mine = m.classList.contains('sent');
+        if (!mine) return;
+        m.dataset.trashBound = '1';
+        /* long-press = delete */
+        var timer = null;
+        m.addEventListener('touchstart', function () {
+          timer = setTimeout(function () {
+            var id = m.dataset.msgId || m.getAttribute('data-msg-id') || '';
+            if (id) { if (confirm('Delete this message?')) deleteChatMessage(id); }
+          }, 600);
+        });
+        m.addEventListener('touchend', function () { clearTimeout(timer); });
+        m.addEventListener('touchcancel', function () { clearTimeout(timer); });
+      });
+    }, 500);
+    return r;
+  };
+
 })();
-console.log('✝️ app17.js v3 active');
+console.log('✝️ app17.js v4 active (events + plans + messages delete)');
