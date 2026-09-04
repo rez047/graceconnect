@@ -1034,3 +1034,115 @@ window.loadAll=function(){
   return p;
 };
 console.log('✝️ app10.js FINAL build active');
+
+// ═══════════ app15-append: FINAL ushirika role assignment (self-contained, verified) ═══════════
+(function(){
+  window._ushRoleRows15=[];
+
+  function fetchRows15(ushId,cb){
+    sb.from('ushirika_members').select('*').eq('ushirika_id',ushId).then(function(r){
+      var rows=r.data||[];
+      var ids=rows.map(function(x){return x.user_id;}).filter(Boolean);
+      if(!ids.length){window._ushRoleRows15=rows;cb(rows,{});return;}
+      sb.from('profiles').select('id,name').in('id',ids).then(function(pr){
+        var pm={};(pr.data||[]).forEach(function(p){pm[p.id]=p;});
+        window._ushRoleRows15=rows;cb(rows,pm);
+      });
+    });
+  }
+
+  function ensureModal15(){
+    if(document.getElementById('ushRole9Modal'))return;
+    document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-overlay" id="ushRole9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+    '<div class="modal-handle"></div><div class="modal-title">🏷️ Assign Role to Member <span class="admin-only">Leader/Admin</span></div>'+
+    '<div class="form-group"><label class="form-label">Member</label><select class="form-select" id="ushRole9Member"></select></div>'+
+    '<div class="form-group"><label class="form-label">Role</label><select class="form-select" id="ushRole9Role">'+
+    '<option value="member">member</option><option value="leader">leader</option><option value="chairman">chairman</option>'+
+    '<option value="secretary">secretary</option><option value="treasurer">treasurer</option></select></div>'+
+    '<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="ushRole9Custom" placeholder="e.g. Sound Engineer"></div>'+
+    '<button class="btn btn-warm btn-block" onclick="assignUshRole9()">Assign</button>'+
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
+  }
+
+  function fillRoles15(ushId){
+    var sel=document.getElementById('ushRole9Role');if(!sel)return;
+    var have={};for(var i=0;i<sel.options.length;i++)have[String(sel.options[i].value).toLowerCase()]=1;
+    sb.from('titles').select('*').eq('category','ushirika').then(function(r){
+      (r.data||[]).forEach(function(t){
+        var nm=String(t.name||'');var role=null;
+        if(nm.indexOf(ushId+'::')===0)role=nm.split('::').slice(1).join('::');
+        else if(nm.indexOf('::')<0)role=nm;
+        if(role&&!have[role.toLowerCase()]){var o=document.createElement('option');o.value=role;o.textContent=role;sel.appendChild(o);have[role.toLowerCase()]=1;}
+      });
+    });
+  }
+
+  window.openUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+    ensureModal15();
+    fetchRows15(ushId,function(rows,pm){
+      var sel=document.getElementById('ushRole9Member');
+      if(!rows.length){sel.innerHTML='<option value="">No members yet</option>';}
+      else sel.innerHTML=rows.map(function(m,i){
+        return '<option value="'+i+'">'+esc((pm[m.user_id]||{}).name||'Member')+' ('+esc(m.role||'member')+')</option>';
+      }).join('');
+      fillRoles15(ushId);
+      var c=document.getElementById('ushRole9Custom');if(c)c.value='';
+      openModal('ushRole9Modal');
+    });
+  };
+
+  window.assignUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+    var sel=document.getElementById('ushRole9Member');
+    var row=window._ushRoleRows15[parseInt(sel.value,10)];
+    if(!row||!row.id)return alert('Pick a member');
+    var custom=(document.getElementById('ushRole9Custom')||{value:''}).value.trim();
+    var role=custom||document.getElementById('ushRole9Role').value;
+    if(!role)return alert('Pick or type a role');
+
+    sb.from('ushirika_members').update({role:role}).eq('id',row.id).then(function(r){
+      if(r.error)return alert('⚠️ '+r.error.message);
+      // VERIFY from DB so we never show a fake success again
+      sb.from('ushirika_members').select('role').eq('id',row.id).single().then(function(v){
+        if(v.error)return alert('⚠️ '+v.error.message);
+        if(String(v.data.role)!==String(role))return alert('⚠️ Database still says "'+v.data.role+'". Update was blocked server-side.');
+        // update local caches so badges/leadership change instantly
+        (window._ushMembers9||[]).forEach(function(m){if(m.id===row.id)m.role=role;});
+        (window._ushRoleRows15||[]).forEach(function(m){if(m.id===row.id)m.role=role;});
+        (window._myUsh||[]).forEach(function(m){if(m.ushirika_id===ushId&&m.user_id===row.user_id)m.role=role;});
+        alert('✅ Role updated to '+role);
+        closeModalDirect();
+        if(typeof loadUshMembers9==='function')loadUshMembers9(ushId);
+        if(typeof renderUshLeaders9==='function')renderUshLeaders9();
+        if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+        setTimeout(function(){if(typeof loadUshMembers9==='function')loadUshMembers9(ushId);},1200);
+      });
+    });
+  };
+
+  // role-based ushirika leaders (e.g. "Ushirika Leader") can edit weekly meetings
+  var _isl15=window.isUshLeaderOf;
+  window.isUshLeaderOf=function(id){
+    try{if(_isl15&&_isl15(id))return true;}catch(e){}
+    var lists=(window._myUsh||[]).concat(window._ushMembers9||[]);
+    for(var i=0;i<lists.length;i++){
+      var m=lists[i];
+      if(m&&m.ushirika_id===id&&String(m.role||'').toLowerCase().indexOf('leader')>-1)return true;
+    }
+    return false;
+  };
+  var _lau15=window.leadsAnyUsh;
+  window.leadsAnyUsh=function(){
+    try{if(_lau15&&_lau15())return true;}catch(e){}
+    var l=window._myUsh||[];
+    for(var i=0;i<l.length;i++){if(String(l[i].role||'').toLowerCase().indexOf('leader')>-1)return true;}
+    return false;
+  };
+})();
+console.log('✝️ app15-append active (ushirika role assignment final)');
