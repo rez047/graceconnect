@@ -1,11 +1,11 @@
-// app9.js — FIXED build v2 (schema-accurate + back-button navigation)
-console.log('✝️ app9.js (fixed build v2) loading...');
+// app9.js — FIXED build v3 (meetings schema-accurate + strict permissions + media)
+console.log('✝️ app9.js (fixed build v3) loading...');
 
-/* LIVE-SCHEMA FACTS APPLIED:
- - posts media column = media_urls (NOT media_url)
- - department_members has NO id column (use user_id/department_id/role)
- - notifications text column = body (NOT message)
- - phone BACK button now walks through in-app pages first */
+/* LIVE-SCHEMA FACTS:
+ - posts: media_urls (NOT media_url) | department_members: NO id column
+ - notifications: body | weekly_meetings: meeting_date + media_urls (NO day/date/media_url)
+ - BACK button walks in-app pages first
+ - PERMISSIONS: leaders/admins only see & use meeting editors; others see NOTHING */
 
 // ═══════════ HELPERS ═══════════
 function ext(o,extra){var n={};for(var k in o)n[k]=o[k];for(var k2 in extra)n[k2]=extra[k2];return n;}
@@ -22,8 +22,13 @@ function mediaHTML(url){
   var isImg=/\.(png|jpe?g|gif|webp|avif)(\?|$)/i.test(url)||!/\.([a-z0-9]+)(\?|$)/i.test(url);
   return isImg?'<div class="post-media"><img src="'+url+'"></div>':'<div class="post-media"><a href="'+url+'" target="_blank">📎 Open media</a></div>';
 }
-
-// insert post; tries media_urls as string, then array, then link-in-content
+function nextDateForDay(day){
+  if(!day)return null;
+  var map={Sunday:0,Monday:1,Tuesday:2,Wednesday:3,Thursday:4,Friday:5,Saturday:6};
+  var t=map[day];if(t==null)return null;
+  var d=new Date();var diff=(t-d.getDay()+7)%7;d.setDate(d.getDate()+diff);
+  return d.toISOString().slice(0,10);
+}
 function insertPostSafe(payload,done){
   var hasMedia=('media_urls' in payload)&&payload.media_urls;
   var base={};for(var k in payload){if(k!=='media_urls')base[k]=payload[k];}
@@ -35,6 +40,16 @@ function insertPostSafe(payload,done){
       if(!r2.error)return done(r2);
       sb.from('posts').insert([ext(base,{content:(base.content||'')+'\n📎 '+url})]).then(done);
     });
+  });
+}
+function insertMeetingSafe(payload,done){
+  var hasMedia=('media_urls' in payload)&&payload.media_urls;
+  var base={};for(var k in payload){if(k!=='media_urls')base[k]=payload[k];}
+  if(!hasMedia){sb.from('weekly_meetings').insert([base]).then(done);return;}
+  var url=payload.media_urls;
+  sb.from('weekly_meetings').insert([ext(base,{media_urls:url})]).then(function(r1){
+    if(!r1.error)return done(r1);
+    sb.from('weekly_meetings').insert([ext(base,{media_urls:[url]})]).then(done);
   });
 }
 
@@ -67,13 +82,191 @@ function activateSection(sectionId,subPageId,navMatch){
   window.scrollTo(0,0);
   gcPush(sectionId,subPageId);
 }
-// wrap original navigators so EVERY page change is remembered
 var _sw9=window.switchSection;
 window.switchSection=function(n){var r=_sw9?_sw9.apply(this,arguments):undefined;var sec=document.getElementById('section-'+n);var sub=sec?sec.querySelector('.sub-page.active'):null;gcPush('section-'+n,sub?sub.id:null);return r;};
 var _sp9=window.showSubPage;
 window.showSubPage=function(id){var r=_sp9?_sp9.apply(this,arguments):undefined;var sec=document.querySelector('.section.active');gcPush(sec?sec.id:null,id);return r;};
 
-// ═══════════ FIX 1: DEPARTMENT JOIN REQUEST (valid columns only) ═══════════
+// ═══════════ PERMISSIONS ═══════════
+function isUshLeaderOf(id){
+  if(isAdmin())return true;
+  for(var i=0;i<officialsData.length;i++){var o=officialsData[i];if(o.user_id===user.id&&o.ushirika_id===id)return true;}
+  return false;
+}
+function leadsAnyUsh(){
+  if(isAdmin())return true;
+  for(var i=0;i<officialsData.length;i++){if(officialsData[i].user_id===user.id)return true;}
+  return false;
+}
+function isDeptLeader9(deptId){
+  if(isAdmin())return true;
+  var list=window._myDepts||[];
+  for(var i=0;i<list.length;i++){if(list[i].department_id===deptId&&['leader','chairman'].indexOf(String(list[i].role||'').toLowerCase())>-1)return true;}
+  return false;
+}
+function leadsAnyDept(){
+  if(isAdmin())return true;
+  var list=window._myDepts||[];
+  for(var i=0;i<list.length;i++){if(['leader','chairman'].indexOf(String(list[i].role||'').toLowerCase())>-1)return true;}
+  return false;
+}
+function ushLedByMe(){return (ushirikasData||[]).filter(function(u){return isUshLeaderOf(u.id);});}
+function deptLedByMe(){return (depts||[]).filter(function(d){return isDeptLeader9(d.id);});}
+
+// hide ALL meeting-edit buttons from users without permission (show NOTHING)
+function sweepMeetingButtons(){
+  if(!user)return;
+  var canUsh=leadsAnyUsh();
+  var btns=document.querySelectorAll('button');
+  for(var i=0;i<btns.length;i++){
+    var t=(btns[i].textContent||'').trim();
+    if(/Edit Ushirika Weekly Meeting/i.test(t)||/Edit Ushirika Meeting/i.test(t)){btns[i].style.display=canUsh?'':'none';}
+  }
+}
+
+// ═══════════ USHIRIKA MEETING EDITOR (leader/admin ONLY + media) ═══════════
+function ensureUshMeetModal9(){
+  if(document.getElementById('ushMeetModal9'))return;
+  document.body.insertAdjacentHTML('beforeend',
+  '<div class="modal-overlay" id="ushMeetModal9" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+  '<div class="modal-handle"></div><div class="modal-title">📅 Edit Ushirika Weekly Meeting <span class="admin-only">Leader/Admin</span></div>'+
+  '<div class="form-group"><label class="form-label">Pick Ushirika</label><select class="form-select" id="um9Pick" onchange="loadUshMeeting9(this.value)"></select></div>'+
+  '<div class="form-group"><label class="form-label">Day</label><select class="form-select" id="um9Day"><option>Saturday</option><option>Sunday</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select></div>'+
+  '<div class="form-group"><label class="form-label">Date</label><input class="form-input" id="um9Date" type="date"></div>'+
+  '<div class="grid-2"><div class="form-group"><label class="form-label">Start</label><input class="form-input" id="um9Start" type="time"></div><div class="form-group"><label class="form-label">End</label><input class="form-input" id="um9End" type="time"></div></div>'+
+  '<div class="form-group"><label class="form-label">Venue</label><input class="form-input" id="um9Venue"></div>'+
+  '<div class="form-group"><label class="form-label">Theme</label><input class="form-input" id="um9Theme"></div>'+
+  '<div class="media-upload" id="um9Upload" onclick="attachMediaTo(\'ushMeet9\')"><i class="fas fa-cloud-upload-alt"></i><span>Reference media (optional)</span></div>'+
+  '<div id="um9MediaLink"></div>'+
+  '<button class="btn btn-primary btn-block" onclick="saveUshMeeting9()">Save Meeting</button>'+
+  '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
+}
+window.openUshirikaMeetingEditor=function(){
+  if(!user)return alert('Log in first');
+  var led=ushLedByMe();
+  if(!led.length)return alert('🚫 You are not permitted to edit ushirika weekly meetings.');
+  ensureUshMeetModal9();
+  document.getElementById('um9Pick').innerHTML=led.map(function(u){return '<option value="'+u.id+'">'+esc(u.name)+'</option>';}).join('');
+  window._curUshMeetId=led[0].id;
+  openModal('ushMeetModal9');
+  loadUshMeeting9(led[0].id);
+};
+window.loadUshMeeting9=function(ushId){
+  if(!ushId||!sb)return;
+  if(!isUshLeaderOf(ushId)){closeModalDirect();return alert('🚫 You are not permitted for this ushirika.');}
+  sb.from('weekly_meetings').select('*').eq('ushirika_id',ushId).order('created_at',{ascending:false}).limit(1).then(function(r){
+    var m=r.data&&r.data[0];var g=function(id){return document.getElementById(id);};
+    if(!m){if(g('um9MediaLink'))g('um9MediaLink').innerHTML='';return;}
+    if(m.meeting_date&&g('um9Date'))g('um9Date').value=m.meeting_date;
+    if(g('um9Start'))g('um9Start').value=m.start_time||'';if(g('um9End'))g('um9End').value=m.end_time||'';
+    if(g('um9Venue'))g('um9Venue').value=m.venue||'';if(g('um9Theme'))g('um9Theme').value=m.theme||'';
+    if(g('um9MediaLink'))g('um9MediaLink').innerHTML=mediaHTML(mediaOf(m));
+  });
+};
+window.saveUshMeeting9=function(){
+  var ushId=document.getElementById('um9Pick').value;
+  if(!isUshLeaderOf(ushId))return alert('🚫 You are not permitted to edit this ushirika\'s meeting.');
+  var media=window._pm&&window._pm.ushMeet9;
+  var doIt=function(url){
+    var payload={ushirika_id:ushId,
+      meeting_date:document.getElementById('um9Date').value||nextDateForDay(document.getElementById('um9Day').value),
+      start_time:document.getElementById('um9Start').value,end_time:document.getElementById('um9End').value,
+      venue:document.getElementById('um9Venue').value,theme:document.getElementById('um9Theme').value};
+    if(url)payload.media_urls=url;
+    insertMeetingSafe(payload,function(r){
+      if(r&&r.error)return alert('⚠️ '+r.error.message);
+      alert('✅ Meeting saved!');delete window._pm.ushMeet9;closeModalDirect();
+    });
+  };
+  if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
+};
+// old callers stay safe
+window.loadUshMeeting=window.loadUshMeeting9;
+window.saveUshMeeting=window.saveUshMeeting9;
+
+// ═══════════ DEPARTMENT MEETING EDITOR (leader/admin ONLY + media) ═══════════
+function ensureDeptMeetModal9(){
+  if(document.getElementById('deptMeetModal9'))return;
+  document.body.insertAdjacentHTML('beforeend',
+  '<div class="modal-overlay" id="deptMeetModal9" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+  '<div class="modal-handle"></div><div class="modal-title">📅 Edit Department Weekly Meeting <span class="admin-only">Leader/Admin</span></div>'+
+  '<div class="form-group"><label class="form-label">Pick Department</label><select class="form-select" id="dm9Pick" onchange="loadDeptMeeting9(this.value)"></select></div>'+
+  '<div class="form-group"><label class="form-label">Day</label><select class="form-select" id="dm9Day"><option>Saturday</option><option>Sunday</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select></div>'+
+  '<div class="form-group"><label class="form-label">Date</label><input class="form-input" id="dm9Date" type="date"></div>'+
+  '<div class="grid-2"><div class="form-group"><label class="form-label">Start</label><input class="form-input" id="dm9Start" type="time"></div><div class="form-group"><label class="form-label">End</label><input class="form-input" id="dm9End" type="time"></div></div>'+
+  '<div class="form-group"><label class="form-label">Venue</label><input class="form-input" id="dm9Venue"></div>'+
+  '<div class="form-group"><label class="form-label">Theme</label><input class="form-input" id="dm9Theme"></div>'+
+  '<div class="media-upload" id="dm9Upload" onclick="attachMediaTo(\'deptMeet9\')"><i class="fas fa-cloud-upload-alt"></i><span>Reference media (optional)</span></div>'+
+  '<div id="dm9MediaLink"></div>'+
+  '<button class="btn btn-primary btn-block" onclick="saveDeptMeeting9()">Save Meeting</button>'+
+  '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
+}
+window.openDeptMeetingEditor=function(deptId){
+  if(!user)return alert('Log in first');
+  var led=deptLedByMe();
+  if(!led.length)return alert('🚫 You are not permitted to edit department weekly meetings.');
+  if(deptId){led=led.filter(function(d){return d.id===deptId;});if(!led.length)return alert('🚫 You are not permitted for this department.');}
+  ensureDeptMeetModal9();
+  document.getElementById('dm9Pick').innerHTML=led.map(function(d){return '<option value="'+d.id+'">'+esc(d.name)+'</option>';}).join('');
+  window._curDeptMeetId=led[0].id;
+  openModal('deptMeetModal9');
+  loadDeptMeeting9(led[0].id);
+};
+window.loadDeptMeeting9=function(deptId){
+  if(!deptId||!sb)return;
+  if(!isDeptLeader9(deptId)){closeModalDirect();return alert('🚫 You are not permitted for this department.');}
+  sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
+    var m=r.data&&r.data[0];var g=function(id){return document.getElementById(id);};
+    if(!m){if(g('dm9MediaLink'))g('dm9MediaLink').innerHTML='';return;}
+    if(m.meeting_date&&g('dm9Date'))g('dm9Date').value=m.meeting_date;
+    if(g('dm9Start'))g('dm9Start').value=m.start_time||'';if(g('dm9End'))g('dm9End').value=m.end_time||'';
+    if(g('dm9Venue'))g('dm9Venue').value=m.venue||'';if(g('dm9Theme'))g('dm9Theme').value=m.theme||'';
+    if(g('dm9MediaLink'))g('dm9MediaLink').innerHTML=mediaHTML(mediaOf(m));
+  });
+};
+window.saveDeptMeeting9=function(){
+  var deptId=document.getElementById('dm9Pick').value;
+  if(!isDeptLeader9(deptId))return alert('🚫 You are not permitted to edit this department\'s meeting.');
+  var media=window._pm&&window._pm.deptMeet9;
+  var doIt=function(url){
+    var payload={department_id:deptId,
+      meeting_date:document.getElementById('dm9Date').value||nextDateForDay(document.getElementById('dm9Day').value),
+      start_time:document.getElementById('dm9Start').value,end_time:document.getElementById('dm9End').value,
+      venue:document.getElementById('dm9Venue').value,theme:document.getElementById('dm9Theme').value};
+    if(url)payload.media_urls=url;
+    insertMeetingSafe(payload,function(r){
+      if(r&&r.error)return alert('⚠️ '+r.error.message);
+      alert('✅ Meeting saved!');delete window._pm.deptMeet9;closeModalDirect();
+    });
+  };
+  if(media){uploadMediaFile(media).then(doIt).catch(function(){doIt(null);});}else doIt(null);
+};
+// old generic "Update" modal made safe + permissioned
+window.updateMeeting=function(){
+  if(!user||!sb)return alert('Log in');
+  if(!(leadsAnyUsh()||leadsAnyDept()))return alert('🚫 You are not permitted to edit weekly meetings.');
+  var payload={meeting_date:document.getElementById('meetingDate').value||nextDateForDay(document.getElementById('meetingDay').value),
+    start_time:document.getElementById('meetingStart').value,end_time:document.getElementById('meetingEnd').value,
+    venue:document.getElementById('meetingVenue').value,theme:document.getElementById('meetingTheme').value};
+  sb.from('weekly_meetings').insert([payload]).then(function(r){
+    if(r.error)return alert('⚠️ '+r.error.message);
+    window._curMeetingId=r.data[0].id;alert('✅ Updated!');closeModalDirect();
+  });
+};
+// "Edit Department Weekly Meeting" button on the Departments tab (leaders/admins ONLY)
+function injectDeptTabMeetBtn(){
+  var host=document.getElementById('ushirika-departments');if(!host||!user)return;
+  var old=document.getElementById('deptTabMeetBtn9');
+  var led=deptLedByMe();
+  if(!led.length){if(old)old.remove();return;}
+  if(old)return;
+  var b=document.createElement('button');b.id='deptTabMeetBtn9';b.className='btn btn-warm btn-block';b.style.marginBottom='12px';
+  b.innerHTML='<i class="fas fa-calendar-alt"></i> Edit Department Weekly Meeting (Leader/Admin)';
+  b.onclick=function(){openDeptMeetingEditor();};
+  host.insertBefore(b,host.firstChild);
+}
+
+// ═══════════ DEPARTMENT JOIN REQUEST ═══════════
 window.requestJoinDept=function(){
   if(!user||!sb)return alert('Log in');
   var sel=document.querySelector('#deptPickerList .user-pick-item.selected');
@@ -87,7 +280,7 @@ window.requestJoinDept=function(){
   });
 };
 
-// ═══════════ FIX 2: PENDING REQUESTS RENDER + APPROVE ═══════════
+// ═══════════ PENDING REQUESTS + APPROVE ═══════════
 window.renderPending=function(){
   var p=document.getElementById('adminPendingRequests');if(!p)return;
   if(isAdmin())p.style.display='block';
@@ -106,7 +299,6 @@ window.renderPending=function(){
       '</div></div>';
   }).join('');
 };
-
 window.approvePendingRequest=function(id){
   if(!sb||!isAdmin())return alert('Admin only');
   var req=null;for(var i=0;i<pendingData.length;i++){if(pendingData[i].id===id){req=pendingData[i];break;}}
@@ -127,13 +319,7 @@ window.declinePendingRequest=function(id){
   sb.from('pending_requests').update({status:'declined'}).eq('id',id).then(function(){alert('Declined');loadPending();});
 };
 
-// ═══════════ FIX 3: DEPARTMENT FORUM (correct membership query — no id column!) ═══════════
-function isDeptLeader9(deptId){
-  if(isAdmin())return true;
-  var list=window._myDepts||[];
-  for(var i=0;i<list.length;i++){if(list[i].department_id===deptId&&['leader','chairman','secretary','treasurer'].indexOf(String(list[i].role||'').toLowerCase())>-1)return true;}
-  return false;
-}
+// ═══════════ DEPARTMENT FORUM ═══════════
 window.openDeptForum=function(deptId){
   if(!user)return alert('Please log in first');
   var dept=null;for(var i=0;i<depts.length;i++){if(depts[i].id===deptId){dept=depts[i];break;}}
@@ -154,7 +340,6 @@ window.openDeptForum=function(deptId){
     var m=document.getElementById('mainDeptMembers');if(m)m.textContent=(dept.member_count||0)+' members';
     var ic=document.getElementById('mainDeptIcon');if(ic)ic.innerHTML='<i class="fas '+(dept.icon||'fa-users')+'"></i>';
     activateSection('section-home','home-mainDept','home');
-    // leader/admin weekly-meeting editor button
     var oldB=document.getElementById('deptEditMeetBtn');if(oldB)oldB.remove();
     if(isDeptLeader9(deptId)){
       var host=document.getElementById('home-mainDept');
@@ -167,7 +352,6 @@ window.openDeptForum=function(deptId){
   });
 };
 window._gcOpenDept=window.openDeptForum;
-
 function bindDeptCards(){
   var cards=document.querySelectorAll('.dept-card');
   cards.forEach(function(card){
@@ -179,41 +363,7 @@ function bindDeptCards(){
   });
 }
 
-// ═══════════ DEPARTMENT WEEKLY MEETING (leader/admin) ═══════════
-function ensureDeptMeetModal(){
-  if(document.getElementById('deptMeetModal9'))return;
-  document.body.insertAdjacentHTML('beforeend',
-  '<div class="modal-overlay" id="deptMeetModal9" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
-  '<div class="modal-handle"></div><div class="modal-title">📅 Edit Department Weekly Meeting</div>'+
-  '<div class="form-group"><label class="form-label">Day</label><select class="form-select" id="dm9Day"><option>Saturday</option><option>Sunday</option><option>Monday</option><option>Tuesday</option><option>Wednesday</option><option>Thursday</option><option>Friday</option></select></div>'+
-  '<div class="form-group"><label class="form-label">Date</label><input class="form-input" id="dm9Date" type="date"></div>'+
-  '<div class="grid-2"><div class="form-group"><label class="form-label">Start</label><input class="form-input" id="dm9Start" type="time"></div><div class="form-group"><label class="form-label">End</label><input class="form-input" id="dm9End" type="time"></div></div>'+
-  '<div class="form-group"><label class="form-label">Venue</label><input class="form-input" id="dm9Venue"></div>'+
-  '<div class="form-group"><label class="form-label">Theme</label><input class="form-input" id="dm9Theme"></div>'+
-  '<button class="btn btn-primary btn-block" onclick="saveDeptMeeting9()">Save Meeting</button>'+
-  '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
-}
-window.openDeptMeetingEditor=function(deptId){
-  if(!isDeptLeader9(deptId))return alert('Only department leaders or admins can edit.');
-  ensureDeptMeetModal();window._curDeptMeetId=deptId;openModal('deptMeetModal9');
-  sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
-    var m=r.data&&r.data[0];if(!m)return;
-    var g=function(id){return document.getElementById(id);};
-    if(g('dm9Day'))g('dm9Day').value=m.day||'Saturday';if(g('dm9Date'))g('dm9Date').value=m.date||'';
-    if(g('dm9Start'))g('dm9Start').value=m.start_time||'';if(g('dm9End'))g('dm9End').value=m.end_time||'';
-    if(g('dm9Venue'))g('dm9Venue').value=m.venue||'';if(g('dm9Theme'))g('dm9Theme').value=m.theme||'';
-  });
-};
-window.saveDeptMeeting9=function(){
-  var deptId=window._curDeptMeetId;if(!deptId||!sb)return;
-  if(!isDeptLeader9(deptId))return alert('Not permitted.');
-  sb.from('weekly_meetings').insert([{department_id:deptId,day:document.getElementById('dm9Day').value,date:document.getElementById('dm9Date').value||null,start_time:document.getElementById('dm9Start').value,end_time:document.getElementById('dm9End').value,venue:document.getElementById('dm9Venue').value,theme:document.getElementById('dm9Theme').value}]).then(function(r){
-    if(r.error)return alert('⚠️ '+r.error.message);
-    alert('✅ Meeting saved!');closeModalDirect();
-  });
-};
-
-// ═══════════ FIX 4: USHIRIKA FORUM (posts table uses media_urls) ═══════════
+// ═══════════ USHIRIKA FORUM ═══════════
 function ensureUshForumPage(){
   if(document.getElementById('ush-forum-page'))return;
   var sec=document.getElementById('section-ushirika');if(!sec)return;
@@ -227,7 +377,6 @@ function ensureUshForumPage(){
   sec.appendChild(div);
 }
 window.closeUshForum=function(){activateSection('section-ushirika','ushirika-main','ushirika');};
-
 window.openUshirikaForum=function(ushId){
   if(!user)return alert('Please log in first');
   var u=null;for(var i=0;i<ushirikasData.length;i++){if(ushirikasData[i].id===ushId){u=ushirikasData[i];break;}}
@@ -242,7 +391,6 @@ window.openUshirikaForum=function(ushId){
     loadUshForumPosts(ushId);
   });
 };
-
 window.loadUshForumPosts=function(ushId){
   if(!sb)return;var box=document.getElementById('ushForumPosts');if(!box)return;
   box.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">Loading...</div>';
@@ -263,7 +411,6 @@ window.loadUshForumPosts=function(ushId){
     }).join('');
   });
 };
-
 window.submitUshPost=function(){
   var ushId=window._curUshForumId;if(!user||!sb||!ushId)return alert('Open a ushirika forum first');
   var txt=document.getElementById('ushPostText');if(!txt||!txt.value.trim())return alert('Write something');
@@ -291,7 +438,7 @@ window.ushLike=function(pid){
 };
 window.ushDeletePost=function(pid){if(!confirm('Delete this post?'))return;sb.from('posts').delete().eq('id',pid).then(function(){loadUshForumPosts(window._curUshForumId);});};
 
-// ═══════════ FIX 5: main forum + dept forum posts also use media_urls ═══════════
+// ═══════════ MAIN + DEPT FORUM POSTS (media_urls) ═══════════
 window.submitPost=function(){
   if(!user||!sb)return alert('Log in');
   var txt=document.getElementById('postText');var t=txt?txt.value.trim():'';if(!t)return alert('Write something');
@@ -320,20 +467,17 @@ window.submitDeptPost=function(){
   };
   if(media){uploadMediaFile(media).then(finish).catch(function(){finish(null);});}else finish(null);
 };
-// global post renderer now understands media_urls
-var _origPostHTML=window.postHTML;
 window.postHTML=function(p,isDept){
   var pr=p.profiles||{};var mine=user&&p.author_id===user.id;
   var liked=user&&p.liked_by&&p.liked_by.indexOf(user.id)>-1;var canDel=mine||isAdmin();
   return '<div class="post"><div class="post-header"><div class="post-avatar'+(pr.role==='admin'?' admin':'')+'">'+ini(pr.name)+'</div><div><div class="post-name">'+esc(pr.name||'')+'</div></div><div class="post-time">'+ago(p.created_at)+'</div>'+(canDel?'<button class="post-delete" onclick="window._gcDeletePost(\''+p.id+'\','+isDept+')"><i class="fas fa-trash"></i></button>':'')+'</div><div class="post-body">'+esc(p.content||'')+'</div>'+mediaHTML(mediaOf(p))+'<div class="post-actions"><button class="post-action'+(liked?' liked':'')+'" onclick="window._gcLike(\''+p.id+'\','+isDept+')"><i class="fas fa-heart"></i> '+(p.likes||0)+'</button><button class="post-action" onclick="toggleComments(\''+p.id+'\')"><i class="far fa-comment"></i> Comment</button></div><div class="comments-area" id="comments-'+p.id+'" style="display:none"></div></div>';
 };
 
-// ═══════════ MY USHIRIKAS + MY DEPARTMENTS (tap = forum) ═══════════
+// ═══════════ MY USHIRIKAS + MY DEPARTMENTS ═══════════
 window.loadMyMemberships9=function(){
   if(!user||!sb)return;
   sb.from('ushirika_members').select('*').eq('user_id',user.id).then(function(r){window._myUsh=r.data||[];renderMyUshirikas();});
   sb.from('department_members').select('user_id,department_id,role').eq('user_id',user.id).then(function(r){window._myDepts=r.data||[];renderMyDepts();});
-  // hide leftover empty block from older builds
   var oldSec=document.getElementById('myUshirikasSection');
   if(oldSec){var lst=document.getElementById('myUshirikasList');if(!lst||!lst.innerHTML.trim())oldSec.style.display='none';}
 };
@@ -375,14 +519,13 @@ function renderMyDepts(){
 }
 
 // ═══════════ LOOPS & HOOKS ═══════════
-setInterval(function(){bindDeptCards();ensureUshForumPage();},2000);
+setInterval(function(){bindDeptCards();ensureUshForumPage();injectDeptTabMeetBtn();sweepMeetingButtons();},2000);
 setInterval(function(){if(user)loadMyMemberships9();if(isAdmin()&&typeof loadPending==='function')loadPending();},10000);
 if(user)setTimeout(loadMyMemberships9,1500);
-
 var _origLoadAll=window.loadAll;
 window.loadAll=function(){
   var p=_origLoadAll?_origLoadAll():Promise.resolve();
   setTimeout(loadMyMemberships9,1200);
   return p;
 };
-console.log('✝️ app9.js FIXED build v2 active (media_urls + membership + back-button)');
+console.log('✝️ app9.js FIXED build v3 active (meetings fixed + strict permissions + media)');
