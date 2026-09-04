@@ -67,7 +67,6 @@ console.log('✝️ app18.js loading...');
         .catch(function(e){alert('⚠️ '+e.message);});
       });
     }
-    // 1) client delete+insert, 2) guaranteed server fallback
     sb.from('ushirika_members').delete().eq('user_id',uid).eq('ushirika_id',ushId).then(function(dr){
       if(dr.error)return serverFallback();
       sb.from('ushirika_members').insert([{user_id:uid,ushirika_id:ushId,role:role}]).then(function(ir){
@@ -81,7 +80,7 @@ console.log('✝️ app18.js loading...');
     });
   };
 
-  // ══ SINGLE CALM MEETING WIDGETS (redraw ONLY on change) ══
+  // ══ CALM MEETING WIDGETS (redraw ONLY when data changes) ══
   function meetSig(m,can){return JSON.stringify([m&&m.id,m&&m.meeting_date,m&&m.start_time,m&&m.end_time,m&&m.venue,m&&m.theme,can]);}
   function meetHTML(m,can,upd,del){
     var h='<div class="card card-cool" style="margin-bottom:14px"><div class="section-title-app" style="margin-bottom:6px"><i class="fas fa-calendar-day"></i> This Week\'s Meeting</div>';
@@ -100,16 +99,21 @@ console.log('✝️ app18.js loading...');
     }
     return h+'</div>';
   }
+
+  // hide EVERY duplicate writer/box except the one we own (deptWeekMeet18 / ushWeekMeet9)
   function hideDupes(host,keepId){
     if(!host)return;
     var keep=g(keepId);
-    var d14=g('deptWeekMeet14');if(d14)d14.style.display='none';
+    var others=[g('deptWeekMeet14'),g('deptWeekMeet17')];
+    for(var o=0;o<others.length;o++){if(others[o]&&others[o]!==keep)others[o].style.display='none';}
     var cards=host.querySelectorAll('.card');
     for(var i=0;i<cards.length;i++){
       var c=cards[i];
       if(/This Week'?s Meeting/i.test(c.textContent||'')&&!(keep&&keep.contains(c)))c.style.display='none';
     }
   }
+
+  // ── USHIRIKA widget (unchanged, calm) ──
   function calmUsh(ushId){
     if(!sb||!ushId)return;
     var box=g('ushWeekMeet9');if(!box)return;
@@ -117,27 +121,30 @@ console.log('✝️ app18.js loading...');
       var m=(r.data&&r.data[0])||null;
       var can=false;try{can=isUshLeaderOf(ushId);}catch(e){}
       var sig=meetSig(m,can);
-      if(box.dataset.sig18===sig)return;           // ← unchanged = no redraw
+      if(box.dataset.sig18===sig)return;
       box.dataset.sig18=sig;
       box.innerHTML=meetHTML(m,can,'openUshirikaMeetingEditor','delUshMeet18');
     });
   }
+
+  // ── DEPARTMENT widget — OWN box id (deptWeekMeet18): no other code knows this id, so nothing else can touch it ──
   function calmDept(deptId){
     if(!sb||!deptId)return;
     var host=g('home-mainDept');if(!host)return;
-    var box=g('deptWeekMeet17');
-    if(!box){box=document.createElement('div');box.id='deptWeekMeet17';host.insertBefore(box,host.firstChild.nextSibling||host.firstChild);}
+    var box=g('deptWeekMeet18');
+    if(!box){box=document.createElement('div');box.id='deptWeekMeet18';host.insertBefore(box,host.firstChild.nextSibling||host.firstChild);}
     sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
       var m=(r.data&&r.data[0])||null;
       var can=false;try{can=isDeptLeader9(deptId);}catch(e){}
       var sig=meetSig(m,can);
-      if(box.dataset.sig18===sig)return;           // ← unchanged = no redraw
+      if(box.dataset.sig18===sig){hideDupes(host,'deptWeekMeet18');return;}  // unchanged → do NOT redraw
       box.dataset.sig18=sig;
       if(m)window._curMeetingId=m.id;
-      box.innerHTML=meetHTML(m,can,"openDeptMeetingEditor18","delDeptMeet18");
-      hideDupes(host,'deptWeekMeet17');
+      box.innerHTML=meetHTML(m,can,'openDeptMeetingEditor18','delDeptMeet18');
+      hideDupes(host,'deptWeekMeet18');
     });
   }
+
   window.openDeptMeetingEditor18=function(id){if(typeof openDeptMeetingEditor==='function')openDeptMeetingEditor(id||window.currentDeptId);};
   window.delUshMeet18=function(mid){
     var ushId=window._curUshForumId;
@@ -154,10 +161,11 @@ console.log('✝️ app18.js loading...');
     if(!confirm('Delete this meeting?'))return;
     sb.from('weekly_meetings').delete().eq('id',mid).then(function(r){
       if(r.error)return alert('⚠️ '+r.error.message);
-      alert('✅ Deleted');var b=g('deptWeekMeet17');if(b)b.dataset.sig18='';calmDept(deptId);
+      alert('✅ Deleted');var b=g('deptWeekMeet18');if(b)b.dataset.sig18='';calmDept(deptId);
     });
   };
-  // hook renders to EVENTS ONLY (open/save/delete) — no intervals, no flicker
+
+  // hook renders to EVENTS ONLY (open / save / delete) — no intervals that redraw
   var _o1=window.openUshirikaForum;
   window.openUshirikaForum=function(id){var r=_o1?_o1.apply(this,arguments):undefined;setTimeout(function(){calmUsh(id);},700);return r;};
   var _o2=window.openDeptForum;
@@ -165,10 +173,11 @@ console.log('✝️ app18.js loading...');
   var _s1=window.saveUshMeeting9;
   window.saveUshMeeting9=function(){var r=_s1?_s1.apply(this,arguments):undefined;setTimeout(function(){var b=g('ushWeekMeet9');if(b)b.dataset.sig18='';calmUsh((g('um9Pick')||{value:window._curUshForumId}).value);},900);return r;};
   var _s2=window.saveDeptMeeting9;
-  window.saveDeptMeeting9=function(){var r=_s2?_s2.apply(this,arguments):undefined;setTimeout(function(){var b=g('deptWeekMeet17');if(b)b.dataset.sig18='';calmDept((g('dm9Pick')||{value:window.currentDeptId}).value);},900);return r;};
+  window.saveDeptMeeting9=function(){var r=_s2?_s2.apply(this,arguments):undefined;setTimeout(function(){var b=g('deptWeekMeet18');if(b)b.dataset.sig18='';calmDept((g('dm9Pick')||{value:window.currentDeptId}).value);},900);return r;};
   var _u=window.updateMeeting;
-  window.updateMeeting=function(){var r=_u?_u.apply(this,arguments):undefined;setTimeout(function(){var a=g('ushWeekMeet9');if(a)a.dataset.sig18='';var b=g('deptWeekMeet17');if(b)b.dataset.sig18='';calmUsh(window._curUshForumId);calmDept(window.currentDeptId);},900);return r;};
-  // keep duplicates hidden (light DOM-only sweep, no network)
-  setInterval(function(){try{hideDupes(g('home-mainDept'),'deptWeekMeet17');}catch(e){}},2500);
+  window.updateMeeting=function(){var r=_u?_u.apply(this,arguments):undefined;setTimeout(function(){var a=g('ushWeekMeet9');if(a)a.dataset.sig18='';var b=g('deptWeekMeet18');if(b)b.dataset.sig18='';calmUsh(window._curUshForumId);calmDept(window.currentDeptId);},900);return r;};
+
+  // light DOM-only sweep: keep duplicates hidden (no network, no redraw of our box)
+  setInterval(function(){try{hideDupes(g('home-mainDept'),'deptWeekMeet18');}catch(e){}},2500);
 })();
-console.log('✝️ app18.js active');
+console.log('✝️ app18.js active (isolated calm dept widget)');
