@@ -1268,3 +1268,180 @@ console.log('✝️ app15-append active (ushirika role assignment final)');
   };
 })();
 console.log('✝️ app16-append active (role bypass + calm dept widget)');
+
+
+// ═══════════ app17-append: BULLETPROOF role assign (delete+insert) + calm dept widget ═══════════
+(function(){
+  window._ushRoleRows17=[];
+
+  function rows17(ushId,cb){
+    sb.from('ushirika_members').select('*').eq('ushirika_id',ushId).then(function(r){
+      var rows=r.data||[];window._ushRoleRows17=rows;
+      var ids=rows.map(function(x){return x.user_id;}).filter(Boolean);
+      if(!ids.length)return cb(rows,{});
+      sb.from('profiles').select('id,name').in('id',ids).then(function(pr){
+        var pm={};(pr.data||[]).forEach(function(p){pm[p.id]=p;});cb(rows,pm);
+      });
+    });
+  }
+
+  function ensureModal17(){
+    if(document.getElementById('ushRole9Modal'))return;
+    document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-overlay" id="ushRole9Modal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()">'+
+    '<div class="modal-handle"></div><div class="modal-title">🏷️ Assign Role to Member <span class="admin-only">Leader/Admin</span></div>'+
+    '<div class="form-group"><label class="form-label">Member</label><select class="form-select" id="ushRole9Member"></select></div>'+
+    '<div class="form-group"><label class="form-label">Role</label><select class="form-select" id="ushRole9Role">'+
+    '<option value="member">member</option><option value="leader">leader</option><option value="chairman">chairman</option>'+
+    '<option value="secretary">secretary</option><option value="treasurer">treasurer</option></select></div>'+
+    '<div class="form-group"><label class="form-label">Or type ANY role</label><input class="form-input" id="ushRole9Custom" placeholder="e.g. Sound Engineer"></div>'+
+    '<button class="btn btn-warm btn-block" onclick="assignUshRole9()">Assign</button>'+
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button></div></div>');
+  }
+
+  window.openUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+    ensureModal17();
+    rows17(ushId,function(rows,pm){
+      var sel=document.getElementById('ushRole9Member');
+      sel.innerHTML=rows.length?rows.map(function(m,i){
+        return '<option value="'+i+'">'+esc((pm[m.user_id]||{}).name||'Member')+' ('+esc(m.role||'member')+')</option>';
+      }).join(''):'<option value="">No members yet</option>';
+      var c=document.getElementById('ushRole9Custom');if(c)c.value='';
+      openModal('ushRole9Modal');
+    });
+  };
+
+  // NO UPDATE ANYMORE: delete pair rows, insert single row with new role, verify.
+  window.assignUshRole9=function(){
+    var ushId=window._curUshForumId;
+    if(!ushId)return alert('Open a ushirika first.');
+    if(!isUshLeaderOf(ushId))return alert('🚫 Not permitted.');
+    var sel=document.getElementById('ushRole9Member');
+    var row=window._ushRoleRows17[parseInt(sel.value,10)];
+    if(!row)return alert('Pick a member');
+    var custom=(document.getElementById('ushRole9Custom')||{value:''}).value.trim();
+    var role=custom||document.getElementById('ushRole9Role').value;
+    if(!role)return alert('Pick or type a role');
+    var uid=row.user_id;
+
+    function refresh(){
+      if(typeof loadUshMembers9==='function')loadUshMembers9(ushId);
+      if(typeof renderUshLeaders9==='function')renderUshLeaders9();
+      if(typeof loadMyMemberships9==='function')loadMyMemberships9();
+    }
+
+    sb.from('ushirika_members').delete().eq('user_id',uid).eq('ushirika_id',ushId).then(function(dr){
+      if(dr.error)return alert('⚠️ Delete failed: '+dr.error.message);
+      sb.from('ushirika_members').insert([{user_id:uid,ushirika_id:ushId,role:role}]).then(function(ir){
+        if(ir.error)return alert('⚠️ Insert failed: '+ir.error.message);
+        sb.from('ushirika_members').select('role').eq('user_id',uid).eq('ushirika_id',ushId).then(function(vr){
+          var rows=vr.data||[];
+          if(rows.length===1&&String(rows[0].role)===String(role)){
+            (window._ushMembers9||[]).forEach(function(m){if(m.user_id===uid)m.role=role;});
+            (window._ushRoleRows17||[]).forEach(function(m){if(m.user_id===uid)m.role=role;});
+            (window._myUsh||[]).forEach(function(m){if(m.ushirika_id===ushId&&m.user_id===uid)m.role=role;});
+            alert('✅ Role updated to '+role);
+            closeModalDirect();refresh();setTimeout(refresh,1000);
+          }else{
+            alert('⚠️ Verification found '+rows.length+' row(s): '+(rows.map(function(x){return x.role;}).join(', ')||'none'));
+          }
+        });
+      });
+    });
+  };
+
+  // role-based ushirika leaders can edit meetings
+  var _isl17=window.isUshLeaderOf;
+  window.isUshLeaderOf=function(id){
+    try{if(_isl17&&_isl17(id))return true;}catch(e){}
+    var lists=(window._myUsh||[]).concat(window._ushMembers9||[],window._ushRoleRows17||[]);
+    for(var i=0;i<lists.length;i++){var m=lists[i];if(m&&m.ushirika_id===id&&String(m.role||'').toLowerCase().indexOf('leader')>-1)return true;}
+    return false;
+  };
+  var _lau17=window.leadsAnyUsh;
+  window.leadsAnyUsh=function(){
+    try{if(_lau17&&_lau17())return true;}catch(e){}
+    var l=window._myUsh||[];
+    for(var i=0;i<l.length;i++){if(String(l[i].role||'').toLowerCase().indexOf('leader')>-1)return true;}
+    return false;
+  };
+
+  // ── CALM department weekly-meeting widget (redraw ONLY on change) ──
+  function calmRender17(deptId){
+    deptId=deptId||window.currentDeptId;
+    if(!sb||!deptId)return;
+    var host=document.getElementById('home-mainDept');if(!host)return;
+    var box=document.getElementById('deptWeekMeet17');
+    if(!box){box=document.createElement('div');box.id='deptWeekMeet17';host.insertBefore(box,host.firstChild.nextSibling||host.firstChild);}
+    sb.from('weekly_meetings').select('*').eq('department_id',deptId).order('created_at',{ascending:false}).limit(1).then(function(r){
+      var m=(r.data&&r.data[0])||null;
+      var canEdit=false;try{canEdit=typeof isDeptLeader9==='function'&&isDeptLeader9(deptId);}catch(e){}
+      var sig=JSON.stringify([m&&m.id,m&&m.meeting_date,m&&m.start_time,m&&m.end_time,m&&m.venue,m&&m.theme,canEdit]);
+      if(box.dataset.sig17===sig)return;              // ← unchanged → do nothing → no flicker
+      box.dataset.sig17=sig;
+      if(m)window._curMeetingId=m.id;
+      var h='<div class="card card-cool" style="margin-bottom:14px"><div class="section-title-app" style="margin-bottom:6px"><i class="fas fa-calendar-day"></i> This Week\'s Meeting</div>';
+      if(!m){h+='<div style="text-align:center;padding:14px;color:var(--text-lighter)">No meeting scheduled yet</div>';}
+      else{
+        h+='<div style="font-size:.9rem;line-height:1.8">'+
+          (m.meeting_date?'<div><b>📅 Date:</b> '+esc(m.meeting_date)+'</div>':'')+
+          (m.start_time?'<div><b>🕐 Time:</b> '+esc(m.start_time)+(m.end_time?' – '+esc(m.end_time):'')+'</div>':'')+
+          (m.venue?'<div><b>📍 Venue:</b> '+esc(m.venue)+'</div>':'')+
+          (m.theme?'<div><b>🎯 Theme:</b> '+esc(m.theme)+'</div>':'')+
+          mediaHTML(mediaOf(m))+'</div>';
+      }
+      if(canEdit){
+        h+='<div style="display:flex;gap:8px;margin-top:10px">'+
+          '<button class="btn btn-warm btn-sm" onclick="openDeptMeetingEditor(\''+deptId+'\')"><i class="fas fa-edit"></i> Update</button>'+
+          (m?'<button class="btn btn-danger btn-sm" onclick="deleteDeptMeeting17(\''+m.id+'\',\''+deptId+'\')"><i class="fas fa-trash"></i> Delete</button>':'')+
+          '</div>';
+      }
+      h+='</div>';
+      box.innerHTML=h;
+      // hide any older flickering widgets
+      var olds=host.querySelectorAll('#deptWeekMeet14,#ushWeekMeet9');
+      for(var i=0;i<olds.length;i++){if(olds[i].id!=='deptWeekMeet17')olds[i].style.display='none';}
+      var cards=host.querySelectorAll('.card');
+      for(var j=0;j<cards.length;j++){var t=cards[j].textContent||'';if(/This Week'?s Meeting/i.test(t)&&!box.contains(cards[j]))cards[j].style.display='none';}
+    });
+  }
+  window.deleteDeptMeeting17=function(mid,deptId){
+    deptId=deptId||window.currentDeptId;
+    if(!mid||!deptId)return alert('No meeting');
+    if(!(typeof isDeptLeader9==='function'&&isDeptLeader9(deptId)))return alert('🚫 Leader/admin only.');
+    if(!confirm('Delete this meeting?'))return;
+    sb.from('weekly_meetings').delete().eq('id',mid).then(function(r){
+      if(r.error)return alert('⚠️ '+r.error.message);
+      alert('✅ Deleted');window._curMeetingId=null;
+      var b=document.getElementById('deptWeekMeet17');if(b)b.dataset.sig17='';
+      calmRender17(deptId);
+    });
+  };
+  var _odf17=window.openDeptForum;
+  window.openDeptForum=function(id){
+    var r=_odf17?_odf17.apply(this,arguments):undefined;
+    setTimeout(function(){calmRender17(id);},800);
+    return r;
+  };
+  var _sdm17=window.saveDeptMeeting9;
+  window.saveDeptMeeting9=function(){
+    var deptId=(document.getElementById('dm9Pick')||{value:null}).value||window.currentDeptId;
+    var r=_sdm17?_sdm17.apply(this,arguments):undefined;
+    setTimeout(function(){var b=document.getElementById('deptWeekMeet17');if(b)b.dataset.sig17='';calmRender17(deptId);},1000);
+    return r;
+  };
+  var _um17=window.updateMeeting;
+  window.updateMeeting=function(){
+    var r=_um17?_um17.apply(this,arguments):undefined;
+    setTimeout(function(){var b=document.getElementById('deptWeekMeet17');if(b)b.dataset.sig17='';calmRender17(window.currentDeptId);},1000);
+    return r;
+  };
+  setInterval(function(){try{
+    var host=document.getElementById('home-mainDept');
+    if(host&&host.classList.contains('active'))calmRender17(window.currentDeptId);
+  }catch(e){}},5000);
+})();
+console.log('✝️ app17-append active (delete+insert roles + calm dept widget)');
