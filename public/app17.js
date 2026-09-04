@@ -179,7 +179,7 @@ console.log('✝️ app17.js v6 loading...');
     var ml = g('beMinList'); if (ml) ml.innerHTML = (window._min || []).map(function (m) { return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.85rem"><b>' + E(m.name) + '</b><button class="post-delete" onclick="beDelMinistry(\'' + m.id + '\')"><i class="fas fa-trash"></i></button></div>'; }).join('') || '<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>';
     var gl = g('beGalList'); if (gl) gl.innerHTML = (window._gal || []).map(function (x) { return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.85rem">' + (x.media_url ? '<img src="' + x.media_url + '" style="width:28px;height:28px;border-radius:4px;object-fit:cover">' : '') + '<b>' + E(x.title || 'Gallery') + '</b><button class="post-delete" onclick="beDelGallery(\'' + x.id + '\')"><i class="fas fa-trash"></i></button></div>'; }).join('') || '<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>';
     var al = g('beArtList'); if (al) al.innerHTML = (window._art || []).map(function (x) { return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.85rem"><b>' + E(x.title || '') + '</b> <span style="color:var(--text-light)">(' + E(x.category || '') + ')</span><button class="post-delete" onclick="beDelArticle(\'' + x.id + '\')"><i class="fas fa-trash"></i></button></div>'; }).join('') || '<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>';
-    var fl = g('beFeList'); if (fl) fl.innerHTML = (window._fp || []).map(function (p) { return '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;font-size:.85rem">' + (p.image_url ? '<img src="' + p.image_url + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover">' : '<div class="post-avatar" style="width:28px;height:28px;font-size:.65rem">' + ini(p.name) + '</div>') + '<b>' + E(p.name) + '</b> <span style="color:var(--text-light)">(' + E(p.role) + ')</span><button class="post-delete" onclick="beDelFeatured(\'' + p.id + '\')"><i class="fas fa-trash"></i></button></div>'; }).join('') || '<div style="color:var(--text-lighter);font-size:.8rem">None yet — add members below.</div>';
+    beFeRender();
   }
   window.beUpload = function (key) { var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = function () { if (i.files && i.files[0]) uploadMediaFile(i.files[0]).then(function (url) { g('be_' + key).value = url; alert('✅ Uploaded — press SAVE / ADD to keep it'); }); }; i.click(); };
   window.beAddBranch = function () { var n = g('be_brName').value.trim(); var a = g('be_brAddr').value.trim(); if (!n) return alert('Branch name required'); var cs = window._cs || {}; var br = (cs.branches || []).slice(); br.push({ name: n, address: a }); upsertAdaptive('church_settings', { id: 1, branches: br }, function (err) { if (err) return alert('⚠️ ' + err + '\nRun: alter table public.church_settings add column if not exists branches jsonb;'); cs.branches = br; g('be_brName').value = ''; g('be_brAddr').value = ''; beLists(); if (window.loadChurchBranding) loadChurchBranding().then(function () { if (window.renderPublicLanding) renderPublicLanding(); }); }); };
@@ -302,6 +302,89 @@ console.log('✝️ app17.js v6 loading...');
       if (c && c.verses && c.verses.length) return paint(out, c, ' <span class="chip chip-green">offline</span>');
       out.innerHTML = '<div style="color:#991B1B">Could not load ' + E(trans) + '. <button class="btn btn-primary btn-sm" onclick="loadBibleChapter()"><i class="fas fa-rotate-right"></i> Retry</button></div>';
     });
+  };
+
+/* ══ FEATURED v7: multiple + ordering + multi-select delete ══ */
+  window.loadFeatured = function () {
+    return sb.from('featured_people').select('*').order('sort', { ascending: true })
+      .then(function (r) { window._featured = r.data || []; })
+      .catch(function () {
+        return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function () { window._featured = []; });
+      });
+  };
+  function feSorted() {
+    var fp = (window._featured || []).slice();
+    fp.sort(function (a, b) { return ((a.sort == null) ? 9999 : a.sort) - ((b.sort == null) ? 9999 : b.sort); });
+    return fp;
+  }
+  function renderFeatured() {
+    var fp = feSorted(); if (!fp.length) return;
+    var wrap = g('featuredPeople');
+    if (!wrap) {
+      var sigEl = document.querySelector('.pastor-signature');
+      var hostEl = sigEl ? sigEl.parentNode : document.querySelector('.welcome-grid');
+      if (!hostEl) return;
+      wrap = document.createElement('div'); wrap.id = 'featuredPeople'; wrap.style.cssText = 'display:flex;flex-wrap:wrap;gap:12px';
+      hostEl.appendChild(wrap); if (sigEl) sigEl.style.display = 'none';
+    }
+    wrap.innerHTML = fp.map(function (p) {
+      var pic = p.image_url ? '<img src="' + p.image_url + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover">' : '<div class="pastor-avatar">' + ini(p.name) + '</div>';
+      return '<div style="flex:1;min-width:180px;display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.07)">' + pic + '<div><div class="pastor-name">' + E(p.name) + '</div><div class="pastor-title" style="display:block">' + E(p.role) + '</div></div></div>';
+    }).join('');
+  }
+  function beFeReload(done) {
+    sb.from('featured_people').select('*').then(function (r) {
+      window._fp = r.data || []; window._featured = r.data || [];
+      beFeRender();
+      if (window.renderPublicLanding) renderPublicLanding();
+      if (done) done();
+    });
+  }
+  function beFeRender() {
+    var fl = g('beFeList'); if (!fl) return;
+    var fp = feSorted(); window._fp = fp;
+    if (!fp.length) { fl.innerHTML = '<div style="color:var(--text-lighter);font-size:.8rem">None yet — add members below.</div>'; return; }
+    fl.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><button class="btn btn-danger btn-sm" onclick="beFeDelSelected()"><i class="fas fa-trash"></i> Delete selected</button><span style="font-size:.7rem;color:var(--text-light)">tick = select • ▲▼ = reorder</span></div>' +
+      fp.map(function (p, i) {
+        return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:.85rem">' +
+          '<input type="checkbox" class="beFeChk" value="' + p.id + '" style="width:16px;height:16px">' +
+          (p.image_url ? '<img src="' + p.image_url + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover">' : '<div class="post-avatar" style="width:28px;height:28px;font-size:.65rem">' + ini(p.name) + '</div>') +
+          '<div style="flex:1"><b>' + E(p.name) + '</b> <span style="color:var(--text-light)">(' + E(p.role) + ')</span></div>' +
+          '<button class="btn btn-secondary-alt btn-sm" onclick="beFeMove(' + i + ',-1)">▲</button>' +
+          '<button class="btn btn-secondary-alt btn-sm" onclick="beFeMove(' + i + ',1)">▼</button>' +
+          '<button class="post-delete" onclick="beDelFeatured(\'' + p.id + '\')"><i class="fas fa-trash"></i></button>' +
+          '</div>';
+      }).join('');
+  }
+  window.beFeMove = function (i, dir) {
+    var fp = feSorted(); var j = i + dir; if (j < 0 || j >= fp.length) return;
+    var tmp = fp[i]; fp[i] = fp[j]; fp[j] = tmp;
+    window._featured = fp;
+    var writes = fp.map(function (p, idx) { return sb.from('featured_people').update({ sort: idx }).eq('id', p.id); });
+    Promise.all(writes).then(function () {
+      beFeRender(); if (window.renderPublicLanding) renderPublicLanding();
+    }).catch(function () {
+      alert('⚠️ To save the order, run once in SQL Editor:\nalter table public.featured_people add column if not exists sort int;');
+      beFeRender();
+    });
+  };
+  window.beFeDelSelected = function () {
+    var ids = []; document.querySelectorAll('.beFeChk').forEach(function (c) { if (c.checked) ids.push(c.value); });
+    if (!ids.length) return alert('Tick members to delete first');
+    if (!confirm('Delete ' + ids.length + ' featured member(s)?')) return;
+    Promise.all(ids.map(function (id) { return sb.from('featured_people').delete().eq('id', id); })).then(function () { beFeReload(); });
+  };
+  window.beAddFeatured = function (uid) {
+    rolesFor(uid).then(function (info) {
+      var payload = { user_id: uid, name: info.name, role: info.role, image_url: info.pic || null, sort: (window._featured || []).length };
+      sb.from('featured_people').insert([payload]).then(function (r) {
+        if (r && r.error && /sort/.test(r.error.message)) { delete payload.sort; return sb.from('featured_people').insert([payload]); }
+        return r;
+      }).then(function () { alert('✅ Added to front page'); beFeReload(); });
+    });
+  };
+  window.beDelFeatured = function (id) {
+    sb.from('featured_people').delete().eq('id', id).then(function () { beFeReload(); });
   };
 })();
 console.log('✝️ app17.js v6 active');
