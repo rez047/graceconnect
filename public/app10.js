@@ -1659,3 +1659,31 @@ console.log('✝️ app17-append active (delete+insert roles + calm dept widget)
   
   console.log('✝️ Production fixes active');
 })();
+
+
+// FIX: Hide blue card, stop flicker, fix Bible Swahili
+(function(){
+  var s=document.createElement('style');
+  s.textContent='#home-mainDept .card-cool{display:none!important}';
+  document.head.appendChild(s);
+  
+  var _ld=window.loadBibleChapter;
+  window.loadBibleChapter=function(){
+    var t=(document.getElementById('readerTrans')||{}).value||'KJV';
+    var r=(document.getElementById('readerRef')||{value:'Genesis 1'}).value;
+    var p=r.match(/^(.+?)\s+(\d+)$/);
+    var b=p?p[1]:'Genesis',c=p?p[2]:1;
+    var o=document.getElementById('readerOut');
+    if(!o)return;
+    o.innerHTML='Loading...';
+    fetch('/api/bible?translation='+(t==='Swahili'?'swahili':t.toLowerCase())+'&book='+encodeURIComponent(b)+'&chapter='+c+'&_='+Date.now(),{cache:'no-store'})
+      .then(function(r){return r.json();})
+      .then(function(d){
+        if(!d.verses){o.innerHTML='Not found';return;}
+        var h='<b>'+esc(d.reference||b+' '+c)+'</b><br>';
+        d.verses.forEach(function(v){h+='<span onclick="this.style.background=\'#FEF3C7\'"><sup>'+v.verse+'</sup> '+esc(v.text)+'</span> ';});
+        o.innerHTML=h;
+      })
+      .catch(function(e){o.innerHTML='Error: '+e.message;});
+  };
+})();
