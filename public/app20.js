@@ -49,14 +49,15 @@ console.log('✝️ app18.js v6 loading...');
     if (cb.hero_image_url) { var hero = g('heroSection'); if (hero) hero.style.backgroundImage = 'url(' + cb.hero_image_url + ')'; }
   }
 
-  /* ══ FIX 3: socials with built-in SVG logos ══ */
+  /* ══ FIX 3: socials with built-in SVG logos (+ Google Maps "Tap for location") ══ */
   var SOCIALS = [
     ['facebook', 'Facebook', 'M24 12.073C24 5.446 18.627.073 12 .073S0 5.446 0 12.073c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z'],
     ['instagram', 'Instagram', 'M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zm0 10.162a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z'],
     ['whatsapp', 'WhatsApp', 'M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z'],
     ['youtube', 'YouTube', 'M23.498 6.186a3.016 3.016 0 00-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 00.502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 002.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 002.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z'],
     ['tiktok', 'TikTok', 'M12.525.02c1.31-.02 2.61-.01 3.91-.02.08 1.53.63 3.09 1.75 4.17 1.12 1.11 2.7 1.62 4.24 1.79v4.03c-1.44-.05-2.89-.35-4.2-.97-.57-.26-1.1-.59-1.62-.93-.01 2.92.01 5.84-.02 8.75-.08 1.4-.54 2.79-1.35 3.94-1.31 1.92-3.58 3.17-5.91 3.21-1.43.08-2.86-.31-4.08-1.03-2.02-1.19-3.44-3.37-3.65-5.71-.02-.5-.03-1-.01-1.49.18-1.9 1.12-3.72 2.58-4.96 1.66-1.44 3.98-2.13 6.15-1.72.02 1.48-.04 2.96-.04 4.44-.99-.32-2.15-.23-3.02.37-.63.41-1.11 1.04-1.36 1.75-.21.51-.15 1.07-.14 1.61.24 1.64 1.82 3.02 3.5 2.87 1.12-.01 2.19-.66 2.77-1.61.19-.33.4-.67.41-1.06.1-1.79.06-3.57.07-5.36.01-4.03-.01-8.05.02-12.07z'],
-    ['x', 'X (Twitter)', 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932zM17.61 20.644h2.039L6.486 3.24H4.298z']
+    ['x', 'X (Twitter)', 'M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932zM17.61 20.644h2.039L6.486 3.24H4.298z'],
+    ['maps', 'Tap for location', 'M12 0C7.58 0 4 3.58 4 8c0 5.25 8 13 8 13s8-7.75 8-13c0-4.42-3.58-8-8-8zm0 11c-1.66 0-3-1.34-3-3s1.34-3 3-3 3 1.34 3 3-1.34 3-3 3z']
   ];
   function socialIcon(s, size) { return '<svg viewBox="0 0 24 24" width="' + (size || 22) + '" height="' + (size || 22) + '" fill="currentColor" aria-hidden="true" style="vertical-align:middle"><path d="' + s[2] + '"/></svg>'; }
   function fixSocials() {
@@ -115,7 +116,8 @@ console.log('✝️ app18.js v6 loading...');
     var wrapEl = featuredHost(); if (!wrapEl) return;
     wrapEl.innerHTML = fp.map(function (p) {
       var pic = p.image_url ? '<img src="' + p.image_url + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover">' : '<div class="pastor-avatar">' + ini(p.name) + '</div>';
-      return '<div style="flex:1;min-width:180px;max-width:280px;display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.07)">' + pic + '<div><div class="pastor-name">' + E(p.name) + '</div><div class="pastor-title" style="display:block">' + E(p.role) + '</div></div></div>';
+      var extra = p.additional_info ? '<div style="font-size:.7rem;color:var(--text-lighter);margin-top:4px;line-height:1.4">' + E(p.additional_info) + '</div>' : '';
+      return '<div style="flex:1;min-width:180px;max-width:280px;display:flex;align-items:center;gap:12px;background:#fff;border-radius:16px;padding:16px;box-shadow:0 4px 6px -1px rgba(0,0,0,.07)">' + pic + '<div style="flex:1;min-width:0"><div class="pastor-name">' + E(p.name) + '</div><div class="pastor-title" style="display:block">' + E(p.role) + '</div>' + extra + '</div></div>';
     }).join('');
   }
   var _feLoadT = 0;
@@ -162,18 +164,51 @@ console.log('✝️ app18.js v6 loading...');
   window.addDoc21 = function () { var t = g('doc_title').value.trim(); if (!t || !window._docUrl) return alert('Title + file required'); sb.from('documents').insert([{ title: t, category: g('doc_cat').value, file_url: window._docUrl }]).then(function () { g('doc_title').value = ''; window._docUrl = null; docListRender(); if (typeof loadDocuments === 'function') loadDocuments(); }); };
   window.delDoc21 = function (id) { if (!confirm('Delete document?')) return; sb.from('documents').delete().eq('id', id).then(function () { docListRender(); if (typeof loadDocuments === 'function') loadDocuments().then(function () { if (window.renderPublicLanding) renderPublicLanding(); }); }); };
 
-  /* ══ FEATURED MEMBERS v6 — DELEGATED TAPS (taps now ALWAYS register) ══ */
-  var FE_SQL = 'Run once in Supabase SQL Editor:\n\ncreate table if not exists public.featured_people (id uuid primary key default gen_random_uuid(), user_id uuid, name text, role text, image_url text, sort int default 0);\nalter table public.featured_people add column if not exists sort int;\ncreate policy "featured_ins" on public.featured_people for insert to authenticated with check (true);\ncreate policy "featured_upd" on public.featured_people for update using (true);\ncreate policy "featured_del" on public.featured_people for delete using (true);';
-  window.loadFeatured = function () { return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function () { window._featured = []; }); };
+  /* ══ FEATURED MEMBERS v7 — fixed taps + manual add + additional info ══ */
+  var FE_SQL = 'Run once in Supabase SQL Editor:\n\ncreate table if not exists public.featured_people (id uuid primary key default gen_random_uuid(), user_id uuid, name text, role text, image_url text, sort int default 0, additional_info text);\nalter table public.featured_people add column if not exists sort int;\nalter table public.featured_people add column if not exists additional_info text;\ncreate policy "featured_sel" on public.featured_people for select using (true);\ncreate policy "featured_ins" on public.featured_people for insert to authenticated with check (true);\ncreate policy "featured_upd" on public.featured_people for update using (true);\ncreate policy "featured_del" on public.featured_people for delete using (true);';
+  window.loadFeatured = function () { return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function (err) { console.warn('⚠️ loadFeatured() failed:', err); window._featured = []; }); };
   if (!g('feMgrModal')) document.body.insertAdjacentHTML('beforeend',
     '<div class="modal-overlay" id="feMgrModal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
     '<div class="modal-title">⭐ Featured Members (front page)</div>' +
     '<div id="feList21"></div>' +
-    '<button class="btn btn-primary btn-sm" onclick="feShowPicker21()"><i class="fas fa-plus"></i> Add member(s)</button>' +
+    '<div style="display:flex;gap:6px;flex-wrap:wrap"><button class="btn btn-primary btn-sm" onclick="feShowPicker21()"><i class="fas fa-plus"></i> Add member(s)</button>' +
+    '<button class="btn btn-secondary-alt btn-sm" onclick="openFeManualModal()"><i class="fas fa-user-plus"></i> Add person (not in system)</button></div>' +
     '<div id="fePicker21" style="display:none;margin-top:6px;max-height:300px;overflow-y:auto"></div>' +
     '<button class="btn btn-primary btn-block" style="margin-top:12px" onclick="feSave21()"><i class="fas fa-save"></i> SAVE & UPDATE FRONT PAGE</button>' +
     '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Close</button>' +
     '</div></div>');
+
+  /* ── Manual person modal (photo + name + title + optional info) ── */
+  if (!g('feManualModal')) document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-overlay" id="feManualModal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
+    '<div class="modal-title">📝 Add Person (not in system)</div>' +
+    '<div class="media-upload" id="feManPic" onclick="feManUpload()"><i class="fas fa-camera"></i><span>Tap to choose photo</span></div>' +
+    '<div class="form-group"><label class="form-label">Name *</label><input class="form-input" id="feManName" placeholder="e.g. Pastor John Kamau"></div>' +
+    '<div class="form-group"><label class="form-label">Title *</label><input class="form-input" id="feManRole" placeholder="e.g. Youth Patron"></div>' +
+    '<div class="form-group"><label class="form-label">Additional info (optional)</label><textarea class="form-textarea" id="feManInfo" rows="2" placeholder="e.g. Serving since 2015…"></textarea></div>' +
+    '<button class="btn btn-primary btn-block" onclick="feAddManual()"><i class="fas fa-plus"></i> Add to front page</button>' +
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Cancel</button>' +
+    '</div></div>');
+  window.feManUpload = function () { var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = function () { if (i.files && i.files[0]) uploadMediaFile(i.files[0]).then(function (url) { window._feManPic = url; var b = g('feManPic'); if (b) b.innerHTML = '<i class="fas fa-check-circle" style="color:var(--accent)"></i><span>Photo ready ✔</span>'; }); }; i.click(); };
+  window.openFeManualModal = function () { window._feManPic = null; var b = g('feManPic'); if (b) b.innerHTML = '<i class="fas fa-camera"></i><span>Tap to choose photo</span>'; g('feManName').value = ''; g('feManRole').value = ''; g('feManInfo').value = ''; openModal('feManualModal'); };
+  window.feAddManual = function () {
+    var name = g('feManName').value.trim(); var role = g('feManRole').value.trim(); var info = g('feManInfo').value.trim();
+    if (!name) return alert('Please enter a name.');
+    var payload = { user_id: null, name: name, role: role || 'Member', image_url: window._feManPic || null, sort: (window._featured || []).length, additional_info: info || null };
+    (function tryInsert(p) {
+      sb.from('featured_people').insert([p]).then(function (r) {
+        if (r && r.error) {
+          var m = r.error.message || '';
+          if (/sort/.test(m)) { delete p.sort; return tryInsert(p); }
+          if (/additional_info/.test(m)) { delete p.additional_info; return tryInsert(p); }
+          return alert('⚠️ Could not add: ' + m + '\n\n' + FE_SQL);
+        }
+        alert('✅ ' + name + ' added to front page!');
+        closeModalDirect();
+        loadFeatured().then(function () { feRender21(); renderFeaturedLanding(); });
+      }).catch(function (err) { alert('⚠️ Insert failed: ' + (err && err.message ? err.message : err) + '\n\n' + FE_SQL); });
+    })(payload);
+  };
 
   function feRender21() {
     var fp = feSorted(); var box = g('feList21'); if (!box) return;
@@ -188,7 +223,7 @@ console.log('✝️ app18.js v6 loading...');
       return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:.85rem;padding:6px;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)">' +
         '<input type="checkbox" class="feChk21" value="' + p.id + '" style="width:18px;height:18px;flex-shrink:0">' +
         (p.image_url ? '<img src="' + p.image_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">' : '<div class="post-avatar" style="width:32px;height:32px;font-size:.65rem;flex-shrink:0">' + ini(p.name) + '</div>') +
-        '<div style="flex:1;min-width:0"><b>' + E(p.name) + '</b><div style="font-size:.7rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(p.role) + '</div></div>' +
+        '<div style="flex:1;min-width:0"><b>' + E(p.name) + '</b><div style="font-size:.7rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(p.role) + '</div>' + (p.additional_info ? '<div style="font-size:.65rem;color:var(--text-lighter)">' + E(p.additional_info) + '</div>' : '') + '</div>' +
         '<button class="btn btn-secondary-alt btn-sm" style="padding:4px 8px" onclick="feMove21(' + i + ',-1)">▲</button>' +
         '<button class="btn btn-secondary-alt btn-sm" style="padding:4px 8px" onclick="feMove21(' + i + ',1)">▼</button>' +
         '<button class="post-delete" onclick="feDelOne21(\'' + p.id + '\')"><i class="fas fa-trash"></i></button>' +
@@ -223,9 +258,7 @@ console.log('✝️ app18.js v6 loading...');
     });
   };
 
-  /* THIS IS THE KEY FIX: delegated click listener on the picker.
-     Every tap on any [data-fe-add] row fires feAdd21 with that row's user_id.
-     Works even when modal events bubble strangely. */
+  /* delegated click listener on the picker — e.preventDefault() removed for iOS */
   var pickerBound = false;
   function bindPickerTaps() {
     if (pickerBound) return;
@@ -233,13 +266,11 @@ console.log('✝️ app18.js v6 loading...');
     if (!pk) return;
     pickerBound = true;
     pk.addEventListener('click', function (e) {
-      e.preventDefault();
       e.stopPropagation();
       var row = e.target;
       while (row && row !== pk && row.nodeType === 1) {
         var uid = row.getAttribute && row.getAttribute('data-fe-add');
         if (uid) {
-          // Visual feedback: flash green
           row.style.background = '#D1FAE5';
           row.style.transition = 'background .3s';
           setTimeout(function () { row.style.background = ''; }, 400);
@@ -251,11 +282,15 @@ console.log('✝️ app18.js v6 loading...');
     }, false);
   }
 
-  window.feShowPicker21 = function () {
+  window.feShowPicker21 = function (refresh) {
     var pk = g('fePicker21');
     if (!pk) return alert('Picker not ready');
-    pk.style.display = pk.style.display === 'none' ? 'block' : 'none';
-    if (pk.style.display === 'none') return;
+    if (!refresh) {
+      pk.style.display = pk.style.display === 'none' ? 'block' : 'none';
+      if (pk.style.display === 'none') return;
+    } else if (pk.style.display === 'none') {
+      return;
+    }
     bindPickerTaps();
     pk.innerHTML = '<div style="padding:10px;color:var(--text-lighter)">Loading members…</div>';
     sb.from('profiles').select('id,name,role,profile_pic').order('name').then(function (r) {
@@ -288,7 +323,7 @@ console.log('✝️ app18.js v6 loading...');
           alert('✅ ' + info.name + ' added to front page!');
           loadFeatured().then(function () {
             feRender21();
-            feShowPicker21();  // re-show picker (already open, refreshed list)
+            feShowPicker21(true);
             renderFeaturedLanding();
           });
         }).catch(function (err) {
