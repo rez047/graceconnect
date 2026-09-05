@@ -1,5 +1,5 @@
-// app18.js v4 — landing fixes + notifications + profile + docs + socials + featured + branches
-console.log('✝️ app18.js v4 loading...');
+// app18.js v5 — landing fixes + notifications + profile + docs + socials + featured + branches
+console.log('✝️ app18.js v5 loading...');
 (function () {
   function g(id) { return document.getElementById(id); }
   function E(x) { return (typeof esc === 'function') ? esc(x) : String(x == null ? '' : x).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
@@ -83,9 +83,8 @@ console.log('✝️ app18.js v4 loading...');
     ['church_name', 'tagline', 'welcome_message', 'location', 'pastor_name', 'pastor_title', 'hero_image', 'pastor_image', 'church_photo_url'].forEach(function (k) {
       var el = g('be_' + k); if (!el) return;
       var v = el.value.trim();
-      if (el.dataset.clear === '1') p[k] = null;      // explicit trash press
-      else if (v) p[k] = v;                            // typed / uploaded
-      // empty = leave unchanged (protects existing data)
+      if (el.dataset.clear === '1') p[k] = null;
+      else if (v) p[k] = v;
     });
     upsertSafe('church_settings', p, function (err) {
       if (err) return alert('⚠️ ' + err);
@@ -163,16 +162,103 @@ console.log('✝️ app18.js v4 loading...');
   window.addDoc21 = function () { var t = g('doc_title').value.trim(); if (!t || !window._docUrl) return alert('Title + file required'); sb.from('documents').insert([{ title: t, category: g('doc_cat').value, file_url: window._docUrl }]).then(function () { g('doc_title').value = ''; window._docUrl = null; docListRender(); if (typeof loadDocuments === 'function') loadDocuments(); }); };
   window.delDoc21 = function (id) { if (!confirm('Delete document?')) return; sb.from('documents').delete().eq('id', id).then(function () { docListRender(); if (typeof loadDocuments === 'function') loadDocuments().then(function () { if (window.renderPublicLanding) renderPublicLanding(); }); }); };
 
-  /* ══ FEATURED MEMBERS manager (multi + order) ══ */
-  window.loadFeatured = function () { return sb.from('featured_people').select('*').order('sort', { ascending: true }).then(function (r) { window._featured = r.data || []; }).catch(function () { return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function () { window._featured = []; }); }); };
-  if (!g('feMgrModal')) document.body.insertAdjacentHTML('beforeend', '<div class="modal-overlay" id="feMgrModal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title">⭐ Featured Members (front page)</div><div id="feList21"></div><button class="btn btn-primary btn-sm" onclick="feShowPicker21()"><i class="fas fa-plus"></i> Add member(s)</button><div id="fePicker21" class="user-picker" style="display:none;margin-top:6px"></div><button class="btn btn-secondary-alt btn-block" style="margin-top:10px" onclick="closeModalDirect()">Close</button></div></div>');
-  function feRender21() { var fp = feSorted(); var box = g('feList21'); if (!box) return; if (!fp.length) { box.innerHTML = '<div style="color:var(--text-lighter);font-size:.8rem">None yet.</div>'; return; } box.innerHTML = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:6px"><button class="btn btn-danger btn-sm" onclick="feDelSel21()"><i class="fas fa-trash"></i> Delete selected</button><span style="font-size:.7rem;color:var(--text-light)">tick = select • ▲▼ = order</span></div>' + fp.map(function (p, i) { return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:.85rem"><input type="checkbox" class="feChk21" value="' + p.id + '" style="width:16px;height:16px">' + (p.image_url ? '<img src="' + p.image_url + '" style="width:28px;height:28px;border-radius:50%;object-fit:cover">' : '<div class="post-avatar" style="width:28px;height:28px;font-size:.65rem">' + ini(p.name) + '</div>') + '<div style="flex:1"><b>' + E(p.name) + '</b> <span style="color:var(--text-light)">(' + E(p.role) + ')</span></div><button class="btn btn-secondary-alt btn-sm" onclick="feMove21(' + i + ',-1)">▲</button><button class="btn btn-secondary-alt btn-sm" onclick="feMove21(' + i + ',1)">▼</button><button class="post-delete" onclick="feDelOne21(\'' + p.id + '\')"><i class="fas fa-trash"></i></button></div>'; }).join(''); }
+  /* ══ FEATURED MEMBERS manager (multi-select + order + save) ══ */
+  var FE_SQL = 'Run once in Supabase SQL Editor:\n\ncreate policy "featured_ins" on public.featured_people for insert to authenticated with check (true);\ncreate policy "featured_upd" on public.featured_people for update using (true);\ncreate policy "featured_del" on public.featured_people for delete using (true);\nalter table public.featured_people add column if not exists sort int;';
+  window.loadFeatured = function () { return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function () { window._featured = []; }); };
+  if (!g('feMgrModal')) document.body.insertAdjacentHTML('beforeend',
+    '<div class="modal-overlay" id="feMgrModal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
+    '<div class="modal-title">⭐ Featured Members (front page)</div>' +
+    '<div id="feList21"></div>' +
+    '<button class="btn btn-primary btn-sm" onclick="feShowPicker21()"><i class="fas fa-plus"></i> Add member(s)</button>' +
+    '<div id="fePicker21" class="user-picker" style="display:none;margin-top:6px"></div>' +
+    '<button class="btn btn-primary btn-block" style="margin-top:12px" onclick="feSave21()"><i class="fas fa-save"></i> SAVE & UPDATE FRONT PAGE</button>' +
+    '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Close</button>' +
+    '</div></div>');
+  function feRender21() {
+    var fp = feSorted(); var box = g('feList21'); if (!box) return;
+    var toolbar = '<div style="display:flex;gap:6px;align-items:center;margin-bottom:8px;padding:8px;background:var(--bg-light);border-radius:8px">' +
+      '<button class="btn btn-danger btn-sm" onclick="feDelSel21()"><i class="fas fa-trash"></i> Delete selected</button>' +
+      '<span style="font-size:.7rem;color:var(--text-light);flex:1;text-align:right">☑ tick to select • ▲▼ reorder</span></div>';
+    if (!fp.length) {
+      box.innerHTML = toolbar + '<div style="text-align:center;padding:20px;color:var(--text-lighter)">No featured members yet.<br>Press <b>"Add member(s)"</b> below to pick people.</div>';
+      return;
+    }
+    box.innerHTML = toolbar + fp.map(function (p, i) {
+      return '<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;font-size:.85rem;padding:6px;border-radius:8px;background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.06)">' +
+        '<input type="checkbox" class="feChk21" value="' + p.id + '" style="width:18px;height:18px;flex-shrink:0">' +
+        (p.image_url ? '<img src="' + p.image_url + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">' : '<div class="post-avatar" style="width:32px;height:32px;font-size:.65rem;flex-shrink:0">' + ini(p.name) + '</div>') +
+        '<div style="flex:1;min-width:0"><b>' + E(p.name) + '</b><div style="font-size:.7rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(p.role) + '</div></div>' +
+        '<button class="btn btn-secondary-alt btn-sm" style="padding:4px 8px" onclick="feMove21(' + i + ',-1)" title="Move up">▲</button>' +
+        '<button class="btn btn-secondary-alt btn-sm" style="padding:4px 8px" onclick="feMove21(' + i + ',1)" title="Move down">▼</button>' +
+        '<button class="post-delete" onclick="feDelOne21(\'' + p.id + '\')" title="Remove"><i class="fas fa-trash"></i></button>' +
+        '</div>';
+    }).join('');
+  }
   window.openFeaturedMgr = function () { openModal('feMgrModal'); loadFeatured().then(feRender21); };
-  window.feMove21 = function (i, dir) { var fp = feSorted(); var j = i + dir; if (j < 0 || j >= fp.length) return; var t = fp[i]; fp[i] = fp[j]; fp[j] = t; window._featured = fp; Promise.all(fp.map(function (p, idx) { return sb.from('featured_people').update({ sort: idx }).eq('id', p.id); })).then(function () { feRender21(); applyLanding(); }).catch(function () { alert('⚠️ Run once in SQL Editor:\nalter table public.featured_people add column if not exists sort int;'); feRender21(); }); };
-  window.feDelSel21 = function () { var ids = []; document.querySelectorAll('.feChk21').forEach(function (c) { if (c.checked) ids.push(c.value); }); if (!ids.length) return alert('Tick members first'); if (!confirm('Delete ' + ids.length + ' featured member(s)?')) return; Promise.all(ids.map(function (id) { return sb.from('featured_people').delete().eq('id', id); })).then(function () { loadFeatured().then(function () { feRender21(); applyLanding(); }); }); };
-  window.feDelOne21 = function (id) { sb.from('featured_people').delete().eq('id', id).then(function () { loadFeatured().then(function () { feRender21(); applyLanding(); }); }); };
-  window.feShowPicker21 = function () { var pk = g('fePicker21'); pk.style.display = pk.style.display === 'none' ? 'block' : 'none'; sb.from('profiles').select('id,name,role,profile_pic').order('name').then(function (r) { pk.innerHTML = (r.data || []).map(function (u) { return '<div class="user-pick-item" onclick="feAdd21(\'' + u.id + '\')">' + (u.profile_pic ? '<img src="' + u.profile_pic + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover">' : '<div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">' + ini(u.name) + '</div>') + '<div style="flex:1"><div style="font-weight:600">' + E(u.name) + '</div><div style="font-size:.7rem;color:var(--text-light)">' + E(u.role) + '</div></div></div>'; }).join(''); }); };
-  window.feAdd21 = function (uid) { rolesFor(uid).then(function (info) { var payload = { user_id: uid, name: info.name, role: info.role, image_url: info.pic || null, sort: (window._featured || []).length }; sb.from('featured_people').insert([payload]).then(function (r) { if (r && r.error && /sort/.test(r.error.message)) { delete payload.sort; return sb.from('featured_people').insert([payload]); } return r; }).then(function () { loadFeatured().then(function () { feRender21(); applyLanding(); }); }); }); };
+  window.feMove21 = function (i, dir) {
+    var fp = feSorted(); var j = i + dir; if (j < 0 || j >= fp.length) return;
+    var t = fp[i]; fp[i] = fp[j]; fp[j] = t; window._featured = fp;
+    Promise.all(fp.map(function (p, idx) { return sb.from('featured_people').update({ sort: idx }).eq('id', p.id); }))
+      .then(function () { feRender21(); renderFeaturedLanding(); })
+      .catch(function () { alert('⚠️ ' + FE_SQL); feRender21(); });
+  };
+  window.feDelSel21 = function () {
+    var ids = []; document.querySelectorAll('.feChk21').forEach(function (c) { if (c.checked) ids.push(c.value); });
+    if (!ids.length) return alert('Tick the checkboxes next to members you want to remove first.');
+    if (!confirm('Delete ' + ids.length + ' featured member(s) from front page?')) return;
+    Promise.all(ids.map(function (id) { return sb.from('featured_people').delete().eq('id', id); })).then(function () {
+      loadFeatured().then(function () { feRender21(); renderFeaturedLanding(); });
+    });
+  };
+  window.feDelOne21 = function (id) {
+    if (!confirm('Remove this member from front page?')) return;
+    sb.from('featured_people').delete().eq('id', id).then(function (r) {
+      if (r && r.error) return alert('⚠️ ' + r.error.message + '\n\n' + FE_SQL);
+      loadFeatured().then(function () { feRender21(); renderFeaturedLanding(); });
+    });
+  };
+  window.feShowPicker21 = function () {
+    var pk = g('fePicker21');
+    pk.style.display = pk.style.display === 'none' ? 'block' : 'none';
+    if (pk.style.display === 'none') return;
+    pk.innerHTML = '<div style="padding:10px;color:var(--text-lighter)">Loading members…</div>';
+    sb.from('profiles').select('id,name,role,profile_pic').order('name').then(function (r) {
+      var existing = (window._featured || []).map(function (f) { return f.user_id; });
+      var available = (r.data || []).filter(function (u) { return existing.indexOf(u.id) === -1; });
+      if (!available.length) { pk.innerHTML = '<div style="padding:10px;color:var(--text-lighter)">All members already featured.</div>'; return; }
+      pk.innerHTML = '<div style="font-size:.75rem;color:var(--text-light);margin-bottom:6px">Tap a member to add them:</div>' +
+        available.map(function (u) {
+          return '<div class="user-pick-item" onclick="feAdd21(\'' + u.id + '\')" style="cursor:pointer">' +
+            (u.profile_pic ? '<img src="' + u.profile_pic + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover">' : '<div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">' + ini(u.name) + '</div>') +
+            '<div style="flex:1"><div style="font-weight:600">' + E(u.name) + '</div><div style="font-size:.7rem;color:var(--text-light)">' + E(u.role) + '</div></div>' +
+            '<i class="fas fa-plus" style="color:var(--accent)"></i></div>';
+        }).join('');
+    });
+  };
+  window.feAdd21 = function (uid) {
+    var dup = (window._featured || []).some(function (p) { return p.user_id === uid; });
+    if (dup) return alert('This member is already featured.');
+    rolesFor(uid).then(function (info) {
+      var payload = { user_id: uid, name: info.name, role: info.role, image_url: info.pic || null, sort: (window._featured || []).length };
+      (function tryInsert(p) {
+        sb.from('featured_people').insert([p]).then(function (r) {
+          if (r && r.error) {
+            if (/sort/.test(r.error.message)) { delete p.sort; return tryInsert(p); }
+            return alert('⚠️ Could not add: ' + r.error.message + '\n\n' + FE_SQL);
+          }
+          alert('✅ ' + info.name + ' added!');
+          loadFeatured().then(function () { feRender21(); feShowPicker21(); renderFeaturedLanding(); });
+        });
+      })(payload);
+    });
+  };
+  window.feSave21 = function () {
+    loadFeatured().then(function () {
+      renderFeaturedLanding();
+      alert('✅ Front page updated with ' + (window._featured || []).length + ' featured member(s)');
+      closeModalDirect();
+    });
+  };
 
   /* ══ inject manager buttons ══ */
   setInterval(function () {
@@ -182,7 +268,7 @@ console.log('✝️ app18.js v4 loading...');
     if (panel && !g('discMgr21')) { var d = document.createElement('div'); d.id = 'discMgr21'; d.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px'; d.innerHTML = '<button class="btn btn-warm btn-block btn-sm" onclick="openFeaturedMgr()"><i class="fas fa-star"></i> Featured Members</button><button class="btn btn-warm btn-block btn-sm" onclick="openDocsMgr()"><i class="fas fa-file"></i> Documents</button><button class="btn btn-warm btn-block btn-sm" onclick="openSocialsEditor()"><i class="fas fa-share-alt"></i> Social Links</button>'; panel.appendChild(d); }
   }, 2500);
 })();
-console.log('✝️ app18.js v4 main active');
+console.log('✝️ app18.js v5 main active');
 
 /* ═══════════════════════════════════════════════════════════
    BRANCHES — FULL REWRITE: real data only, placeholders killed.
@@ -226,4 +312,4 @@ console.log('✝️ app18.js v4 main active');
   setInterval(fixBranches, 2000);
   if (window.loadChurchBranding) window.loadChurchBranding().then(fixBranches);
 })();
-console.log('✝️ app18.js v4 complete with branches + socials + featured');
+console.log('✝️ app18.js v5 complete');
