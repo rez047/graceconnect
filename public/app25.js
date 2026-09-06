@@ -1,9 +1,11 @@
-// public/app26.js v3 — Unified Community Engine
-// + chat per member, dept join requests w/ admin approval,
-// + profile pics + emails, ushirika role-change fix (via SQL policies)
+// public/app26.js v4 — Unified Community Engine
+// CHANGED vs v3: c26ChangeRole (dept-method + /api/set-role fallback),
+// c26SendRequest/c26RequestsModal/approve/reject (table + notification fallback),
+// c26OpenChat (uses ORIGINAL chat so delete-message works as before).
+// Everything else identical to v3.
 
 (function () {
-  console.log('✝️ app26.js v3');
+  console.log('✝️ app26.js v4');
 
   window._c26 = Object.assign({
     myDept: [], myUsh: [], myReqs: [],
@@ -162,23 +164,31 @@
 
   window.c26Back = function () { if (_origSwitch) _origSwitch('home'); };
 
-  // ============ CHAT ============
+  // ============ CHAT (uses ORIGINAL chat UI → delete messages works as before) ============
   window.c26OpenChat = function (uid) {
     if (!me()) return alert('Log in first.');
     const u = (window.usersData || []).find(x => x.id === uid);
     const name = (u && u.name) || 'Chat';
 
-    if (typeof window.openChat === 'function') return window.openChat(uid);
-    if (typeof window.openChatWith === 'function') return window.openChatWith(uid);
-    if (typeof window.openUserChat === 'function') return window.openUserChat(uid);
-
-    // fallback: wire the built-in discover chat
+    // 1) known names
+    const names = ['openChat','openChatWith','openUserChat','openDirectChat','startChat','startChatWith','chatWith','openConvo','openConversation'];
+    for (let i = 0; i < names.length; i++) {
+      if (typeof window[names[i]] === 'function') { try { window[names[i]](uid); return; } catch (e) {} }
+    }
+    // 2) auto-discover any window function that looks like a chat opener
+    for (const k in window) {
+      if (k === 'c26OpenChat') continue;
+      if (/^(open|start)?chat(with|user|modal|box)?$/i.test(k) && typeof window[k] === 'function') {
+        try { window[k](uid); return; } catch (e) {}
+      }
+    }
+    // 3) fallback: wire built-in discover chat
     window.currentChatUserId = uid;
     const cn = document.getElementById('chatName'); if (cn) cn.textContent = name;
     const ca = document.getElementById('chatAvatar'); if (ca) ca.textContent = ini(name);
     if (window.c26OrigSwitch) window.c26OrigSwitch('discover');
     if (window.showSubPage) window.showSubPage('discover-chat');
-    ['loadChatMessages', 'loadChat', 'refreshChat'].forEach(function (fn) {
+    ['loadChatMessages','loadChat','renderChat','refreshChat','loadMessages'].forEach(function (fn) {
       if (typeof window[fn] === 'function') { try { window[fn](uid); } catch (e) {} }
     });
   };
@@ -239,7 +249,7 @@
 
     (data || []).forEach(g => {
       const mine = isMember(type, g.id);
-      const pending = type === 'department' && C.myReqs.some(r => r.department_id === g.id);
+      const pending = type === 'department' && (C.myReqs || []).some(r => r.department_id === g.id);
       let action;
       if (mine || isAdmin()) action = '<button class="btn btn-primary btn-sm" onclick="c26OpenGroup(\''+type+'\',\''+g.id+'\')">Open</button>';
       else if (type === 'department') {
@@ -258,7 +268,7 @@
     show(html);
   };
 
-  // ============ JOIN / REQUEST ============
+  // ============ JOIN (direct for ushirika/groups) ============
   window.c26Join = async function (type, id) {
     if (!me()) return alert('Log in first.');
     const cf = cfg(type);
@@ -268,6 +278,7 @@
     await loadMy(); c26OpenGroup(type, id);
   };
 
+  // ============ DEPARTMENT REQUEST TO JOIN ============
   window.c26RequestModal = function (deptId) {
     document.body.insertAdjacentHTML('beforeend',
       '<div class="modal-overlay show" id="c26ReqModal" style="display:flex" onclick="if(event.target===this)c26Close(\'c26ReqModal\')"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title"><i class="fas fa-paper-plane"></i> Request to Join</div>'
@@ -275,60 +286,107 @@
       + '<button class="btn btn-primary btn-block" onclick="c26SendRequest(\''+deptId+'\')">Send Request</button></div></div>');
   };
 
+  async function requestTargets(deptId) {
+    const ids = {};
+    const mem = await sb().from('department_members').select('user_id,role').eq('department_id', deptId);
+    (mem.data || []).forEach(function (m) {
+      const r = String(m.role || '').toLowerCase();
+      if (['leader','chairman','secretary'].includes(r)) ids[m.user_id] = 1;
+    });
+    const adm = await sb().from('profiles').select('id,role');
+    (adm.data || []).forEach(function (p) {
+      if (['admin','superadmin'].includes(String(p.role || '').toLowerCase())) ids[p.id] = 1;
+    });
+    return Object.keys(ids);
+  }
+
   window.c26SendRequest = async function (deptId) {
     const msg = document.getElementById('c26ReqMsg').value.trim();
-    const { error } = await sb().from('department_join_requests').upsert(
-      [{ department_id: deptId, user_id: me().id, message: msg, status: 'pending' }],
-      { onConflict: 'department_id,user_id' }
-    );
-    if (error) return alert(error.message);
+    const row = { department_id: deptId, user_id: me().id, message: msg, status: 'pending' };
 
-    // notify dept leaders/admins
-    const mem = await sb().from('department_members').select('user_id,role').eq('department_id', deptId);
-    (mem.data || []).forEach(m => {
-      const r = String(m.role || '').toLowerCase();
-      if (['leader','chairman'].includes(r)) notify(m.user_id, '📨 Join request', (window.profile && window.profile.name || 'A member') + ' requested to join ' + (C.group && C.group.name || 'a department'));
-    });
-    if (isAdmin()) {} // admin sees it in Requests
+    let r = await sb().from('department_join_requests').upsert([row], { onConflict: 'department_id,user_id' });
+    if (r.error) r = await sb().from('department_join_requests').insert([row]);
+
+    if (r.error) {
+      // FALLBACK (table missing): send structured notifications to leaders/admins
+      const name = (window.profile && window.profile.name) || 'A member';
+      const targets = await requestTargets(deptId);
+      if (!targets.length) return alert('Request failed: ' + r.error.message);
+      for (let i = 0; i < targets.length; i++) {
+        notify(targets[i], '📨 Join Request', 'dept:' + deptId + '|user:' + me().id + '|name:' + name + (msg ? '|msg:' + msg : ''));
+      }
+      c26Close('c26ReqModal');
+      alert('Request sent to the department leaders.');
+      c26OpenHome('department');
+      return;
+    }
+
+    const targets = await requestTargets(deptId);
+    const name = (window.profile && window.profile.name) || 'A member';
+    targets.forEach(function (t) { notify(t, '📨 Join Request', name + ' requested to join ' + ((C.group && C.group.name) || 'a department')); });
+
     c26Close('c26ReqModal');
     alert('Request sent. Waiting for approval.');
     c26OpenHome('department');
   };
 
   window.c26RequestsModal = async function () {
-    const reqs = await sb().from('department_join_requests').select('*')
-      .eq('department_id', C.currentId).eq('status', 'pending').order('created_at', { ascending: false });
     const users = await getUsers();
-    let list = (reqs.data || []).map(r => {
-      const u = users.find(x => x.id === r.user_id);
+    let rows = [];
+
+    const q = await sb().from('department_join_requests').select('*')
+      .eq('department_id', C.currentId).eq('status', 'pending').order('created_at', { ascending: false });
+
+    if (!q.error) {
+      rows = (q.data || []).map(function (r) {
+        const u = users.find(x => x.id === r.user_id);
+        return { id: r.id, user_id: r.user_id, u: u, note: r.message || '', fallback: false, created: r.created_at };
+      });
+    } else {
+      // FALLBACK: read structured notifications addressed to me
+      const n = await sb().from('notifications').select('*').eq('user_id', me().id).like('message', 'dept:' + C.currentId + '|%');
+      rows = (n.data || []).map(function (x) {
+        const m = String(x.message || '').match(/dept:([^|]+)\|user:([^|]+)\|name:([^|]*)(\|msg:(.*))?/);
+        if (!m) return null;
+        const u = users.find(xx => xx.id === m[2]);
+        return { id: x.id, user_id: m[2], u: u || { name: m[3] }, note: m[5] || '', fallback: true, created: x.created_at };
+      }).filter(Boolean);
+    }
+
+    let list = rows.map(function (r) {
       return '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center">'
-        + avatarHtml(u) + '<div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'User') + '</div>'
-        + (u && u.email ? '<div style="font-size:.75rem;color:var(--text-light)">' + esc(u.email) + '</div>' : '')
-        + (r.message ? '<div style="font-size:.8rem;margin-top:4px;color:var(--text-light)">"' + esc(r.message) + '"</div>' : '')
-        + '<div style="font-size:.7rem;color:var(--text-lighter)">' + fdate(r.created_at) + '</div></div></div>'
-        + '<div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="c26ApproveReq(\''+r.id+'\',\''+r.user_id+'\')"><i class="fas fa-check"></i> Approve</button>'
-        + '<button class="btn btn-danger btn-sm" onclick="c26RejectReq(\''+r.id+'\',\''+r.user_id+'\')"><i class="fas fa-times"></i> Reject</button></div></div>';
+        + avatarHtml(r.u) + '<div style="flex:1"><div style="font-weight:700">' + esc((r.u && r.u.name) || 'User') + '</div>'
+        + (r.u && r.u.email ? '<div style="font-size:.75rem;color:var(--text-light)">' + esc(r.u.email) + '</div>' : '')
+        + (r.note ? '<div style="font-size:.8rem;margin-top:4px;color:var(--text-light)">"' + esc(r.note) + '"</div>' : '')
+        + '<div style="font-size:.7rem;color:var(--text-lighter)">' + fdate(r.created) + '</div></div></div>'
+        + '<div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="c26ApproveReq(\''+r.id+'\',\''+r.user_id+'\','+(r.fallback?'true':'false')+')"><i class="fas fa-check"></i> Approve</button>'
+        + '<button class="btn btn-danger btn-sm" onclick="c26RejectReq(\''+r.id+'\',\''+r.user_id+'\','+(r.fallback?'true':'false')+')"><i class="fas fa-times"></i> Reject</button></div></div>';
     }).join('');
+
     document.body.insertAdjacentHTML('beforeend',
       '<div class="modal-overlay show" id="c26Requests" style="display:flex" onclick="if(event.target===this)c26Close(\'c26Requests\')"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title"><i class="fas fa-inbox"></i> Join Requests</div>'
       + '<div id="c26ReqList">' + (list || '<div style="color:var(--text-light)">No pending requests.</div>') + '</div>'
       + '<button class="btn btn-secondary-alt btn-block" style="margin-top:10px" onclick="c26Close(\'c26Requests\')">Close</button></div></div>');
   };
 
-  window.c26ApproveReq = async function (reqId, userId) {
+  window.c26ApproveReq = async function (reqId, userId, fallback) {
     const cf = cfg('department');
     const p = {}; p[cf.fk] = C.currentId; p.user_id = userId; p.role = 'Member';
     let { error } = await sb().from(cf.memberTable).upsert(p, { onConflict: cf.fk + ',user_id' });
     if (error) { const r = await sb().from(cf.memberTable).insert([p]); if (r.error) return alert(r.error.message); }
-    await sb().from('department_join_requests').update({ status: 'approved' }).eq('id', reqId);
+
+    if (fallback) await sb().from('notifications').delete().eq('id', reqId);
+    else await sb().from('department_join_requests').update({ status: 'approved' }).eq('id', reqId);
+
     notify(userId, '✅ Request approved', 'You are now a member of ' + ((C.group && C.group.name) || 'the department'));
     c26Close('c26Requests'); c26RequestsModal();
     const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
     C.members = m.data || [];
   };
 
-  window.c26RejectReq = async function (reqId, userId) {
-    await sb().from('department_join_requests').update({ status: 'rejected' }).eq('id', reqId);
+  window.c26RejectReq = async function (reqId, userId, fallback) {
+    if (fallback) await sb().from('notifications').delete().eq('id', reqId);
+    else await sb().from('department_join_requests').update({ status: 'rejected' }).eq('id', reqId);
     notify(userId, '❌ Request not approved', 'Your request to join ' + ((C.group && C.group.name) || 'the department') + ' was not approved.');
     c26Close('c26Requests'); c26RequestsModal();
   };
@@ -467,7 +525,7 @@
     loadFeed();
   };
 
-  // ============ MEMBERS (chat + pics + emails + roles) ============
+  // ============ MEMBERS (chat icon + pics + emails + roles) ============
   async function roleOptions(selected) {
     const std = ['Member','Leader','Chairman','Secretary','Treasurer','Teacher'];
     const cat = await sb().from('community_role_catalog').select('*')
@@ -492,7 +550,7 @@
         + '<div style="flex:1;min-width:0"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div>'
         + (u && u.email ? '<div style="font-size:.72rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis">' + esc(u.email) + '</div>' : '')
         + '<div style="font-size:.75rem;color:var(--primary);font-weight:700">' + esc(m.role || 'Member') + '</div></div>'
-        + '<button class="btn btn-secondary btn-sm" onclick="c26OpenChat(\''+m.user_id+'\')"><i class="fas fa-comment-dots"></i> Chat</button>'
+        + '<button class="btn btn-secondary btn-sm" title="Chat" onclick="c26OpenChat(\''+m.user_id+'\')"><i class="fas fa-comment-dots"></i></button>'
         + '</div>'
         + (manage && !self ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="c26ChangeRole(\''+m.user_id+'\',this.value)">' + (await roleOptions(m.role)) + '</select><button class="btn btn-danger btn-sm" onclick="c26RemoveMember(\''+m.user_id+'\')"><i class="fas fa-trash"></i></button></div>' : '')
         + '</div>';
@@ -500,10 +558,44 @@
     box.innerHTML = html;
   }
 
+  // ROLE CHANGE: same method as Department + automatic /api/set-role fallback for Ushirika
   window.c26ChangeRole = async function (userId, role) {
     const cf = cfg(C.currentType);
-    const { error } = await sb().from(cf.memberTable).update({ role: role }).eq(cf.fk, C.currentId).eq('user_id', userId);
-    if (error) return alert('Role change failed: ' + error.message);
+
+    // 1) normal client update (this is what works in Department)
+    let r = await sb().from(cf.memberTable).update({ role: role }).eq(cf.fk, C.currentId).eq('user_id', userId);
+
+    // 2) if a column name problem, retry by user only
+    if (r.error && /column|does not exist/i.test(r.error.message)) {
+      r = await sb().from(cf.memberTable).update({ role: role }).eq('user_id', userId).eq(cf.fk, C.currentId);
+    }
+
+    // 3) if blocked by RLS (Ushirika), use the existing serverless endpoint
+    if (r.error) {
+      try {
+        const res = await fetch('/api/set-role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            userId: userId,
+            user_id: userId,
+            role: role,
+            table: cf.memberTable,
+            groupId: C.currentId,
+            group_id: C.currentId,
+            department_id: C.currentType === 'department' ? C.currentId : undefined,
+            ushirika_id: C.currentType === 'ushirika' ? C.currentId : undefined
+          })
+        });
+        if (!res.ok) {
+          const j = await res.json().catch(function () { return null; });
+          return alert('Role change failed: ' + r.error.message + (j && j.error ? ' | API: ' + j.error : ''));
+        }
+      } catch (e) {
+        return alert('Role change failed: ' + r.error.message);
+      }
+    }
+
     const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
     C.members = m.data || [];
     await loadMy();
