@@ -1,12 +1,12 @@
-// public/app26.js — UNIFIED COMMUNITY ENGINE (v2 fixes)
-// Fixes: department_members has no id column (use user_id),
-// duplicate Department nav button removed, scrollable bottom nav.
+// public/app26.js v3 — Unified Community Engine
+// + chat per member, dept join requests w/ admin approval,
+// + profile pics + emails, ushirika role-change fix (via SQL policies)
 
 (function () {
-  console.log('✝️ app26.js v2 — Unified Community Engine');
+  console.log('✝️ app26.js v3');
 
   window._c26 = Object.assign({
-    myDept: [], myUsh: [], catalog: [],
+    myDept: [], myUsh: [], myReqs: [],
     currentType: null, currentId: null,
     group: null, members: []
   }, window._c26 || {});
@@ -63,9 +63,16 @@
 
   async function getUsers() {
     if (window.usersData && window.usersData.length) return window.usersData;
-    const { data } = await sb().from('profiles').select('id,name,profile_pic,role').order('name');
+    let { data, error } = await sb().from('profiles').select('id,name,profile_pic,email,role').order('name');
+    if (error) ({ data } = await sb().from('profiles').select('id,name,profile_pic,role').order('name'));
     window.usersData = data || [];
     return window.usersData;
+  }
+
+  function avatarHtml(u, size) {
+    const s = size || 44;
+    if (u && u.profile_pic) return '<img src="' + u.profile_pic + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;flex-shrink:0">';
+    return '<div class="post-avatar" style="width:' + s + 'px;height:' + s + 'px">' + ini(u && u.name) + '</div>';
   }
 
   async function upload(file, path) {
@@ -76,6 +83,14 @@
     const { error } = await sb().storage.from('media').upload(name, file);
     if (error) { alert('Upload failed: ' + error.message); return null; }
     return sb().storage.from('media').getPublicUrl(name).data.publicUrl;
+  }
+
+  function notify(uid, title, msg) {
+    if (!uid || !me() || uid === me().id) return;
+    sb().from('notifications').insert([{ user_id: uid, title: title, message: msg, body: msg }])
+      .then(function (r) {
+        if (r && r.error) sb().from('notifications').insert([{ user_id: uid, title: title, message: msg }]).then(function(){});
+      });
   }
 
   window.c26Attach = function (key, labelId) {
@@ -100,7 +115,7 @@
     return '<a href="'+url+'" target="_blank" class="btn btn-secondary btn-sm" style="margin-top:8px"><i class="fas fa-paperclip"></i> Attachment</a>';
   }
 
-  // ============ NAV (scrollable + duplicate cleanup) ============
+  // ============ NAV ============
   function c26NavCss() {
     if (document.getElementById('c26NavCss')) return;
     const s = document.createElement('style');
@@ -113,12 +128,10 @@
   }
 
   function c26CleanNav() {
-    // remove leftover buttons from old app23/app24
     ['d43NavBtn', 'dp23NavBtn'].forEach(function (id) {
       const el = document.getElementById(id);
       if (el) el.remove();
     });
-    // remove any duplicate Department buttons that are not ours
     document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) {
       if (b.id !== 'c26NavBtn' && /department/i.test(b.textContent || '')) b.remove();
     });
@@ -140,6 +153,7 @@
   }
 
   const _origSwitch = window.switchSection;
+  window.c26OrigSwitch = _origSwitch;
   window.switchSection = function (name) {
     if (name === 'ushirika') { c26OpenHome('ushirika'); return; }
     if (name === 'department') { c26OpenHome('department'); return; }
@@ -147,6 +161,27 @@
   };
 
   window.c26Back = function () { if (_origSwitch) _origSwitch('home'); };
+
+  // ============ CHAT ============
+  window.c26OpenChat = function (uid) {
+    if (!me()) return alert('Log in first.');
+    const u = (window.usersData || []).find(x => x.id === uid);
+    const name = (u && u.name) || 'Chat';
+
+    if (typeof window.openChat === 'function') return window.openChat(uid);
+    if (typeof window.openChatWith === 'function') return window.openChatWith(uid);
+    if (typeof window.openUserChat === 'function') return window.openUserChat(uid);
+
+    // fallback: wire the built-in discover chat
+    window.currentChatUserId = uid;
+    const cn = document.getElementById('chatName'); if (cn) cn.textContent = name;
+    const ca = document.getElementById('chatAvatar'); if (ca) ca.textContent = ini(name);
+    if (window.c26OrigSwitch) window.c26OrigSwitch('discover');
+    if (window.showSubPage) window.showSubPage('discover-chat');
+    ['loadChatMessages', 'loadChat', 'refreshChat'].forEach(function (fn) {
+      if (typeof window[fn] === 'function') { try { window[fn](uid); } catch (e) {} }
+    });
+  };
 
   // ============ SECTION ============
   function ensureSection() {
@@ -175,6 +210,8 @@
     const a = await sb().from('department_members').select('*').eq('user_id', me().id);
     const b = await sb().from('ushirika_members').select('*').eq('user_id', me().id);
     C.myDept = a.data || []; C.myUsh = b.data || [];
+    const r = await sb().from('department_join_requests').select('*').eq('user_id', me().id).eq('status', 'pending');
+    C.myReqs = r.data || [];
   }
   function myRole(type, id) {
     const list = type === 'department' ? C.myDept : C.myUsh;
@@ -202,17 +239,26 @@
 
     (data || []).forEach(g => {
       const mine = isMember(type, g.id);
+      const pending = type === 'department' && C.myReqs.some(r => r.department_id === g.id);
+      let action;
+      if (mine || isAdmin()) action = '<button class="btn btn-primary btn-sm" onclick="c26OpenGroup(\''+type+'\',\''+g.id+'\')">Open</button>';
+      else if (type === 'department') {
+        action = pending
+          ? '<button class="btn btn-secondary btn-sm" disabled><i class="fas fa-clock"></i> Pending</button>'
+          : '<button class="btn btn-secondary btn-sm" onclick="c26RequestModal(\''+g.id+'\')"><i class="fas fa-paper-plane"></i> Request</button>';
+      } else {
+        action = '<button class="btn btn-secondary btn-sm" onclick="c26Join(\''+type+'\',\''+g.id+'\')">Join</button>';
+      }
       html += '<div class="card" style="margin-bottom:12px"><div style="display:flex;gap:12px;align-items:center">'
         + '<div style="width:52px;height:52px;border-radius:16px;background:' + cf.gradient + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;flex-shrink:0"><i class="fas ' + iconFor(g.name, g.icon) + '"></i></div>'
         + '<div style="flex:1;min-width:0"><div style="font-weight:800">' + esc(g.name) + '</div><div style="font-size:.83rem;color:var(--text-light)">' + esc(g.description || g.location || cf.label) + '</div>'
         + (mine ? '<div style="font-size:.72rem;color:var(--accent);margin-top:2px"><i class="fas fa-check"></i> Member</div>' : '') + '</div>'
-        + '<div style="display:flex;flex-direction:column;gap:6px">'
-        + ((mine || isAdmin()) ? '<button class="btn btn-primary btn-sm" onclick="c26OpenGroup(\''+type+'\',\''+g.id+'\')">Open</button>' : '<button class="btn btn-secondary btn-sm" onclick="c26Join(\''+type+'\',\''+g.id+'\')">Join</button>')
-        + '</div></div></div>';
+        + '<div style="display:flex;flex-direction:column;gap:6px">' + action + '</div></div></div>';
     });
     show(html);
   };
 
+  // ============ JOIN / REQUEST ============
   window.c26Join = async function (type, id) {
     if (!me()) return alert('Log in first.');
     const cf = cfg(type);
@@ -220,6 +266,71 @@
     let { error } = await sb().from(cf.memberTable).upsert(payload, { onConflict: cf.fk + ',user_id' });
     if (error) { const r = await sb().from(cf.memberTable).insert([payload]); if (r.error) return alert(r.error.message); }
     await loadMy(); c26OpenGroup(type, id);
+  };
+
+  window.c26RequestModal = function (deptId) {
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-overlay show" id="c26ReqModal" style="display:flex" onclick="if(event.target===this)c26Close(\'c26ReqModal\')"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title"><i class="fas fa-paper-plane"></i> Request to Join</div>'
+      + '<div class="form-group"><label class="form-label">Message (optional)</label><textarea class="form-textarea" id="c26ReqMsg" rows="3" placeholder="Why do you want to join?"></textarea></div>'
+      + '<button class="btn btn-primary btn-block" onclick="c26SendRequest(\''+deptId+'\')">Send Request</button></div></div>');
+  };
+
+  window.c26SendRequest = async function (deptId) {
+    const msg = document.getElementById('c26ReqMsg').value.trim();
+    const { error } = await sb().from('department_join_requests').upsert(
+      [{ department_id: deptId, user_id: me().id, message: msg, status: 'pending' }],
+      { onConflict: 'department_id,user_id' }
+    );
+    if (error) return alert(error.message);
+
+    // notify dept leaders/admins
+    const mem = await sb().from('department_members').select('user_id,role').eq('department_id', deptId);
+    (mem.data || []).forEach(m => {
+      const r = String(m.role || '').toLowerCase();
+      if (['leader','chairman'].includes(r)) notify(m.user_id, '📨 Join request', (window.profile && window.profile.name || 'A member') + ' requested to join ' + (C.group && C.group.name || 'a department'));
+    });
+    if (isAdmin()) {} // admin sees it in Requests
+    c26Close('c26ReqModal');
+    alert('Request sent. Waiting for approval.');
+    c26OpenHome('department');
+  };
+
+  window.c26RequestsModal = async function () {
+    const reqs = await sb().from('department_join_requests').select('*')
+      .eq('department_id', C.currentId).eq('status', 'pending').order('created_at', { ascending: false });
+    const users = await getUsers();
+    let list = (reqs.data || []).map(r => {
+      const u = users.find(x => x.id === r.user_id);
+      return '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center">'
+        + avatarHtml(u) + '<div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'User') + '</div>'
+        + (u && u.email ? '<div style="font-size:.75rem;color:var(--text-light)">' + esc(u.email) + '</div>' : '')
+        + (r.message ? '<div style="font-size:.8rem;margin-top:4px;color:var(--text-light)">"' + esc(r.message) + '"</div>' : '')
+        + '<div style="font-size:.7rem;color:var(--text-lighter)">' + fdate(r.created_at) + '</div></div></div>'
+        + '<div style="display:flex;gap:8px"><button class="btn btn-primary btn-sm" onclick="c26ApproveReq(\''+r.id+'\',\''+r.user_id+'\')"><i class="fas fa-check"></i> Approve</button>'
+        + '<button class="btn btn-danger btn-sm" onclick="c26RejectReq(\''+r.id+'\',\''+r.user_id+'\')"><i class="fas fa-times"></i> Reject</button></div></div>';
+    }).join('');
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-overlay show" id="c26Requests" style="display:flex" onclick="if(event.target===this)c26Close(\'c26Requests\')"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div><div class="modal-title"><i class="fas fa-inbox"></i> Join Requests</div>'
+      + '<div id="c26ReqList">' + (list || '<div style="color:var(--text-light)">No pending requests.</div>') + '</div>'
+      + '<button class="btn btn-secondary-alt btn-block" style="margin-top:10px" onclick="c26Close(\'c26Requests\')">Close</button></div></div>');
+  };
+
+  window.c26ApproveReq = async function (reqId, userId) {
+    const cf = cfg('department');
+    const p = {}; p[cf.fk] = C.currentId; p.user_id = userId; p.role = 'Member';
+    let { error } = await sb().from(cf.memberTable).upsert(p, { onConflict: cf.fk + ',user_id' });
+    if (error) { const r = await sb().from(cf.memberTable).insert([p]); if (r.error) return alert(r.error.message); }
+    await sb().from('department_join_requests').update({ status: 'approved' }).eq('id', reqId);
+    notify(userId, '✅ Request approved', 'You are now a member of ' + ((C.group && C.group.name) || 'the department'));
+    c26Close('c26Requests'); c26RequestsModal();
+    const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
+    C.members = m.data || [];
+  };
+
+  window.c26RejectReq = async function (reqId, userId) {
+    await sb().from('department_join_requests').update({ status: 'rejected' }).eq('id', reqId);
+    notify(userId, '❌ Request not approved', 'Your request to join ' + ((C.group && C.group.name) || 'the department') + ' was not approved.');
+    c26Close('c26Requests'); c26RequestsModal();
   };
 
   // ============ GROUP PAGE ============
@@ -254,6 +365,7 @@
         + '<button class="btn btn-danger btn-sm" onclick="c26DeleteGroup(\''+type+'\',\''+id+'\')"><i class="fas fa-trash"></i> Delete</button>'
         + '<button class="btn btn-warm btn-sm" onclick="c26AddMemberModal()"><i class="fas fa-user-plus"></i> Add Member</button>'
         + '<button class="btn btn-warm btn-sm" onclick="c26RoleCatalogModal()"><i class="fas fa-tags"></i> Role Catalog</button>'
+        + (type === 'department' ? '<button class="btn btn-warm btn-sm" onclick="c26RequestsModal()"><i class="fas fa-inbox"></i> Join Requests</button>' : '')
         + '</div></div>';
     }
 
@@ -312,13 +424,13 @@
       const canDel = isAdmin() || canManageGroup(C.currentType, C.currentId) || (me() && p.user_id === me().id);
       const cs = cMap[p.id] || [];
       html += '<div class="card" style="border-radius:18px;margin-bottom:12px">'
-        + '<div style="display:flex;gap:10px;align-items:center"><div class="post-avatar">' + ini(u && u.name) + '</div><div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div><div style="font-size:.72rem;color:var(--text-light)">' + fdate(p.created_at) + '</div></div>'
+        + '<div style="display:flex;gap:10px;align-items:center">' + avatarHtml(u) + '<div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div><div style="font-size:.72rem;color:var(--text-light)">' + fdate(p.created_at) + '</div></div>'
         + (canDel ? '<button class="post-delete" onclick="c26DeletePost(\''+p.id+'\')"><i class="fas fa-trash"></i></button>' : '') + '</div>'
         + '<div style="white-space:pre-wrap;margin-top:8px">' + esc(p.text || '') + '</div>' + mediaHtml(p.media_url)
         + '<div style="margin-top:10px;border-top:1px solid var(--border);padding-top:8px">'
         + '<div id="c26cl-' + p.id + '">' + cs.map(c => {
             const cu = users.find(x => x.id === c.user_id);
-            return '<div style="display:flex;gap:8px;margin-bottom:8px"><div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">' + ini(cu && cu.name) + '</div><div style="flex:1;background:var(--bg);border-radius:12px;padding:8px"><b style="font-size:.8rem">' + esc((cu && cu.name) || 'Member') + '</b><div style="font-size:.85rem;white-space:pre-wrap">' + esc(c.text || '') + '</div>' + mediaHtml(c.media_url) + '</div></div>';
+            return '<div style="display:flex;gap:8px;margin-bottom:8px">' + avatarHtml(cu, 32) + '<div style="flex:1;background:var(--bg);border-radius:12px;padding:8px"><b style="font-size:.8rem">' + esc((cu && cu.name) || 'Member') + '</b><div style="font-size:.85rem;white-space:pre-wrap">' + esc(c.text || '') + '</div>' + mediaHtml(c.media_url) + '</div></div>';
           }).join('') + '</div>'
         + '<div style="display:flex;gap:6px;align-items:center"><input class="form-input" id="c26ct-' + p.id + '" placeholder="Comment..." style="flex:1">'
         + '<button class="btn btn-secondary btn-sm" onclick="c26Attach(\'c_'+p.id+'\',\'c26cu_'+p.id+'\')"><i class="fas fa-paperclip"></i></button><span id="c26cu-' + p.id + '"></span>'
@@ -355,7 +467,7 @@
     loadFeed();
   };
 
-  // ============ MEMBERS (user_id based — no id column needed) ============
+  // ============ MEMBERS (chat + pics + emails + roles) ============
   async function roleOptions(selected) {
     const std = ['Member','Leader','Chairman','Secretary','Treasurer','Teacher'];
     const cat = await sb().from('community_role_catalog').select('*')
@@ -375,7 +487,13 @@
     for (const m of C.members) {
       const u = users.find(x => x.id === m.user_id);
       const self = me() && m.user_id === me().id;
-      html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center"><div class="post-avatar">' + ini(u && u.name) + '</div><div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div><div style="font-size:.75rem;color:var(--text-light)">' + esc(m.role || 'Member') + '</div></div></div>'
+      html += '<div class="card" style="margin-bottom:10px">'
+        + '<div style="display:flex;gap:10px;align-items:center">' + avatarHtml(u)
+        + '<div style="flex:1;min-width:0"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div>'
+        + (u && u.email ? '<div style="font-size:.72rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis">' + esc(u.email) + '</div>' : '')
+        + '<div style="font-size:.75rem;color:var(--primary);font-weight:700">' + esc(m.role || 'Member') + '</div></div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="c26OpenChat(\''+m.user_id+'\')"><i class="fas fa-comment-dots"></i> Chat</button>'
+        + '</div>'
         + (manage && !self ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="c26ChangeRole(\''+m.user_id+'\',this.value)">' + (await roleOptions(m.role)) + '</select><button class="btn btn-danger btn-sm" onclick="c26RemoveMember(\''+m.user_id+'\')"><i class="fas fa-trash"></i></button></div>' : '')
         + '</div>';
     }
@@ -384,11 +502,11 @@
 
   window.c26ChangeRole = async function (userId, role) {
     const cf = cfg(C.currentType);
-    const q = {}; q[cf.fk] = C.currentId;
     const { error } = await sb().from(cf.memberTable).update({ role: role }).eq(cf.fk, C.currentId).eq('user_id', userId);
-    if (error) return alert(error.message);
+    if (error) return alert('Role change failed: ' + error.message);
     const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
     C.members = m.data || [];
+    await loadMy();
     loadMembers(); loadLeadership();
   };
 
@@ -457,7 +575,11 @@
     if (!leads.length) html += '<div class="card">No leadership listed yet.</div>';
     leads.forEach(m => {
       const u = users.find(x => x.id === m.user_id);
-      html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center"><div class="post-avatar">' + ini(u && u.name) + '</div><div><div style="font-weight:800">' + esc((u && u.name) || 'Member') + '</div><div style="font-size:.8rem;color:var(--primary);font-weight:700">' + esc(m.role) + '</div></div></div></div>';
+      html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center">' + avatarHtml(u)
+        + '<div style="flex:1"><div style="font-weight:800">' + esc((u && u.name) || 'Member') + '</div>'
+        + (u && u.email ? '<div style="font-size:.72rem;color:var(--text-light)">' + esc(u.email) + '</div>' : '')
+        + '<div style="font-size:.8rem;color:var(--primary);font-weight:700">' + esc(m.role) + '</div></div>'
+        + '<button class="btn btn-secondary btn-sm" onclick="c26OpenChat(\''+m.user_id+'\')"><i class="fas fa-comment-dots"></i></button></div></div>';
     });
     box.innerHTML = html;
   }
@@ -638,9 +760,9 @@
     const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
     const t = days.indexOf(String(day).trim()); if (t<0) return false;
     const s = parseMin(start), e = parseMin(end||start); if (s===null||e===null) return false;
-    const today = now.getDay(), yest = (today+6)%7, nowM = now.getHours()*60+now.getMinutes();
-    if (e>s) return today===t && nowM>=s && nowM<=e;
-    return (today===t && nowM>=s) || (yest===t && nowM<=e);
+    const td = now.getDay(), yest = (td+6)%7, nowM = now.getHours()*60+now.getMinutes();
+    if (e>s) return td===t && nowM>=s && nowM<=e;
+    return (td===t && nowM>=s) || (yest===t && nowM<=e);
   }
   function fmt(ms) {
     if (ms<=0) return '0d 0h 0m 0s';
