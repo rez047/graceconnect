@@ -1,9 +1,10 @@
-// public/app27.js v2 — Home quick tiles, exact memberships list, forum redirect,
-// full chat (send messages, all video formats, delete own messages),
-// Prayer Wall + Public Forum (nested comments) + Plans.
+// public/app27.js v3 — tiles-only home, full-page modules, fixed forum UUID,
+// chat buttons injected across departments/ushirika/groups.
 
 (function () {
-  console.log('✝️ app27.js v2');
+  console.log('✝️ app27.js v3');
+
+  const FORUM_GID = '11111111-1111-1111-1111-111111111111';
 
   window._h27 = window._h27 || { chatUid: null, chatOpen: false, chatUser: null, chatFile: null };
   const H = window._h27;
@@ -48,7 +49,7 @@
   function homeActive() { const h = document.querySelector('#section-home'); return h && h.classList.contains('active'); }
 
   // =====================================================
-  // CHAT (send messages, all video formats, delete own)
+  // CHAT PANEL (send messages, all video formats, delete own)
   // =====================================================
   window.c26OpenChat = function (uid) { return window.h27ChatWith(uid); };
 
@@ -71,7 +72,7 @@
       '<div style="display:flex;gap:10px;align-items:center;padding:12px 14px;background:var(--gradient);color:#fff">'
       + '<button onclick="h27ChatClose()" style="border:none;background:none;color:#fff;font-size:1.1rem"><i class="fas fa-arrow-left"></i></button>'
       + '<span id="h27ChatAvatar"></span>'
-      + '<div style="flex:1"><div id="h27ChatName" style="font-weight:800"></div><div style="font-size:.7rem;opacity:.85">Online</div></div>'
+      + '<div style="flex:1"><div id="h27ChatName" style="font-weight:800"></div><div style="font-size:.7rem;opacity:.85">Chat</div></div>'
       + '</div>'
       + '<div id="h27ChatMsgs" style="flex:1;overflow-y:auto;padding:14px;display:flex;flex-direction:column;gap:8px"></div>'
       + '<div style="display:flex;gap:6px;align-items:center;padding:10px;border-top:1px solid var(--border);background:#fff">'
@@ -94,7 +95,7 @@
   window.h27ChatAttach = function () {
     const i = document.createElement('input');
     i.type = 'file';
-    i.accept = '*/*'; // ALL formats incl. every video format
+    i.accept = '*/*';
     i.onchange = function () {
       const f = i.files && i.files[0]; if (!f) return;
       H.chatFile = f;
@@ -140,13 +141,57 @@
         + mediaHtml(m.media_url)
         + '<div style="display:flex;gap:8px;align-items:center;justify-content:flex-end;margin-top:4px">'
         + '<span style="font-size:.6rem;opacity:.7">' + ftime(m.created_at) + '</span>'
-        + (mine ? '<button onclick="h27ChatDel(\'' + m.id + '\')" style="border:none;background:none;color:' + (mine ? '#fff' : 'var(--danger)') + ';font-size:.7rem"><i class="fas fa-trash"></i></button>' : '')
+        + (mine ? '<button onclick="h27ChatDel(\'' + m.id + '\')" style="border:none;background:none;color:#fff;font-size:.7rem"><i class="fas fa-trash"></i></button>' : '')
         + '</div></div>';
     }).join('') || '<div style="text-align:center;color:var(--text-light);font-size:.85rem;margin:auto">No messages yet. Say hi! 👋</div>';
     box.scrollTop = box.scrollHeight;
   }
 
   setInterval(function () { if (H.chatOpen) chatLoad(); }, 3000);
+
+  // =====================================================
+  // CHAT BUTTON INJECTION — departments, ushirika, groups, feeds
+  // =====================================================
+  async function h27InjectChat() {
+    const us = await users();
+    if (!us || !us.length) return;
+
+    const scopes = ['#c26-members', '#c26-leadership', '#c26-feed', '#gg-tab-members', '#gg-tab-feed', '#h27PostList'];
+
+    scopes.forEach(function (sel) {
+      const scope = document.querySelector(sel);
+      if (!scope) return;
+      const cards = sel === '#h27PostList' ? Array.from(scope.children) : Array.from(scope.querySelectorAll('.card'));
+
+      cards.forEach(function (card) {
+        if (!card || !card.querySelectorAll) return;
+        if (card.querySelector('[data-h27chat]')) return;
+
+        const leaves = Array.from(card.querySelectorAll('div,span,b,strong')).filter(function (d) {
+          return d.children.length === 0;
+        });
+
+        for (let i = 0; i < leaves.length; i++) {
+          const nm = (leaves[i].textContent || '').trim();
+          if (nm.length < 2 || nm.length > 40) continue;
+          const u = us.find(function (x) { return x.name && x.name.trim().toLowerCase() === nm.toLowerCase(); });
+          if (!u) continue;
+          if (me() && u.id === me().id) { card.setAttribute('data-h27chat', 'self'); return; }
+          const btn = document.createElement('button');
+          btn.setAttribute('data-h27chat', '1');
+          btn.className = 'btn btn-secondary btn-sm';
+          btn.style.marginLeft = '6px';
+          btn.title = 'Chat';
+          btn.innerHTML = '<i class="fas fa-comment-dots"></i>';
+          btn.onclick = (function (id) { return function () { window.h27ChatWith(id); }; })(u.id);
+          leaves[i].parentNode.insertBefore(btn, leaves[i].nextSibling);
+          return;
+        }
+        card.setAttribute('data-h27chat', 'scan');
+      });
+    });
+  }
+  setInterval(h27InjectChat, 2000);
 
   // =====================================================
   // EXACT MEMBERSHIPS LIST → FORUM
@@ -189,7 +234,7 @@
   };
 
   // =====================================================
-  // HOME: rename + tap + quick tiles + modules
+  // HOME: rename + tap + TILES ONLY
   // =====================================================
   function h27RenameAndTiles() {
     const home = homeEl(); if (!home) return;
@@ -206,11 +251,9 @@
     if (head && !head.dataset.h27tap) {
       head.dataset.h27tap = '1';
       head.style.cursor = 'pointer';
-      head.title = 'Tap to view all';
       head.onclick = function () { window.h27MyListModal(); };
     }
 
-    // membership quick tiles inside the card (tap → forum)
     const card = head ? (head.closest('.card') || head.parentElement.parentElement) : null;
     if (card && !card.dataset.h27tiles) {
       card.dataset.h27tiles = '1';
@@ -236,6 +279,18 @@
         if (html) { row.innerHTML = html; card.appendChild(row); }
       })();
     }
+
+    // TILES ONLY (no modules at bottom)
+    if (!document.getElementById('h27-quicktiles')) {
+      const tiles = document.createElement('div');
+      tiles.id = 'h27-quicktiles';
+      tiles.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px';
+      tiles.innerHTML =
+        '<div onclick="h27OpenPage(\'prayer\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#8B5CF6,#EC4899);cursor:pointer;box-shadow:0 8px 20px -8px rgba(139,92,246,.5)"><i class="fas fa-hands-praying" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Prayer Wall</div></div>'
+        + '<div onclick="h27OpenPage(\'forum\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#4F46E5,#06B6D4);cursor:pointer;box-shadow:0 8px 20px -8px rgba(79,70,229,.5)"><i class="fas fa-comments" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Public Forum</div></div>'
+        + '<div onclick="h27OpenPage(\'plans\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);cursor:pointer;box-shadow:0 8px 20px -8px rgba(245,158,11,.5)"><i class="fas fa-calendar-check" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Plans</div></div>';
+      home.appendChild(tiles);
+    }
   }
 
   function h27QuickActionsFab() {
@@ -243,58 +298,74 @@
     if (!grid || grid.dataset.h27) return;
     grid.dataset.h27 = '1';
     grid.insertAdjacentHTML('beforeend',
-      '<div class="mini-card mc-purple" onclick="closeModalDirect();h27Go(\'h27-forum\')"><i class="fas fa-comments"></i><div class="mc-title">Forum</div></div>'
-      + '<div class="mini-card mc-gold" onclick="closeModalDirect();h27Go(\'h27-plans\')"><i class="fas fa-calendar-check"></i><div class="mc-title">Plans</div></div>'
-      + '<div class="mini-card mc-green" onclick="closeModalDirect();h27Go(\'h27-prayer\')"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer Wall</div></div>');
+      '<div class="mini-card mc-purple" onclick="closeModalDirect();h27OpenPage(\'forum\')"><i class="fas fa-comments"></i><div class="mc-title">Forum</div></div>'
+      + '<div class="mini-card mc-gold" onclick="closeModalDirect();h27OpenPage(\'plans\')"><i class="fas fa-calendar-check"></i><div class="mc-title">Plans</div></div>'
+      + '<div class="mini-card mc-green" onclick="closeModalDirect();h27OpenPage(\'prayer\')"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer Wall</div></div>');
   }
 
-  window.h27Go = function (id) {
+  // =====================================================
+  // FULL-PAGE MODULES
+  // =====================================================
+  function ensureH27Section() {
+    let s = document.getElementById('section-h27');
+    if (s) return s;
+    s = document.createElement('div');
+    s.id = 'section-h27'; s.className = 'section';
+    s.innerHTML = '<div id="h27-root" class="sub-page active"></div>';
+    (document.querySelector('main') || document.body).appendChild(s);
+    return s;
+  }
+
+  function shell(title, icon, grad, body) {
+    return '<button class="back-btn" onclick="h27BackHome()"><i class="fas fa-arrow-left"></i> Back</button>'
+      + '<div style="border-radius:20px;padding:16px;color:#fff;background:' + grad + ';font-weight:800;font-size:1.15rem;margin-bottom:14px"><i class="fas ' + icon + '"></i> ' + title + '</div>'
+      + body;
+  }
+
+  window.h27BackHome = function () {
     if (window.c26OrigSwitch) window.c26OrigSwitch('home');
     else if (window.switchSection) window.switchSection('home');
-    setTimeout(function () {
-      const el = document.getElementById(id);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }, 300);
   };
 
-  function h27Ensure() {
-    const home = homeEl(); if (!home || !homeActive()) return;
-    if (document.getElementById('h27-quicktiles')) return;
+  window.h27OpenPage = function (page) {
+    const sec = ensureH27Section();
+    document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+    sec.classList.add('active');
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) { b.classList.remove('active'); });
+    const root = document.getElementById('h27-root');
 
-    const tiles = document.createElement('div');
-    tiles.id = 'h27-quicktiles';
-    tiles.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px';
-    tiles.innerHTML =
-      '<div onclick="h27Go(\'h27-prayer\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#8B5CF6,#EC4899);cursor:pointer;box-shadow:0 8px 20px -8px rgba(139,92,246,.5)"><i class="fas fa-hands-praying" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Prayer Wall</div></div>'
-      + '<div onclick="h27Go(\'h27-forum\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#4F46E5,#06B6D4);cursor:pointer;box-shadow:0 8px 20px -8px rgba(79,70,229,.5)"><i class="fas fa-comments" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Public Forum</div></div>'
-      + '<div onclick="h27Go(\'h27-plans\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);cursor:pointer;box-shadow:0 8px 20px -8px rgba(245,158,11,.5)"><i class="fas fa-calendar-check" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Plans</div></div>';
-    home.appendChild(tiles);
+    if (page === 'prayer') {
+      root.innerHTML = shell('Prayer Wall', 'fa-hands-praying', 'linear-gradient(135deg,#8B5CF6,#EC4899)',
+        '<div class="card" style="border-radius:20px"><textarea class="form-textarea" id="h27PrayerText" rows="2" placeholder="Share a prayer request..."></textarea>'
+        + '<div style="display:flex;gap:10px;align-items:center;margin:8px 0"><span style="font-size:.8rem;color:var(--text-light)">Anonymous</span><input type="checkbox" id="h27PrayerAnon"></div>'
+        + '<button class="btn btn-primary btn-block" onclick="h27SubmitPrayer()"><i class="fas fa-paper-plane"></i> Pray</button>'
+        + '<div id="h27PrayerList" style="margin-top:12px"></div></div>');
+      h27LoadPrayers();
+    }
 
-    const wrap = document.createElement('div');
-    wrap.id = 'h27-modules';
-    wrap.innerHTML =
-      '<div class="card" id="h27-prayer" style="border-radius:20px;margin-top:16px;overflow:hidden">'
-      + '<div style="background:linear-gradient(135deg,#8B5CF6,#EC4899);color:#fff;padding:14px 16px;font-weight:800"><i class="fas fa-hands-praying"></i> Prayer Wall</div>'
-      + '<div style="padding:14px"><textarea class="form-textarea" id="h27PrayerText" rows="2" placeholder="Share a prayer request..."></textarea>'
-      + '<div style="display:flex;gap:10px;align-items:center;margin:8px 0"><span style="font-size:.8rem;color:var(--text-light)">Anonymous</span><input type="checkbox" id="h27PrayerAnon"></div>'
-      + '<button class="btn btn-primary btn-block" onclick="h27SubmitPrayer()"><i class="fas fa-paper-plane"></i> Pray</button>'
-      + '<div id="h27PrayerList" style="margin-top:12px"></div></div></div>'
+    if (page === 'forum') {
+      root.innerHTML = shell('Public Forum', 'fa-comments', 'linear-gradient(135deg,#4F46E5,#06B6D4)',
+        '<div class="card" style="border-radius:20px"><textarea class="form-textarea" id="h27PostText" rows="2" placeholder="Post to the public forum..."></textarea>'
+        + '<div class="media-upload" id="h27PostUpload" onclick="c26Attach(\'h27post\',\'h27PostUpload\')"><i class="fas fa-cloud-upload-alt"></i><span>Add media (any format)</span></div>'
+        + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="h27SubmitPost()"><i class="fas fa-paper-plane"></i> Post</button>'
+        + '<div id="h27PostList" style="margin-top:12px"></div></div>');
+      h27LoadForum();
+    }
 
-      + '<div class="card" id="h27-forum" style="border-radius:20px;margin-top:16px;overflow:hidden">'
-      + '<div style="background:linear-gradient(135deg,#4F46E5,#06B6D4);color:#fff;padding:14px 16px;font-weight:800"><i class="fas fa-comments"></i> Public Forum</div>'
-      + '<div style="padding:14px"><textarea class="form-textarea" id="h27PostText" rows="2" placeholder="Post to the public forum..."></textarea>'
-      + '<div class="media-upload" id="h27PostUpload" onclick="c26Attach(\'h27post\',\'h27PostUpload\')"><i class="fas fa-cloud-upload-alt"></i><span>Add media (any format)</span></div>'
-      + '<button class="btn btn-primary btn-block" style="margin-top:8px" onclick="h27SubmitPost()"><i class="fas fa-paper-plane"></i> Post</button>'
-      + '<div id="h27PostList" style="margin-top:12px"></div></div></div>'
+    if (page === 'plans') {
+      root.innerHTML = shell('Plans', 'fa-calendar-check', 'linear-gradient(135deg,#F59E0B,#EF4444)',
+        '<div class="card" style="border-radius:20px"><button class="btn btn-warm btn-block" onclick="h27PlanModal()"><i class="fas fa-plus"></i> Create Plan</button>'
+        + '<div id="h27PlanList" style="margin-top:12px"></div></div>');
+      h27LoadPlans();
+    }
 
-      + '<div class="card" id="h27-plans" style="border-radius:20px;margin-top:16px;overflow:hidden">'
-      + '<div style="background:linear-gradient(135deg,#F59E0B,#EF4444);color:#fff;padding:14px 16px;font-weight:800"><i class="fas fa-calendar-check"></i> Plans</div>'
-      + '<div style="padding:14px"><button class="btn btn-warm btn-block" onclick="h27PlanModal()"><i class="fas fa-plus"></i> Create Plan</button>'
-      + '<div id="h27PlanList" style="margin-top:12px"></div></div></div>';
-    home.appendChild(wrap);
+    window.scrollTo({ top: 0 });
+  };
 
-    h27LoadPrayers(); h27LoadForum(); h27LoadPlans();
-  }
+  window.h27Go = function (id) {
+    const map = { 'h27-prayer': 'prayer', 'h27-forum': 'forum', 'h27-plans': 'plans' };
+    window.h27OpenPage(map[id] || 'forum');
+  };
 
   // ============ PRAYER WALL ============
   window.h27SubmitPrayer = async function () {
@@ -309,7 +380,7 @@
 
   async function h27LoadPrayers() {
     const box = document.getElementById('h27PrayerList'); if (!box) return;
-    const r = await sb().from('community_prayers').select('*').order('created_at', { ascending: false }).limit(20);
+    const r = await sb().from('community_prayers').select('*').order('created_at', { ascending: false }).limit(30);
     if (r.error) { box.innerHTML = ''; return; }
     const us = await users();
     box.innerHTML = (r.data || []).map(function (p) {
@@ -321,13 +392,13 @@
     }).join('') || '<div style="color:var(--text-light);font-size:.85rem;text-align:center">No prayers yet.</div>';
   }
 
-  // ============ PUBLIC FORUM (nested comments + media) ============
+  // ============ PUBLIC FORUM (fixed UUID + nested comments) ============
   window.h27SubmitPost = async function () {
     const t = document.getElementById('h27PostText').value.trim();
     const f = window._c26Media && window._c26Media.h27post;
     if (!t && !f) return alert('Write something or add media.');
     let url = null; if (f) url = await up(f, 'forum');
-    const r = await sb().from('community_posts').insert([{ group_type: 'forum', group_id: 'public-forum', user_id: me().id, text: t, media_url: url }]);
+    const r = await sb().from('community_posts').insert([{ group_type: 'forum', group_id: FORUM_GID, user_id: me().id, text: t, media_url: url }]);
     if (r.error) return alert(r.error.message);
     if (window._c26Media) window._c26Media.h27post = null;
     const u = document.getElementById('h27PostUpload'); if (u) u.innerHTML = '<i class="fas fa-cloud-upload-alt"></i><span>Add media (any format)</span>';
@@ -338,9 +409,9 @@
   async function h27LoadForum() {
     const box = document.getElementById('h27PostList'); if (!box) return;
     const posts = await sb().from('community_posts').select('*')
-      .eq('group_type', 'forum').eq('group_id', 'public-forum')
+      .eq('group_type', 'forum').eq('group_id', FORUM_GID)
       .order('created_at', { ascending: false }).limit(30);
-    if (posts.error) { box.innerHTML = ''; return; }
+    if (posts.error) { box.innerHTML = '<div style="color:#EF4444">' + esc(posts.error.message) + '</div>'; return; }
     const ids = (posts.data || []).map(p => p.id);
     let cs = { data: [] };
     if (ids.length) cs = await sb().from('community_comments').select('*').in('post_id', ids).order('created_at');
@@ -351,10 +422,9 @@
 
     box.innerHTML = (posts.data || []).map(function (p) {
       const u = us.find(x => x.id === p.user_id);
-      return '<div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px">'
+      return '<div class="card" style="border-radius:16px;margin-bottom:10px">'
         + '<div style="display:flex;gap:8px;align-items:center">' + avatarHtml(u, 36)
         + '<div style="flex:1"><b style="font-size:.85rem">' + esc((u && u.name) || 'Member') + '</b><div style="font-size:.68rem;color:var(--text-light)">' + fdate(p.created_at) + '</div></div>'
-        + (u && u.id !== me().id ? '<button class="btn btn-secondary btn-sm" onclick="h27ChatWith(\'' + u.id + '\')"><i class="fas fa-comment-dots"></i></button>' : '')
         + '</div>'
         + '<div style="white-space:pre-wrap;margin:6px 0">' + esc(p.text || '') + '</div>' + mediaHtml(p.media_url)
         + renderComments(buildTree(byPost[p.id] || []), 0, p.id)
@@ -363,6 +433,8 @@
         + '<button class="btn btn-primary btn-sm" onclick="h27SubmitComment(\'' + p.id + '\',null)"><i class="fas fa-paper-plane"></i></button></div>'
         + '</div>';
     }).join('') || '<div style="color:var(--text-light);font-size:.85rem;text-align:center">No posts yet. Be the first!</div>';
+
+    h27InjectChat();
   }
 
   function buildTree(list) {
@@ -382,7 +454,6 @@
       return '<div style="margin-left:' + Math.min(depth, 4) * 16 + 'px;margin-top:8px;background:var(--bg);border-radius:12px;padding:8px">'
         + '<div style="display:flex;gap:6px;align-items:center">' + avatarHtml(u, 26)
         + '<b style="font-size:.75rem;flex:1">' + esc((u && u.name) || 'Member') + '</b>'
-        + (u && u.id !== me().id ? '<button style="border:none;background:none;color:var(--primary)" onclick="h27ChatWith(\'' + u.id + '\')"><i class="fas fa-comment-dots"></i></button>' : '')
         + '</div>'
         + '<div style="font-size:.85rem;white-space:pre-wrap;margin-top:4px">' + esc(c.text || '') + '</div>' + mediaHtml(c.media_url)
         + '<button style="border:none;background:none;color:var(--primary);font-size:.7rem;font-weight:700;margin-top:4px" onclick="h27ToggleReply(\'' + c.id + '\')"><i class="fas fa-reply"></i> Reply</button>'
@@ -483,7 +554,6 @@
     if (!homeActive()) return;
     h27RenameAndTiles();
     h27QuickActionsFab();
-    h27Ensure();
   }
   h27Sync();
   setInterval(h27Sync, 1500);
