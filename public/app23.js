@@ -1,12 +1,15 @@
-// public/app23.js
-// Department section + replacement department weekly meetings
-// Department section appears after Ushirika and before Groups.
-// Old department meeting rendering is hidden/disabled.
+// public/app24.js
+// Corrected Department section:
+// - Department keeps Feed, Members, Leadership, Meetings
+// - Only Department meeting module is replaced
+// - Ushirika remains separate
+// - Department admin functions are separate from Ushirika
+// - Forum and Plans are moved/injected into Home where possible
 
 (function () {
-  console.log('✝️ app23.js loaded — Department section + new department meetings');
+  console.log('✝️ app24.js loaded — Corrected Department section');
 
-  window._dp23 = Object.assign(
+  window._d43 = Object.assign(
     {
       myMemberships: [],
       departments: [],
@@ -14,26 +17,26 @@
       deptMembers: [],
       currentDepartmentId: null
     },
-    window._dp23 || {}
+    window._d43 || {}
   );
 
-  window._dp23Media = window._dp23Media || {};
+  window._d43Media = window._d43Media || {};
 
-  const D = window._dp23;
+  const D = window._d43;
 
   function sb() {
     return window.sb;
   }
 
-  function dp23User() {
+  function d43User() {
     return window.user;
   }
 
-  function dp23IsAdmin() {
+  function d43IsAdmin() {
     return window.isAdmin ? window.isAdmin() : false;
   }
 
-  function dp23Esc(s) {
+  function d43Esc(s) {
     if (window.esc) return window.esc(s);
     return String(s == null ? '' : s)
       .replace(/&/g, '&amp;')
@@ -43,7 +46,7 @@
       .replace(/'/g, '&#39;');
   }
 
-  function dp23Initials(name) {
+  function d43Initials(name) {
     if (window.ini) return window.ini(name);
     if (!name) return '?';
     return String(name)
@@ -54,21 +57,21 @@
       .toUpperCase();
   }
 
-  function dp23Date(ts) {
+  function d43Date(ts) {
     if (!ts) return '';
     if (window.fdate) return window.fdate(ts);
     return new Date(ts).toLocaleDateString();
   }
 
-  function dp23Today() {
+  function d43Today() {
     return new Date().toISOString().slice(0, 10);
   }
 
-  function dp23Error(msg) {
-    return '<div class="card" style="color:#EF4444">' + dp23Esc(msg || 'Error') + '</div>';
+  function d43Error(msg) {
+    return '<div class="card" style="color:#EF4444">' + d43Esc(msg || 'Error') + '</div>';
   }
 
-  function dp23MediaHtml(url) {
+  function d43MediaHtml(url) {
     if (!url) return '';
     if (/\.(jpg|jpeg|png|gif|webp)$/i.test(url)) {
       return '<img src="' + url + '" style="width:100%;max-height:260px;object-fit:cover;border-radius:12px;margin-top:8px">';
@@ -76,7 +79,7 @@
     return '<a href="' + url + '" target="_blank" class="btn btn-secondary btn-sm" style="margin-top:8px"><i class="fas fa-paperclip"></i> Media</a>';
   }
 
-  async function dp23GetUsers() {
+  async function d43GetUsers() {
     if (window.usersData && window.usersData.length) return window.usersData;
     if (!sb()) return [];
 
@@ -94,7 +97,7 @@
     return window.usersData;
   }
 
-  async function dp23UploadMedia(file, path) {
+  async function d43UploadMedia(file, path) {
     if (!file) return null;
 
     if (window.uploadMediaFile) {
@@ -120,47 +123,58 @@
     return data.publicUrl;
   }
 
-  window.dp23AttachMedia = function (key, labelId) {
+  window.d43AttachMedia = function (key, labelId) {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '*/*';
     input.onchange = function () {
       const file = input.files && input.files[0];
       if (!file) return;
-      window._dp23Media[key] = file;
+      window._d43Media[key] = file;
       const label = document.getElementById(labelId);
       if (label) {
-        label.innerHTML = '<i class="fas fa-check-circle"></i> ' + dp23Esc(file.name);
+        label.innerHTML = '<i class="fas fa-check-circle"></i> ' + d43Esc(file.name);
       }
     };
     input.click();
   };
 
-  window.dp23CloseModal = function (id) {
+  window.d43CloseModal = function (id) {
     const el = document.getElementById(id);
     if (el) el.remove();
   };
 
   // =====================================================
+  // REMOVE OLD APP23 DEPARTMENT SHELL IF PRESENT
+  // =====================================================
+
+  function d43CleanupOldDepartmentShell() {
+    ['dp23NavBtn', 'section-dp23'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+  }
+
+  // =====================================================
   // SECTION + NAV
   // =====================================================
 
-  function dp23EnsureSection() {
-    let sec = document.getElementById('section-dp23');
+  function d43EnsureSection() {
+    let sec = document.getElementById('section-d43-department');
     if (sec) return sec;
 
     sec = document.createElement('div');
-    sec.id = 'section-dp23';
+    sec.id = 'section-d43-department';
     sec.className = 'section';
-    sec.innerHTML = '<div id="dp23-root" class="sub-page active"></div>';
+    sec.innerHTML = '<div id="d43-root" class="sub-page active"></div>';
 
     const main = document.querySelector('main') || document.body;
     main.appendChild(sec);
     return sec;
   }
 
-  function dp23ShowRoot(html) {
-    const sec = dp23EnsureSection();
+  function d43ShowRoot(html) {
+    const sec = d43EnsureSection();
 
     document.querySelectorAll('.section').forEach(function (s) {
       s.classList.remove('active');
@@ -172,10 +186,10 @@
       b.classList.remove('active');
     });
 
-    const navBtn = document.getElementById('dp23NavBtn');
+    const navBtn = document.getElementById('d43NavBtn');
     if (navBtn) navBtn.classList.add('active');
 
-    const root = document.getElementById('dp23-root');
+    const root = document.getElementById('d43-root');
     if (root) root.innerHTML = html;
 
     try {
@@ -183,16 +197,18 @@
     } catch (e) {}
   }
 
-  function dp23InjectNav() {
+  function d43InjectNav() {
+    d43CleanupOldDepartmentShell();
+
     const nav = document.querySelector('.bottom-nav');
-    if (!nav || document.getElementById('dp23NavBtn')) return;
+    if (!nav || document.getElementById('d43NavBtn')) return;
 
     const btn = document.createElement('button');
-    btn.id = 'dp23NavBtn';
+    btn.id = 'd43NavBtn';
     btn.className = 'nav-item';
     btn.innerHTML = '<i class="fas fa-building"></i>Department';
     btn.onclick = function () {
-      window.dp23OpenHome();
+      window.d43OpenHome();
     };
 
     const navItems = Array.from(nav.querySelectorAll('.nav-item'));
@@ -222,19 +238,124 @@
     }
   }
 
-  window.dp23GoBackApp = function () {
+  window.d43GoBackApp = function () {
     if (window.switchSection) window.switchSection('home');
   };
 
   // =====================================================
-  // REMOVE / HIDE OLD DEPARTMENT WEEKLY MEETINGS
+  // MOVE / SURFACE FORUM + PLANS IN HOME
   // =====================================================
 
-  function dp23AddHideCss() {
-    if (document.getElementById('dp23HideOldDeptMeetings')) return;
+  function d43MoveForumAndPlansToHome() {
+    const home =
+      document.querySelector('#section-home') ||
+      document.querySelector('#home-main') ||
+      document.querySelector('.main-section');
+
+    if (!home) return;
+
+    const forumSelectors = [
+      '#section-forum',
+      '#forumSection',
+      '#publicForum',
+      '#section-public-forum',
+      '#homeForumSection'
+    ];
+
+    const plansSelectors = [
+      '#section-plans',
+      '#plansSection',
+      '#communityPlans',
+      '#section-community-plans',
+      '#homePlansSection'
+    ];
+
+    function moveExact(selectors) {
+      for (let i = 0; i < selectors.length; i++) {
+        const el = document.querySelector(selectors[i]);
+        if (el && !home.contains(el)) {
+          home.appendChild(el);
+          el.style.display = 'block';
+          return el;
+        }
+      }
+      return null;
+    }
+
+    moveExact(forumSelectors);
+    moveExact(plansSelectors);
+
+    // If exact sections are not found, add safe shortcuts only once.
+    if (!document.getElementById('d43HomeForumPlanShortcuts')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'd43HomeForumPlanShortcuts';
+      wrap.className = 'grid-2';
+      wrap.style.marginBottom = '14px';
+      wrap.innerHTML = `
+        <button class="btn btn-primary btn-block" onclick="d43TryOpenForum()">
+          <i class="fas fa-comments"></i> Public Forum
+        </button>
+        <button class="btn btn-secondary btn-block" onclick="d43TryOpenPlans()">
+          <i class="fas fa-calendar-check"></i> Plans
+        </button>
+      `;
+
+      const firstCard = home.querySelector('.card, .section-title-app');
+      if (firstCard) {
+        home.insertBefore(wrap, firstCard);
+      } else {
+        home.prepend(wrap);
+      }
+    }
+  }
+
+  window.d43TryOpenForum = function () {
+    const candidates = ['forum', 'publicForum', 'public-forum', 'communityForum'];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const el = document.getElementById(candidates[i]) || document.getElementById('section-' + candidates[i]);
+      if (el) {
+        document.querySelectorAll('.section').forEach(function (s) {
+          s.classList.remove('active');
+        });
+        el.classList.add('active');
+        return;
+      }
+    }
+
+    if (window.switchSection) {
+      window.switchSection('discover');
+    }
+  };
+
+  window.d43TryOpenPlans = function () {
+    const candidates = ['plans', 'communityPlans', 'community-plans', 'planSection'];
+
+    for (let i = 0; i < candidates.length; i++) {
+      const el = document.getElementById(candidates[i]) || document.getElementById('section-' + candidates[i]);
+      if (el) {
+        document.querySelectorAll('.section').forEach(function (s) {
+          s.classList.remove('active');
+        });
+        el.classList.add('active');
+        return;
+      }
+    }
+
+    if (window.switchSection) {
+      window.switchSection('discover');
+    }
+  };
+
+  // =====================================================
+  // HIDE OLD DEPARTMENT MEETING UI
+  // =====================================================
+
+  function d43AddHideCss() {
+    if (document.getElementById('d43HideOldDeptMeetings')) return;
 
     const style = document.createElement('style');
-    style.id = 'dp23HideOldDeptMeetings';
+    style.id = 'd43HideOldDeptMeetings';
     style.textContent = `
       #deptMeetings,
       #deptMeet,
@@ -253,7 +374,7 @@
     document.head.appendChild(style);
   }
 
-  function dp23DisableOldMeetingFunctions() {
+  function d43DisableOldMeetingFunctions() {
     const oldFns = [
       'loadDeptMeetings',
       'loadDeptMeetings9',
@@ -272,34 +393,33 @@
 
     oldFns.forEach(function (name) {
       const current = window[name];
-      if (!current || !current._dp23Disabled) {
+      if (!current || !current._d43Disabled) {
         const stub = function () {
           console.log('Old department meeting function disabled:', name);
           return Promise.resolve ? Promise.resolve() : undefined;
         };
-        stub._dp23Disabled = true;
+        stub._d43Disabled = true;
         window[name] = stub;
       }
     });
   }
 
-  function dp23KillOldMeetingUI() {
-    dp23AddHideCss();
+  function d43KillOldMeetingUI() {
+    d43AddHideCss();
 
     const containers = document.querySelectorAll('[id*="dept"], [class*="dept"], #section-department');
 
     containers.forEach(function (container) {
       if (!container) return;
-      if (container.closest && container.closest('#section-dp23')) return;
-      if (container.id === 'dp23NavBtn') return;
+      if (container.closest && container.closest('#section-d43-department')) return;
+      if (container.id === 'd43NavBtn') return;
 
       const containerMeta =
         String(container.id || '') + ' ' +
         String(container.getAttribute ? container.getAttribute('class') || '' : '');
 
-      // Hide old meeting containers/cards inside department areas
       container.querySelectorAll('[id*="meet"], [class*="meet"]').forEach(function (el) {
-        if (el.closest && el.closest('#section-dp23')) return;
+        if (el.closest && el.closest('#section-d43-department')) return;
 
         const meta =
           String(el.id || '') + ' ' +
@@ -311,9 +431,8 @@
         }
       });
 
-      // Hide old department meeting buttons/tabs
       container.querySelectorAll('button, .btn, .tab').forEach(function (el) {
-        if (el.closest && el.closest('#section-dp23')) return;
+        if (el.closest && el.closest('#section-d43-department')) return;
 
         const onclick = String(el.getAttribute ? el.getAttribute('onclick') || '' : '');
         const text = String(el.textContent || '');
@@ -329,53 +448,47 @@
     });
   }
 
-  dp23DisableOldMeetingFunctions();
-  dp23KillOldMeetingUI();
-
-  setInterval(dp23DisableOldMeetingFunctions, 3000);
-  setInterval(dp23KillOldMeetingUI, 1500);
-
   // =====================================================
   // PERMISSIONS
   // =====================================================
 
-  async function dp23LoadMyMemberships() {
-    if (!dp23User() || !sb()) return;
+  async function d43LoadMyMemberships() {
+    if (!d43User() || !sb()) return;
 
     const { data, error } = await sb()
       .from('department_members')
       .select('*')
-      .eq('user_id', dp23User().id);
+      .eq('user_id', d43User().id);
 
     if (!error) D.myMemberships = data || [];
   }
 
-  function dp23MyRole(departmentId) {
+  function d43MyRole(departmentId) {
     const m = (D.myMemberships || []).find(function (x) {
       return x.department_id === departmentId;
     });
     return m ? String(m.role || 'Member').toLowerCase() : '';
   }
 
-  function dp23IsMember(departmentId) {
+  function d43IsMember(departmentId) {
     return (D.myMemberships || []).some(function (x) {
       return x.department_id === departmentId;
     });
   }
 
-  function dp23CanManageMinutes(departmentId) {
-    if (dp23IsAdmin()) return true;
-    const r = dp23MyRole(departmentId);
-    return ['leader', 'chairman', 'secretary'].includes(r);
-  }
-
-  function dp23CanManageMembers(departmentId) {
-    if (dp23IsAdmin()) return true;
-    const r = dp23MyRole(departmentId);
+  function d43CanManageMembers(departmentId) {
+    if (d43IsAdmin()) return true;
+    const r = d43MyRole(departmentId);
     return ['leader', 'chairman'].includes(r);
   }
 
-  function dp23RoleOptions(selected) {
+  function d43CanManageMinutes(departmentId) {
+    if (d43IsAdmin()) return true;
+    const r = d43MyRole(departmentId);
+    return ['leader', 'chairman', 'secretary'].includes(r);
+  }
+
+  function d43RoleOptions(selected) {
     const roles = ['Member', 'Leader', 'Chairman', 'Secretary', 'Treasurer'];
     const selectedLower = String(selected || '').toLowerCase();
 
@@ -387,7 +500,7 @@
       .join('');
   }
 
-  function dp23UserOptions(users, selectedId, excludeIds) {
+  function d43UserOptions(users, selectedId, excludeIds) {
     excludeIds = excludeIds || [];
 
     return (users || [])
@@ -396,12 +509,12 @@
       })
       .map(function (u) {
         const sel = u.id === selectedId ? 'selected' : '';
-        return '<option value="' + u.id + '" ' + sel + '>' + dp23Esc(u.name || u.email || 'User') + '</option>';
+        return '<option value="' + u.id + '" ' + sel + '>' + d43Esc(u.name || u.email || 'User') + '</option>';
       })
       .join('');
   }
 
-  async function dp23RefreshDeptMembers() {
+  async function d43RefreshDeptMembers() {
     if (!sb() || !D.currentDepartmentId) return;
 
     const { data } = await sb()
@@ -410,32 +523,32 @@
       .eq('department_id', D.currentDepartmentId);
 
     D.deptMembers = data || [];
-    await dp23LoadMyMemberships();
+    await d43LoadMyMemberships();
   }
 
   // =====================================================
   // DEPARTMENT HOME
   // =====================================================
 
-  window.dp23OpenHome = async function () {
-    if (!dp23User()) return alert('Please log in first.');
+  window.d43OpenHome = async function () {
+    if (!d43User()) return alert('Please log in first.');
     if (!sb()) return alert('Supabase not ready.');
 
-    dp23ShowRoot('<div class="section-title-app">Departments</div><div class="card">Loading...</div>');
+    d43ShowRoot('<div class="section-title-app">Departments</div><div class="card">Loading...</div>');
 
-    await dp23LoadMyMemberships();
+    await d43LoadMyMemberships();
 
     const { data, error } = await sb()
       .from('departments')
       .select('*')
       .order('name');
 
-    if (error) return dp23ShowRoot(dp23Error(error.message));
+    if (error) return d43ShowRoot(d43Error(error.message));
 
     D.departments = data || [];
 
     let html = '';
-    html += '<button class="back-btn" onclick="dp23GoBackApp()"><i class="fas fa-arrow-left"></i> Back</button>';
+    html += '<button class="back-btn" onclick="d43GoBackApp()"><i class="fas fa-arrow-left"></i> Back</button>';
     html += '<div class="section-title-app"><i class="fas fa-building"></i> Departments</div>';
 
     if (!D.departments.length) {
@@ -451,28 +564,28 @@
         <div class="card" style="margin-bottom:12px">
           <div style="display:flex;justify-content:space-between;gap:10px;align-items:flex-start">
             <div style="flex:1">
-              <div style="font-weight:800;font-size:1.05rem">${dp23Esc(d.name)}</div>
-              <div style="font-size:.85rem;color:var(--text-light)">${dp23Esc(d.description || 'Department')}</div>
-              ${mine ? '<div style="font-size:.75rem;color:var(--accent);margin-top:4px"><i class="fas fa-check"></i> ' + dp23Esc(mine.role || 'Member') + '</div>' : ''}
+              <div style="font-weight:800;font-size:1.05rem">${d43Esc(d.name)}</div>
+              <div style="font-size:.85rem;color:var(--text-light)">${d43Esc(d.description || 'Department')}</div>
+              ${mine ? '<div style="font-size:.75rem;color:var(--accent);margin-top:4px"><i class="fas fa-check"></i> ' + d43Esc(mine.role || 'Member') + '</div>' : ''}
             </div>
             <div style="display:flex;flex-direction:column;gap:6px">
-              ${(mine || dp23IsAdmin()) ? '<button class="btn btn-primary btn-sm" onclick="dp23OpenDepartment(\'' + d.id + '\')">Open</button>' : ''}
-              ${!mine ? '<button class="btn btn-secondary btn-sm" onclick="dp23JoinDepartment(\'' + d.id + '\')">Join</button>' : ''}
+              ${(mine || d43IsAdmin()) ? '<button class="btn btn-primary btn-sm" onclick="d43OpenDepartment(\'' + d.id + '\')">Open</button>' : ''}
+              ${!mine ? '<button class="btn btn-secondary btn-sm" onclick="d43JoinDepartment(\'' + d.id + '\')">Join</button>' : ''}
             </div>
           </div>
         </div>
       `;
     });
 
-    dp23ShowRoot(html);
+    d43ShowRoot(html);
   };
 
-  window.dp23JoinDepartment = async function (departmentId) {
-    if (!dp23User()) return alert('Please log in first.');
+  window.d43JoinDepartment = async function (departmentId) {
+    if (!d43User()) return alert('Please log in first.');
 
     const payload = {
       department_id: departmentId,
-      user_id: dp23User().id,
+      user_id: d43User().id,
       role: 'Member'
     };
 
@@ -481,7 +594,6 @@
       .upsert(payload, { onConflict: 'department_id,user_id' });
 
     if (error) {
-      // Fallback if upsert conflict column is not accepted
       const insert = await sb()
         .from('department_members')
         .insert([payload]);
@@ -489,37 +601,37 @@
       if (insert.error) return alert(insert.error.message);
     }
 
-    await dp23LoadMyMemberships();
-    window.dp23OpenDepartment(departmentId);
+    await d43LoadMyMemberships();
+    window.d43OpenDepartment(departmentId);
   };
 
-  window.dp23LeaveDepartment = async function (departmentId) {
-    if (!dp23User()) return;
+  window.d43LeaveDepartment = async function (departmentId) {
+    if (!d43User()) return;
     if (!confirm('Leave this department?')) return;
 
     await sb()
       .from('department_members')
       .delete()
       .eq('department_id', departmentId)
-      .eq('user_id', dp23User().id);
+      .eq('user_id', d43User().id);
 
-    await dp23LoadMyMemberships();
-    window.dp23OpenHome();
+    await d43LoadMyMemberships();
+    window.d43OpenHome();
   };
 
   // =====================================================
   // DEPARTMENT PAGE
   // =====================================================
 
-  window.dp23OpenDepartment = async function (departmentId) {
-    if (!dp23User()) return alert('Please log in first.');
+  window.d43OpenDepartment = async function (departmentId) {
+    if (!d43User()) return alert('Please log in first.');
     if (!sb()) return alert('Supabase not ready.');
 
     D.currentDepartmentId = departmentId;
 
-    dp23ShowRoot('<div class="section-title-app">Department</div><div class="card">Loading...</div>');
+    d43ShowRoot('<div class="section-title-app">Department</div><div class="card">Loading...</div>');
 
-    await dp23LoadMyMemberships();
+    await d43LoadMyMemberships();
 
     const { data: department, error } = await sb()
       .from('departments')
@@ -527,7 +639,7 @@
       .eq('id', departmentId)
       .single();
 
-    if (error || !department) return window.dp23OpenHome();
+    if (error || !department) return window.d43OpenHome();
 
     D.department = department;
 
@@ -535,13 +647,13 @@
       return m.department_id === departmentId;
     });
 
-    if (!mine && !dp23IsAdmin()) {
-      dp23ShowRoot(`
-        <button class="back-btn" onclick="dp23OpenHome()"><i class="fas fa-arrow-left"></i> Back</button>
+    if (!mine && !d43IsAdmin()) {
+      d43ShowRoot(`
+        <button class="back-btn" onclick="d43OpenHome()"><i class="fas fa-arrow-left"></i> Back</button>
         <div class="card">
-          <div style="font-weight:800;font-size:1.2rem">${dp23Esc(department.name)}</div>
-          <div style="color:var(--text-light);margin:8px 0">${dp23Esc(department.description || 'Department')}</div>
-          <button class="btn btn-primary btn-block" onclick="dp23JoinDepartment('${department.id}')">
+          <div style="font-weight:800;font-size:1.2rem">${d43Esc(department.name)}</div>
+          <div style="color:var(--text-light);margin:8px 0">${d43Esc(department.description || 'Department')}</div>
+          <button class="btn btn-primary btn-block" onclick="d43JoinDepartment('${department.id}')">
             <i class="fas fa-sign-in-alt"></i> Join Department
           </button>
         </div>
@@ -549,68 +661,398 @@
       return;
     }
 
-    await dp23RefreshDeptMembers();
+    await d43RefreshDeptMembers();
 
     const html = `
-      <button class="back-btn" onclick="dp23OpenHome()"><i class="fas fa-arrow-left"></i> Back</button>
+      <button class="back-btn" onclick="d43OpenHome()"><i class="fas fa-arrow-left"></i> Back</button>
 
       <div class="dept-banner" style="border-radius:var(--radius);margin-bottom:14px">
         <div class="dept-icon" style="background:var(--gradient-dept)"><i class="fas fa-building"></i></div>
         <div>
-          <div style="font-weight:800;font-size:1.2rem">${dp23Esc(department.name)}</div>
-          <div style="font-size:.8rem;opacity:.9">${dp23Esc(department.description || 'Department')}</div>
+          <div style="font-weight:800;font-size:1.2rem">${d43Esc(department.name)}</div>
+          <div style="font-size:.8rem;opacity:.9">${d43Esc(department.description || 'Department')}</div>
         </div>
       </div>
 
       <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">
         ${mine
-          ? '<button class="btn btn-danger btn-sm" onclick="dp23LeaveDepartment(\'' + department.id + '\')"><i class="fas fa-sign-out-alt"></i> Leave</button>'
-          : '<button class="btn btn-primary btn-sm" onclick="dp23JoinDepartment(\'' + department.id + '\')"><i class="fas fa-sign-in-alt"></i> Join</button>'
+          ? '<button class="btn btn-danger btn-sm" onclick="d43LeaveDepartment(\'' + department.id + '\')"><i class="fas fa-sign-out-alt"></i> Leave</button>'
+          : '<button class="btn btn-primary btn-sm" onclick="d43JoinDepartment(\'' + department.id + '\')"><i class="fas fa-sign-in-alt"></i> Join</button>'
         }
       </div>
 
       <div class="tabs">
-        <div class="tab active" id="dp23-tabbtn-meetings" onclick="dp23SwitchTab('meetings')">Meetings</div>
-        <div class="tab" id="dp23-tabbtn-members" onclick="dp23SwitchTab('members')">Members</div>
+        <div class="tab active" id="d43-tabbtn-feed" onclick="d43SwitchTab('feed')">Feed</div>
+        <div class="tab" id="d43-tabbtn-members" onclick="d43SwitchTab('members')">Members</div>
+        <div class="tab" id="d43-tabbtn-leadership" onclick="d43SwitchTab('leadership')">Leadership</div>
+        <div class="tab" id="d43-tabbtn-meetings" onclick="d43SwitchTab('meetings')">Meetings</div>
       </div>
 
-      <div id="dp23-tab-meetings" class="dp23-tab"></div>
-      <div id="dp23-tab-members" class="dp23-tab" style="display:none"></div>
+      <div id="d43-tab-feed" class="d43-tab"></div>
+      <div id="d43-tab-members" class="d43-tab" style="display:none"></div>
+      <div id="d43-tab-leadership" class="d43-tab" style="display:none"></div>
+      <div id="d43-tab-meetings" class="d43-tab" style="display:none"></div>
     `;
 
-    dp23ShowRoot(html);
-    window.dp23SwitchTab('meetings');
+    d43ShowRoot(html);
+    window.d43SwitchTab('feed');
   };
 
-  window.dp23SwitchTab = function (tab) {
-    document.querySelectorAll('#dp23-root .tab').forEach(function (t) {
+  window.d43SwitchTab = function (tab) {
+    document.querySelectorAll('#d43-root .tab').forEach(function (t) {
       t.classList.remove('active');
     });
 
-    const btn = document.getElementById('dp23-tabbtn-' + tab);
+    const btn = document.getElementById('d43-tabbtn-' + tab);
     if (btn) btn.classList.add('active');
 
-    ['meetings', 'members'].forEach(function (t) {
-      const el = document.getElementById('dp23-tab-' + t);
+    ['feed', 'members', 'leadership', 'meetings'].forEach(function (t) {
+      const el = document.getElementById('d43-tab-' + t);
       if (el) el.style.display = t === tab ? 'block' : 'none';
     });
 
-    if (tab === 'meetings') dp23LoadMeetings();
-    if (tab === 'members') dp23LoadMembers();
+    if (tab === 'feed') d43LoadFeed();
+    if (tab === 'members') d43LoadMembers();
+    if (tab === 'leadership') d43LoadLeadership();
+    if (tab === 'meetings') d43LoadMeetings();
   };
+
+  // =====================================================
+  // FEED
+  // =====================================================
+
+  async function d43LoadFeed() {
+    const box = document.getElementById('d43-tab-feed');
+    if (!box) return;
+
+    box.innerHTML = '<div class="card">Loading...</div>';
+
+    const canPost = d43IsAdmin() || d43IsMember(D.currentDepartmentId);
+
+    const { data: posts, error } = await sb()
+      .from('department_posts')
+      .select('*')
+      .eq('department_id', D.currentDepartmentId)
+      .order('created_at', { ascending: false })
+      .limit(50);
+
+    if (error) {
+      box.innerHTML = d43Error(error.message);
+      return;
+    }
+
+    const users = await d43GetUsers();
+
+    let html = '';
+
+    if (canPost) {
+      html += `
+        <div class="card">
+          <div class="form-group">
+            <textarea class="form-textarea" id="d43PostText" placeholder="Post to this department..."></textarea>
+          </div>
+          <div class="media-upload" id="d43PostUpload" onclick="d43AttachMedia('post','d43PostUpload')">
+            <i class="fas fa-cloud-upload-alt"></i><span>Add media</span>
+          </div>
+          <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="d43SubmitPost()">
+            <i class="fas fa-paper-plane"></i> Post
+          </button>
+        </div>
+      `;
+    }
+
+    if (!posts || !posts.length) {
+      html += '<div class="card" style="text-align:center;color:var(--text-light)">No posts yet.</div>';
+    }
+
+    (posts || []).forEach(function (p) {
+      const u = users.find(function (x) {
+        return x.id === p.user_id;
+      });
+
+      const text = p.text || p.post_text || p.content || '';
+
+      html += `
+        <div class="card" style="margin-bottom:12px">
+          <div style="display:flex;gap:10px;align-items:center;margin-bottom:8px">
+            <div class="post-avatar">${d43Initials(u && u.name)}</div>
+            <div>
+              <div style="font-weight:700">${d43Esc((u && u.name) || 'Member')}</div>
+              <div style="font-size:.75rem;color:var(--text-light)">${d43Date(p.created_at)}</div>
+            </div>
+          </div>
+          <div style="white-space:pre-wrap">${d43Esc(text)}</div>
+          ${d43MediaHtml(p.media_url)}
+        </div>
+      `;
+    });
+
+    box.innerHTML = html;
+  }
+
+  window.d43SubmitPost = async function () {
+    const textEl = document.getElementById('d43PostText');
+    if (!textEl) return;
+
+    const text = textEl.value.trim();
+    const file = window._d43Media.post;
+
+    if (!text && !file) return alert('Write something or attach media.');
+
+    let media_url = null;
+    if (file) media_url = await d43UploadMedia(file, 'department-posts');
+
+    const payloads = [
+      {
+        department_id: D.currentDepartmentId,
+        user_id: d43User().id,
+        text: text,
+        media_url: media_url
+      },
+      {
+        department_id: D.currentDepartmentId,
+        user_id: d43User().id,
+        post_text: text,
+        media_url: media_url
+      },
+      {
+        department_id: D.currentDepartmentId,
+        user_id: d43User().id,
+        content: text,
+        media_url: media_url
+      }
+    ];
+
+    let lastError = null;
+
+    for (let i = 0; i < payloads.length; i++) {
+      const { error } = await sb()
+        .from('department_posts')
+        .insert([payloads[i]]);
+
+      if (!error) {
+        window._d43Media.post = null;
+        d43LoadFeed();
+        return;
+      }
+
+      lastError = error;
+    }
+
+    alert(lastError ? lastError.message : 'Could not submit post.');
+  };
+
+  // =====================================================
+  // MEMBERS
+  // =====================================================
+
+  async function d43LoadMembers() {
+    const box = document.getElementById('d43-tab-members');
+    if (!box) return;
+
+    box.innerHTML = '<div class="card">Loading...</div>';
+
+    await d43RefreshDeptMembers();
+
+    const users = await d43GetUsers();
+    const canManage = d43CanManageMembers(D.currentDepartmentId);
+
+    let html = '';
+
+    if (canManage) {
+      html += `
+        <button class="btn btn-warm btn-block" style="margin-bottom:14px" onclick="d43AddMemberModal()">
+          <i class="fas fa-user-plus"></i> Add Member
+        </button>
+      `;
+    }
+
+    if (!D.deptMembers.length) {
+      html += '<div class="card">No members yet.</div>';
+    }
+
+    D.deptMembers.forEach(function (m) {
+      const u = users.find(function (x) {
+        return x.id === m.user_id;
+      });
+
+      const isSelf = d43User() && m.user_id === d43User().id;
+
+      html += `
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="post-avatar">${d43Initials(u && u.name)}</div>
+            <div style="flex:1">
+              <div style="font-weight:700">${d43Esc((u && u.name) || 'Member')}</div>
+              <div style="font-size:.75rem;color:var(--text-light)">${d43Esc(m.role || 'Member')}</div>
+            </div>
+          </div>
+
+          ${canManage && !isSelf ? `
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+              <select class="form-select" onchange="d43ChangeMemberRole('${m.id}', this.value)">
+                ${d43RoleOptions(m.role)}
+              </select>
+              <button class="btn btn-danger btn-sm" onclick="d43RemoveMember('${m.id}')"><i class="fas fa-trash"></i></button>
+            </div>
+          ` : ''}
+        </div>
+      `;
+    });
+
+    box.innerHTML = html;
+  }
+
+  window.d43AddMemberModal = async function () {
+    const users = await d43GetUsers();
+
+    const existingIds = D.deptMembers.map(function (m) {
+      return m.user_id;
+    });
+
+    const html = `
+      <div class="modal-overlay show" id="d43AddMemberModal" style="display:flex" onclick="if(event.target===this)d43CloseModal('d43AddMemberModal')">
+        <div class="modal" onclick="event.stopPropagation()">
+          <div class="modal-handle"></div>
+          <div class="modal-title"><i class="fas fa-user-plus"></i> Add Member</div>
+
+          <div class="form-group">
+            <label class="form-label">Member</label>
+            <select class="form-select" id="d43AddMemberUser">
+              <option value="">Select member</option>
+              ${d43UserOptions(users, null, existingIds)}
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label">Role</label>
+            <select class="form-select" id="d43AddMemberRole">
+              ${d43RoleOptions('Member')}
+            </select>
+          </div>
+
+          <button class="btn btn-primary btn-block" onclick="d43SaveNewMember()"><i class="fas fa-save"></i> Add</button>
+          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="d43CloseModal('d43AddMemberModal')">Cancel</button>
+        </div>
+      </div>
+    `;
+
+    document.body.insertAdjacentHTML('beforeend', html);
+  };
+
+  window.d43SaveNewMember = async function () {
+    const user_id = document.getElementById('d43AddMemberUser').value;
+    const role = document.getElementById('d43AddMemberRole').value;
+
+    if (!user_id) return alert('Select a member.');
+
+    const payload = {
+      department_id: D.currentDepartmentId,
+      user_id: user_id,
+      role: role
+    };
+
+    let { error } = await sb()
+      .from('department_members')
+      .upsert(payload, { onConflict: 'department_id,user_id' });
+
+    if (error) {
+      const insert = await sb()
+        .from('department_members')
+        .insert([payload]);
+
+      if (insert.error) return alert(insert.error.message);
+    }
+
+    d43CloseModal('d43AddMemberModal');
+    d43LoadMembers();
+  };
+
+  window.d43ChangeMemberRole = async function (memberId, role) {
+    const { error } = await sb()
+      .from('department_members')
+      .update({ role: role })
+      .eq('id', memberId);
+
+    if (error) return alert(error.message);
+
+    await d43RefreshDeptMembers();
+    d43LoadMembers();
+    d43LoadLeadership();
+  };
+
+  window.d43RemoveMember = async function (memberId) {
+    if (!confirm('Remove this member?')) return;
+
+    const { error } = await sb()
+      .from('department_members')
+      .delete()
+      .eq('id', memberId);
+
+    if (error) return alert(error.message);
+
+    await d43RefreshDeptMembers();
+    d43LoadMembers();
+    d43LoadLeadership();
+  };
+
+  // =====================================================
+  // LEADERSHIP
+  // =====================================================
+
+  async function d43LoadLeadership() {
+    const box = document.getElementById('d43-tab-leadership');
+    if (!box) return;
+
+    box.innerHTML = '<div class="card">Loading...</div>';
+
+    await d43RefreshDeptMembers();
+    const users = await d43GetUsers();
+
+    const leaders = D.deptMembers.filter(function (m) {
+      const r = String(m.role || '').toLowerCase();
+      return r !== 'member';
+    });
+
+    let html = '';
+
+    if (!leaders.length) {
+      html += '<div class="card">No leadership listed yet.</div>';
+    }
+
+    leaders.forEach(function (m) {
+      const u = users.find(function (x) {
+        return x.id === m.user_id;
+      });
+
+      html += `
+        <div class="card" style="margin-bottom:10px">
+          <div style="display:flex;gap:10px;align-items:center">
+            <div class="post-avatar">${d43Initials(u && u.name)}</div>
+            <div style="flex:1">
+              <div style="font-weight:800">${d43Esc((u && u.name) || 'Member')}</div>
+              <div style="font-size:.8rem;color:var(--primary);font-weight:700">${d43Esc(m.role || 'Leader')}</div>
+            </div>
+          </div>
+        </div>
+      `;
+    });
+
+    box.innerHTML = html;
+  }
 
   // =====================================================
   // MEETINGS
   // =====================================================
 
-  async function dp23LoadMeetings() {
-    const box = document.getElementById('dp23-tab-meetings');
+  async function d43LoadMeetings() {
+    const box = document.getElementById('d43-tab-meetings');
     if (!box) return;
 
     box.innerHTML = '<div class="card">Loading...</div>';
 
-    const canManage = dp23CanManageMinutes(D.currentDepartmentId);
-    const isMember = dp23IsAdmin() || dp23IsMember(D.currentDepartmentId);
+    const canManage = d43CanManageMinutes(D.currentDepartmentId);
+    const isMember = d43IsAdmin() || d43IsMember(D.currentDepartmentId);
 
     const { data: meetings, error } = await sb()
       .from('department_meetings')
@@ -620,7 +1062,7 @@
       .limit(50);
 
     if (error) {
-      box.innerHTML = dp23Error(error.message);
+      box.innerHTML = d43Error(error.message);
       return;
     }
 
@@ -628,7 +1070,7 @@
 
     if (canManage) {
       html += `
-        <button class="btn btn-warm btn-block" style="margin-bottom:14px" onclick="dp23MeetingModal()">
+        <button class="btn btn-warm btn-block" style="margin-bottom:14px" onclick="d43MeetingModal()">
           <i class="fas fa-plus"></i> Add Weekly Meeting / Minutes
         </button>
       `;
@@ -641,34 +1083,35 @@
     (meetings || []).forEach(function (m) {
       html += `
         <div class="card" style="margin-bottom:12px">
-          <div style="font-weight:800">${dp23Esc(m.theme || 'Weekly Meeting')}</div>
+          <div style="font-weight:800">${d43Esc(m.theme || 'Weekly Meeting')}</div>
+
           <div style="font-size:.85rem;color:var(--text-light);margin-top:4px">
-            ${dp23Esc(m.meeting_date || '')} ${m.start_time ? '• ' + dp23Esc(m.start_time) : ''}
-            ${m.end_time ? ' - ' + dp23Esc(m.end_time) : ''}
+            ${d43Esc(m.meeting_date || '')} ${m.start_time ? '• ' + d43Esc(m.start_time) : ''}
+            ${m.end_time ? ' - ' + d43Esc(m.end_time) : ''}
           </div>
 
-          ${m.venue ? '<div style="font-size:.85rem;color:var(--text-light);margin-top:2px"><i class="fas fa-map-marker-alt"></i> ' + dp23Esc(m.venue) + '</div>' : ''}
+          ${m.venue ? '<div style="font-size:.85rem;color:var(--text-light);margin-top:2px"><i class="fas fa-map-marker-alt"></i> ' + d43Esc(m.venue) + '</div>' : ''}
 
           <div style="margin-top:8px;font-size:.9rem">
-            <i class="fas fa-users"></i> Total present: ${dp23Esc(m.total_members_present || 0)}
+            <i class="fas fa-users"></i> Total present: ${d43Esc(m.total_members_present || 0)}
           </div>
 
           <details style="margin-top:8px">
             <summary style="cursor:pointer;color:var(--primary);font-weight:600">View Minutes</summary>
 
-            ${m.agenda ? '<div style="margin-top:8px"><b>Agenda</b><div style="white-space:pre-wrap">' + dp23Esc(m.agenda) + '</div></div>' : ''}
-            ${m.members_present ? '<div style="margin-top:8px"><b>Members Present</b><div style="white-space:pre-wrap">' + dp23Esc(m.members_present) + '</div></div>' : ''}
-            ${m.absent_with_apology ? '<div style="margin-top:8px"><b>Absent with Apology</b><div style="white-space:pre-wrap">' + dp23Esc(m.absent_with_apology) + '</div></div>' : ''}
-            ${m.absent_without_apology ? '<div style="margin-top:8px"><b>Absent without Apology</b><div style="white-space:pre-wrap">' + dp23Esc(m.absent_without_apology) + '</div></div>' : ''}
-            ${m.guests ? '<div style="margin-top:8px"><b>Guests</b><div>' + dp23Esc(m.guests) + '</div></div>' : ''}
-            ${m.minutes ? '<div style="margin-top:8px"><b>Minutes</b><div style="white-space:pre-wrap">' + dp23Esc(m.minutes) + '</div></div>' : ''}
+            ${m.agenda ? '<div style="margin-top:8px"><b>Agenda</b><div style="white-space:pre-wrap">' + d43Esc(m.agenda) + '</div></div>' : ''}
+            ${m.members_present ? '<div style="margin-top:8px"><b>Members Present</b><div style="white-space:pre-wrap">' + d43Esc(m.members_present) + '</div></div>' : ''}
+            ${m.absent_with_apology ? '<div style="margin-top:8px"><b>Absent with Apology</b><div style="white-space:pre-wrap">' + d43Esc(m.absent_with_apology) + '</div></div>' : ''}
+            ${m.absent_without_apology ? '<div style="margin-top:8px"><b>Absent without Apology</b><div style="white-space:pre-wrap">' + d43Esc(m.absent_without_apology) + '</div></div>' : ''}
+            ${m.guests ? '<div style="margin-top:8px"><b>Guests</b><div>' + d43Esc(m.guests) + '</div></div>' : ''}
+            ${m.minutes ? '<div style="margin-top:8px"><b>Minutes</b><div style="white-space:pre-wrap">' + d43Esc(m.minutes) + '</div></div>' : ''}
 
-            ${dp23MediaHtml(m.media_url)}
+            ${d43MediaHtml(m.media_url)}
           </details>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            ${isMember ? '<button class="btn btn-secondary btn-sm" onclick="dp23ApologyModal(\'' + m.id + '\')"><i class="fas fa-hand-paper"></i> Submit Apology</button>' : ''}
-            ${canManage ? '<button class="btn btn-primary btn-sm" onclick="dp23MeetingModal(\'' + m.id + '\')"><i class="fas fa-edit"></i> Edit Meeting</button>' : ''}
+            ${isMember ? '<button class="btn btn-secondary btn-sm" onclick="d43ApologyModal(\'' + m.id + '\')"><i class="fas fa-hand-paper"></i> Submit Apology</button>' : ''}
+            ${canManage ? '<button class="btn btn-primary btn-sm" onclick="d43MeetingModal(\'' + m.id + '\')"><i class="fas fa-edit"></i> Edit Meeting</button>' : ''}
           </div>
         </div>
       `;
@@ -677,7 +1120,7 @@
     box.innerHTML = html;
   }
 
-  window.dp23MeetingModal = async function (meetingId) {
+  window.d43MeetingModal = async function (meetingId) {
     let m = {};
 
     if (meetingId) {
@@ -700,7 +1143,7 @@
     ].join('\n');
 
     const html = `
-      <div class="modal-overlay show" id="dp23MeetingModal" style="display:flex" onclick="if(event.target===this)dp23CloseModal('dp23MeetingModal')">
+      <div class="modal-overlay show" id="d43MeetingModal" style="display:flex" onclick="if(event.target===this)d43CloseModal('d43MeetingModal')">
         <div class="modal" onclick="event.stopPropagation()">
           <div class="modal-handle"></div>
           <div class="modal-title">${meetingId ? '📝 Edit Department Meeting' : '📝 Add Department Meeting'}</div>
@@ -708,12 +1151,12 @@
           <div class="grid-2">
             <div class="form-group">
               <label class="form-label">Date</label>
-              <input class="form-input" id="dp23MeetingDate" type="date" value="${dp23Esc(String(m.meeting_date || dp23Today()).slice(0, 10))}">
+              <input class="form-input" id="d43MeetingDate" type="date" value="${d43Esc(String(m.meeting_date || d43Today()).slice(0, 10))}">
             </div>
 
             <div class="form-group">
               <label class="form-label">Day</label>
-              <select class="form-select" id="dp23MeetingDay">
+              <select class="form-select" id="d43MeetingDay">
                 ${['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
                   .map(function (d) {
                     return '<option value="' + d + '" ' + (m.day === d ? 'selected' : '') + '>' + d + '</option>';
@@ -726,76 +1169,76 @@
           <div class="grid-2">
             <div class="form-group">
               <label class="form-label">Start</label>
-              <input class="form-input" id="dp23MeetingStart" type="time" value="${dp23Esc(m.start_time || '')}">
+              <input class="form-input" id="d43MeetingStart" type="time" value="${d43Esc(m.start_time || '')}">
             </div>
 
             <div class="form-group">
               <label class="form-label">End</label>
-              <input class="form-input" id="dp23MeetingEnd" type="time" value="${dp23Esc(m.end_time || '')}">
+              <input class="form-input" id="d43MeetingEnd" type="time" value="${d43Esc(m.end_time || '')}">
             </div>
           </div>
 
           <div class="form-group">
             <label class="form-label">Venue</label>
-            <input class="form-input" id="dp23MeetingVenue" value="${dp23Esc(m.venue || '')}">
+            <input class="form-input" id="d43MeetingVenue" value="${d43Esc(m.venue || '')}">
           </div>
 
           <div class="form-group">
             <label class="form-label">Theme</label>
-            <input class="form-input" id="dp23MeetingTheme" value="${dp23Esc(m.theme || '')}">
+            <input class="form-input" id="d43MeetingTheme" value="${d43Esc(m.theme || '')}">
           </div>
 
           <div class="form-group">
             <label class="form-label">Agenda</label>
-            <textarea class="form-textarea" id="dp23MeetingAgenda" rows="5">${dp23Esc(m.agenda || defaultAgenda)}</textarea>
+            <textarea class="form-textarea" id="d43MeetingAgenda" rows="5">${d43Esc(m.agenda || defaultAgenda)}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Members Present</label>
-            <textarea class="form-textarea" id="dp23MeetingPresent" rows="3" placeholder="One name per line">${dp23Esc(m.members_present || '')}</textarea>
+            <textarea class="form-textarea" id="d43MeetingPresent" rows="3" placeholder="One name per line">${d43Esc(m.members_present || '')}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Absent with Apology</label>
-            <textarea class="form-textarea" id="dp23MeetingApology" rows="3" placeholder="Name - Reason">${dp23Esc(m.absent_with_apology || '')}</textarea>
+            <textarea class="form-textarea" id="d43MeetingApology" rows="3" placeholder="Name - Reason">${d43Esc(m.absent_with_apology || '')}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Absent without Apology</label>
-            <textarea class="form-textarea" id="dp23MeetingAbsent" rows="2">${dp23Esc(m.absent_without_apology || '')}</textarea>
+            <textarea class="form-textarea" id="d43MeetingAbsent" rows="2">${d43Esc(m.absent_without_apology || '')}</textarea>
           </div>
 
           <div class="form-group">
             <label class="form-label">Guests / Others in Attendance</label>
-            <input class="form-input" id="dp23MeetingGuests" value="${dp23Esc(m.guests || '')}">
+            <input class="form-input" id="d43MeetingGuests" value="${d43Esc(m.guests || '')}">
           </div>
 
           <div class="form-group">
             <label class="form-label">Minutes / Proceedings</label>
-            <textarea class="form-textarea" id="dp23MeetingMinutes" rows="6">${dp23Esc(m.minutes || '')}</textarea>
+            <textarea class="form-textarea" id="d43MeetingMinutes" rows="6">${d43Esc(m.minutes || '')}</textarea>
           </div>
 
           <div class="grid-2">
             <div class="form-group">
               <label class="form-label">Time Taken (mins)</label>
-              <input class="form-input" id="dp23MeetingTimeTaken" type="number" value="${dp23Esc(m.time_taken_minutes || 0)}">
+              <input class="form-input" id="d43MeetingTimeTaken" type="number" value="${d43Esc(m.time_taken_minutes || 0)}">
             </div>
 
             <div class="form-group">
               <label class="form-label">Total Members Present</label>
-              <input class="form-input" id="dp23MeetingTotalPresent" type="number" value="${dp23Esc(m.total_members_present || 0)}">
+              <input class="form-input" id="d43MeetingTotalPresent" type="number" value="${d43Esc(m.total_members_present || 0)}">
             </div>
           </div>
 
-          <div class="media-upload" id="dp23MeetingUpload" onclick="dp23AttachMedia('meeting','dp23MeetingUpload')">
+          <div class="media-upload" id="d43MeetingUpload" onclick="d43AttachMedia('meeting','d43MeetingUpload')">
             <i class="fas fa-cloud-upload-alt"></i><span>Upload media</span>
           </div>
 
-          <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="dp23SaveMeeting('${meetingId || ''}')">
+          <button class="btn btn-primary btn-block" style="margin-top:10px" onclick="d43SaveMeeting('${meetingId || ''}')">
             <i class="fas fa-save"></i> Save Meeting
           </button>
 
-          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="dp23CloseModal('dp23MeetingModal')">Cancel</button>
+          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="d43CloseModal('d43MeetingModal')">Cancel</button>
         </div>
       </div>
     `;
@@ -803,24 +1246,24 @@
     document.body.insertAdjacentHTML('beforeend', html);
   };
 
-  window.dp23SaveMeeting = async function (meetingId) {
+  window.d43SaveMeeting = async function (meetingId) {
     const id = meetingId || null;
 
-    const meeting_date = document.getElementById('dp23MeetingDate').value || dp23Today();
-    const day = document.getElementById('dp23MeetingDay').value;
-    const start_time = document.getElementById('dp23MeetingStart').value;
-    const end_time = document.getElementById('dp23MeetingEnd').value;
-    const venue = document.getElementById('dp23MeetingVenue').value.trim();
-    const theme = document.getElementById('dp23MeetingTheme').value.trim();
-    const agenda = document.getElementById('dp23MeetingAgenda').value.trim();
-    const members_present = document.getElementById('dp23MeetingPresent').value.trim();
-    const absent_with_apology = document.getElementById('dp23MeetingApology').value.trim();
-    const absent_without_apology = document.getElementById('dp23MeetingAbsent').value.trim();
-    const guests = document.getElementById('dp23MeetingGuests').value.trim();
-    const minutes = document.getElementById('dp23MeetingMinutes').value.trim();
-    const time_taken_minutes = parseInt(document.getElementById('dp23MeetingTimeTaken').value || '0', 10);
+    const meeting_date = document.getElementById('d43MeetingDate').value || d43Today();
+    const day = document.getElementById('d43MeetingDay').value;
+    const start_time = document.getElementById('d43MeetingStart').value;
+    const end_time = document.getElementById('d43MeetingEnd').value;
+    const venue = document.getElementById('d43MeetingVenue').value.trim();
+    const theme = document.getElementById('d43MeetingTheme').value.trim();
+    const agenda = document.getElementById('d43MeetingAgenda').value.trim();
+    const members_present = document.getElementById('d43MeetingPresent').value.trim();
+    const absent_with_apology = document.getElementById('d43MeetingApology').value.trim();
+    const absent_without_apology = document.getElementById('d43MeetingAbsent').value.trim();
+    const guests = document.getElementById('d43MeetingGuests').value.trim();
+    const minutes = document.getElementById('d43MeetingMinutes').value.trim();
+    const time_taken_minutes = parseInt(document.getElementById('d43MeetingTimeTaken').value || '0', 10);
 
-    let total_members_present = parseInt(document.getElementById('dp23MeetingTotalPresent').value, 10);
+    let total_members_present = parseInt(document.getElementById('d43MeetingTotalPresent').value, 10);
 
     if (isNaN(total_members_present)) {
       total_members_present = members_present
@@ -828,10 +1271,10 @@
         : 0;
     }
 
-    const file = window._dp23Media.meeting;
+    const file = window._d43Media.meeting;
     let media_url = null;
 
-    if (file) media_url = await dp23UploadMedia(file, 'department-meetings');
+    if (file) media_url = await d43UploadMedia(file, 'department-meetings');
 
     const payload = {
       department_id: D.currentDepartmentId,
@@ -861,7 +1304,7 @@
 
       if (error) return alert(error.message);
     } else {
-      payload.created_by = dp23User().id;
+      payload.created_by = d43User().id;
 
       const { error } = await sb()
         .from('department_meetings')
@@ -870,30 +1313,30 @@
       if (error) return alert(error.message);
     }
 
-    window._dp23Media.meeting = null;
-    dp23CloseModal('dp23MeetingModal');
-    dp23LoadMeetings();
+    window._d43Media.meeting = null;
+    d43CloseModal('d43MeetingModal');
+    d43LoadMeetings();
   };
 
-  window.dp23ApologyModal = function (meetingId) {
-    if (!dp23User()) return alert('Please log in first.');
+  window.d43ApologyModal = function (meetingId) {
+    if (!d43User()) return alert('Please log in first.');
 
     const html = `
-      <div class="modal-overlay show" id="dp23ApologyModal" style="display:flex" onclick="if(event.target===this)dp23CloseModal('dp23ApologyModal')">
+      <div class="modal-overlay show" id="d43ApologyModal" style="display:flex" onclick="if(event.target===this)d43CloseModal('d43ApologyModal')">
         <div class="modal" onclick="event.stopPropagation()">
           <div class="modal-handle"></div>
           <div class="modal-title">🙏 Absent with Apology</div>
 
           <div class="form-group">
             <label class="form-label">Reason for Absence</label>
-            <textarea class="form-textarea" id="dp23ApologyReason" rows="4" placeholder="State reason..."></textarea>
+            <textarea class="form-textarea" id="d43ApologyReason" rows="4" placeholder="State reason..."></textarea>
           </div>
 
-          <button class="btn btn-primary btn-block" onclick="dp23SaveApology('${meetingId}')">
+          <button class="btn btn-primary btn-block" onclick="d43SaveApology('${meetingId}')">
             <i class="fas fa-paper-plane"></i> Submit Apology
           </button>
 
-          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="dp23CloseModal('dp23ApologyModal')">Cancel</button>
+          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="d43CloseModal('d43ApologyModal')">Cancel</button>
         </div>
       </div>
     `;
@@ -901,8 +1344,8 @@
     document.body.insertAdjacentHTML('beforeend', html);
   };
 
-  window.dp23SaveApology = async function (meetingId) {
-    const reason = document.getElementById('dp23ApologyReason').value.trim();
+  window.d43SaveApology = async function (meetingId) {
+    const reason = document.getElementById('d43ApologyReason').value.trim();
     if (!reason) return alert('Please enter a reason.');
 
     const name = (window.profile && window.profile.name) || 'Member';
@@ -926,172 +1369,32 @@
       .from('department_meeting_attendance')
       .insert([{
         meeting_id: meetingId,
-        user_id: dp23User().id,
+        user_id: d43User().id,
         status: 'absent_with_apology',
         reason: reason
       }]);
 
-    dp23CloseModal('dp23ApologyModal');
+    d43CloseModal('d43ApologyModal');
     alert('Apology submitted.');
-    dp23LoadMeetings();
-  };
-
-  // =====================================================
-  // MEMBERS
-  // =====================================================
-
-  async function dp23LoadMembers() {
-    const box = document.getElementById('dp23-tab-members');
-    if (!box) return;
-
-    box.innerHTML = '<div class="card">Loading...</div>';
-
-    await dp23RefreshDeptMembers();
-
-    const users = await dp23GetUsers();
-    const canManage = dp23CanManageMembers(D.currentDepartmentId);
-
-    let html = '';
-
-    if (canManage) {
-      html += `
-        <button class="btn btn-warm btn-block" style="margin-bottom:14px" onclick="dp23AddMemberModal()">
-          <i class="fas fa-user-plus"></i> Add Member
-        </button>
-      `;
-    }
-
-    if (!D.deptMembers.length) {
-      html += '<div class="card">No members yet.</div>';
-    }
-
-    D.deptMembers.forEach(function (m) {
-      const u = users.find(function (x) {
-        return x.id === m.user_id;
-      });
-
-      const isSelf = dp23User() && m.user_id === dp23User().id;
-
-      html += `
-        <div class="card" style="margin-bottom:10px">
-          <div style="display:flex;gap:10px;align-items:center">
-            <div class="post-avatar">${dp23Initials(u && u.name)}</div>
-            <div style="flex:1">
-              <div style="font-weight:700">${dp23Esc((u && u.name) || 'Member')}</div>
-              <div style="font-size:.75rem;color:var(--text-light)">${dp23Esc(m.role || 'Member')}</div>
-            </div>
-          </div>
-
-          ${canManage && !isSelf ? `
-            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
-              <select class="form-select" onchange="dp23ChangeMemberRole('${m.id}', this.value)">
-                ${dp23RoleOptions(m.role)}
-              </select>
-              <button class="btn btn-danger btn-sm" onclick="dp23RemoveMember('${m.id}')"><i class="fas fa-trash"></i></button>
-            </div>
-          ` : ''}
-        </div>
-      `;
-    });
-
-    box.innerHTML = html;
-  }
-
-  window.dp23AddMemberModal = async function () {
-    const users = await dp23GetUsers();
-
-    const existingIds = D.deptMembers.map(function (m) {
-      return m.user_id;
-    });
-
-    const html = `
-      <div class="modal-overlay show" id="dp23AddMemberModal" style="display:flex" onclick="if(event.target===this)dp23CloseModal('dp23AddMemberModal')">
-        <div class="modal" onclick="event.stopPropagation()">
-          <div class="modal-handle"></div>
-          <div class="modal-title"><i class="fas fa-user-plus"></i> Add Member</div>
-
-          <div class="form-group">
-            <label class="form-label">Member</label>
-            <select class="form-select" id="dp23AddMemberUser">
-              <option value="">Select member</option>
-              ${dp23UserOptions(users, null, existingIds)}
-            </select>
-          </div>
-
-          <div class="form-group">
-            <label class="form-label">Role</label>
-            <select class="form-select" id="dp23AddMemberRole">
-              ${dp23RoleOptions('Member')}
-            </select>
-          </div>
-
-          <button class="btn btn-primary btn-block" onclick="dp23SaveNewMember()"><i class="fas fa-save"></i> Add</button>
-          <button class="btn btn-secondary-alt btn-block" style="margin-top:8px" onclick="dp23CloseModal('dp23AddMemberModal')">Cancel</button>
-        </div>
-      </div>
-    `;
-
-    document.body.insertAdjacentHTML('beforeend', html);
-  };
-
-  window.dp23SaveNewMember = async function () {
-    const user_id = document.getElementById('dp23AddMemberUser').value;
-    const role = document.getElementById('dp23AddMemberRole').value;
-
-    if (!user_id) return alert('Select a member.');
-
-    const payload = {
-      department_id: D.currentDepartmentId,
-      user_id: user_id,
-      role: role
-    };
-
-    let { error } = await sb()
-      .from('department_members')
-      .upsert(payload, { onConflict: 'department_id,user_id' });
-
-    if (error) {
-      const insert = await sb()
-        .from('department_members')
-        .insert([payload]);
-
-      if (insert.error) return alert(insert.error.message);
-    }
-
-    dp23CloseModal('dp23AddMemberModal');
-    dp23LoadMembers();
-  };
-
-  window.dp23ChangeMemberRole = async function (memberId, role) {
-    const { error } = await sb()
-      .from('department_members')
-      .update({ role: role })
-      .eq('id', memberId);
-
-    if (error) return alert(error.message);
-
-    await dp23RefreshDeptMembers();
-    dp23LoadMembers();
-  };
-
-  window.dp23RemoveMember = async function (memberId) {
-    if (!confirm('Remove this member?')) return;
-
-    const { error } = await sb()
-      .from('department_members')
-      .delete()
-      .eq('id', memberId);
-
-    if (error) return alert(error.message);
-
-    await dp23RefreshDeptMembers();
-    dp23LoadMembers();
+    d43LoadMeetings();
   };
 
   // =====================================================
   // INIT
   // =====================================================
 
-  dp23InjectNav();
-  setInterval(dp23InjectNav, 1000);
+  function d43Init() {
+    d43CleanupOldDepartmentShell();
+    d43InjectNav();
+    d43MoveForumAndPlansToHome();
+    d43DisableOldMeetingFunctions();
+    d43KillOldMeetingUI();
+  }
+
+  d43Init();
+
+  setInterval(d43InjectNav, 1000);
+  setInterval(d43MoveForumAndPlansToHome, 3000);
+  setInterval(d43DisableOldMeetingFunctions, 3000);
+  setInterval(d43KillOldMeetingUI, 1500);
 })();
