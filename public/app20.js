@@ -76,7 +76,7 @@ console.log('✝️ app18.js v6 loading...');
   window.openSocialsEditor = function () { var so = (window.churchBrandingData || {}).socials || {}; SOCIALS.forEach(function (s) { var e = g('so_' + s[0]); if (e) e.value = so[s[0]] || ''; }); openModal('socialsModal21'); };
   window.saveSocials21 = function () { var so = {}; SOCIALS.forEach(function (s) { var v = g('so_' + s[0]).value.trim(); if (v) so[s[0]] = v; }); upsertSafe('church_settings', { id: 1, socials: so }, function (err) { if (err) return alert('⚠️ ' + err); alert('✅ Saved'); closeModalDirect(); loadChurchBranding().then(function () { if (window.renderPublicLanding) renderPublicLanding(); else applyLanding(); }); }); };
 
-  /* ══ FIX 4: SAFE save ══ */
+  /* ══ FIX 4: SAFE save — never overwrite with null unless trash button pressed ══ */
   document.addEventListener('click', function (e) { var b = e.target.closest ? e.target.closest('button.btn-danger') : null; if (b && (b.getAttribute('onclick') || '').indexOf(".value=''") > -1) { var inp = b.parentElement.querySelector('input'); if (inp) inp.dataset.clear = '1'; } }, true);
   document.addEventListener('input', function (e) { if (e.target && e.target.dataset) delete e.target.dataset.clear; }, true);
   window.beSave = function () {
@@ -132,7 +132,7 @@ console.log('✝️ app18.js v6 loading...');
   setInterval(applyLanding, 5000);
   loadChurchBranding().then(applyLanding);
 
-  /* ══ NOTIFICATIONS ══ */
+  /* ══ NOTIFICATIONS (scoped to same group) ══ */
   function notifyInsert(uid, title, msg) { if (!uid || !user || uid === user.id) return; sb.from('notifications').insert([{ user_id: uid, title: title, message: msg, body: msg }]).then(function (r) { if (r && r.error) sb.from('notifications').insert([{ user_id: uid, title: title, message: msg }]).then(function () { }); }); }
   function notifyMany(ids, title, msg) { (ids || []).forEach(function (id) { notifyInsert(id, title, msg); }); }
   function deptMemberIds(d) { return sb.from('department_members').select('user_id').eq('department_id', d).then(function (r) { return (r.data || []).map(function (x) { return x.user_id; }); }); }
@@ -142,7 +142,7 @@ console.log('✝️ app18.js v6 loading...');
   window.sendChatMessage = function () { if (user && currentChatUserId) { var i = g('chatInput'); var v = i ? i.value.trim() : ''; if (v) notifyInsert(currentChatUserId, '💬 New message', (profile && profile.name || 'Someone') + ': ' + v.slice(0, 60)); } return _scm ? _scm.apply(this, arguments) : undefined; };
   wrap('submitUshPost', function () { var u = window._curUshForumId; if (!u) return; ushMemberIds(u).then(function (ids) { notifyMany(ids, '🏘️ New ushirika post', 'By ' + (profile && profile.name || 'a member')); }); });
   wrap('submitDeptPost', function () { var d = window.currentDeptId; if (!d) return; deptMemberIds(d).then(function (ids) { notifyMany(ids, '🏢 New department post', 'By ' + (profile && profile.name || 'a member')); }); });
-  function meetNote(d, u) { var t = '📅 Weekly meeting updated', b = 'Check the new meeting details'; if (d) deptMemberIds(d).then(function (ids) { notifyMany(ids, t, b)); }); else if (u) ushMemberIds(u).then(function (ids) { notifyMany(ids, t, b); }); }
+  function meetNote(d, u) { var t = '📅 Weekly meeting updated', b = 'Check the new meeting details'; if (d) deptMemberIds(d).then(function (ids) { notifyMany(ids, t, b); }); else if (u) ushMemberIds(u).then(function (ids) { notifyMany(ids, t, b); }); }
   wrap('saveDeptMeeting9', function () { meetNote((g('dm9Pick') || {}).value || window.currentDeptId, null); });
   wrap('saveUshMeeting9', function () { meetNote(null, (g('um9Pick') || {}).value || window._curUshForumId); });
   wrap('updateMeeting', function () { meetNote(window.currentDeptId, window._curUshForumId); });
@@ -164,7 +164,7 @@ console.log('✝️ app18.js v6 loading...');
   window.addDoc21 = function () { var t = g('doc_title').value.trim(); if (!t || !window._docUrl) return alert('Title + file required'); sb.from('documents').insert([{ title: t, category: g('doc_cat').value, file_url: window._docUrl }]).then(function () { g('doc_title').value = ''; window._docUrl = null; docListRender(); if (typeof loadDocuments === 'function') loadDocuments(); }); };
   window.delDoc21 = function (id) { if (!confirm('Delete document?')) return; sb.from('documents').delete().eq('id', id).then(function () { docListRender(); if (typeof loadDocuments === 'function') loadDocuments().then(function () { if (window.renderPublicLanding) renderPublicLanding(); }); }); };
 
-  /* ══ FEATURED MEMBERS v7 — system taps use SAME logic as manual add ══ */
+  /* ══ FEATURED MEMBERS v7 — fixed taps + manual add + additional info ══ */
   var FE_SQL = 'Run once in Supabase SQL Editor:\n\ncreate table if not exists public.featured_people (id uuid primary key default gen_random_uuid(), user_id uuid, name text, role text, image_url text, sort int default 0, additional_info text);\nalter table public.featured_people add column if not exists sort int;\nalter table public.featured_people add column if not exists additional_info text;\ncreate policy "featured_sel" on public.featured_people for select using (true);\ncreate policy "featured_ins" on public.featured_people for insert to authenticated with check (true);\ncreate policy "featured_upd" on public.featured_people for update using (true);\ncreate policy "featured_del" on public.featured_people for delete using (true);';
   window.loadFeatured = function () { return sb.from('featured_people').select('*').then(function (r) { window._featured = r.data || []; }).catch(function (err) { console.warn('⚠️ loadFeatured() failed:', err); window._featured = []; }); };
   if (!g('feMgrModal')) document.body.insertAdjacentHTML('beforeend',
@@ -178,7 +178,7 @@ console.log('✝️ app18.js v6 loading...');
     '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="closeModalDirect()">Close</button>' +
     '</div></div>');
 
-  /* ── Manual person modal ── */
+  /* ── Manual person modal (photo + name + title + optional info) ── */
   if (!g('feManualModal')) document.body.insertAdjacentHTML('beforeend',
     '<div class="modal-overlay" id="feManualModal" onclick="if(event.target===this)closeModalDirect()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
     '<div class="modal-title">📝 Add Person (not in system)</div>' +
@@ -191,49 +191,23 @@ console.log('✝️ app18.js v6 loading...');
     '</div></div>');
   window.feManUpload = function () { var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = function () { if (i.files && i.files[0]) uploadMediaFile(i.files[0]).then(function (url) { window._feManPic = url; var b = g('feManPic'); if (b) b.innerHTML = '<i class="fas fa-check-circle" style="color:var(--accent)"></i><span>Photo ready ✔</span>'; }); }; i.click(); };
   window.openFeManualModal = function () { window._feManPic = null; var b = g('feManPic'); if (b) b.innerHTML = '<i class="fas fa-camera"></i><span>Tap to choose photo</span>'; g('feManName').value = ''; g('feManRole').value = ''; g('feManInfo').value = ''; openModal('feManualModal'); };
-
-  /* ── shared insert engine (used by BOTH manual + system taps) ── */
-  function feInsert(payload, label) {
-    window._feBusy = window._feBusy || {};
-    var key = payload.user_id || payload.name;
-    if (window._feBusy[key]) return false;
-    window._feBusy[key] = true;
-    function unbusy() { delete window._feBusy[key]; }
+  window.feAddManual = function () {
+    var name = g('feManName').value.trim(); var role = g('feManRole').value.trim(); var info = g('feManInfo').value.trim();
+    if (!name) return alert('Please enter a name.');
+    var payload = { user_id: null, name: name, role: role || 'Member', image_url: window._feManPic || null, sort: (window._featured || []).length, additional_info: info || null };
     (function tryInsert(p) {
       sb.from('featured_people').insert([p]).then(function (r) {
         if (r && r.error) {
           var m = r.error.message || '';
           if (/sort/.test(m)) { delete p.sort; return tryInsert(p); }
           if (/additional_info/.test(m)) { delete p.additional_info; return tryInsert(p); }
-          if (/user_id/.test(m)) { delete p.user_id; return tryInsert(p); }
-          unbusy(); return alert('⚠️ Could not add: ' + m + '\n\n' + FE_SQL);
+          return alert('⚠️ Could not add: ' + m + '\n\n' + FE_SQL);
         }
-        loadFeatured().then(function () {
-          unbusy();
-          feRender21();
-          feShowPicker21(true);
-          renderFeaturedLanding();
-          alert('✅ ' + label + ' added to front page!');
-        });
-      }).catch(function (err) { unbusy(); alert('⚠️ Insert failed: ' + (err && err.message ? err.message : err) + '\n\n' + FE_SQL); });
+        alert('✅ ' + name + ' added to front page!');
+        closeModalDirect();
+        loadFeatured().then(function () { feRender21(); renderFeaturedLanding(); });
+      }).catch(function (err) { alert('⚠️ Insert failed: ' + (err && err.message ? err.message : err) + '\n\n' + FE_SQL); });
     })(payload);
-    return true;
-  }
-
-  window.feAddManual = function () {
-    var name = g('feManName').value.trim(); var role = g('feManRole').value.trim(); var info = g('feManInfo').value.trim();
-    if (!name) return alert('Please enter a name.');
-    feInsert({ user_id: null, name: name, role: role || 'Member', image_url: window._feManPic || null, sort: (window._featured || []).length, additional_info: info || null }, name);
-    closeModalDirect();
-  };
-
-  /* ── SYSTEM MEMBER TAP: same logic as manual (profile pic + system role) ── */
-  window.fePickAdd = function (i) {
-    var u = (window._feAvail || [])[i];
-    if (!u || !u.id) return alert('⚠️ Row not found — close & reopen the picker.');
-    var dup = (window._featured || []).some(function (p) { return p.user_id === u.id; });
-    if (dup) return alert('This member is already featured.');
-    feInsert({ user_id: u.id, name: u.name, role: u.role || 'Member', image_url: u.profile_pic || null, sort: (window._featured || []).length, additional_info: null }, u.name);
   };
 
   function feRender21() {
@@ -284,7 +258,7 @@ console.log('✝️ app18.js v6 loading...');
     });
   };
 
-  /* backup delegated taps (guarded — inline onclick is primary) */
+  /* delegated click listener on the picker — e.preventDefault() removed for iOS */
   var pickerBound = false;
   function bindPickerTaps() {
     if (pickerBound) return;
@@ -295,8 +269,14 @@ console.log('✝️ app18.js v6 loading...');
       e.stopPropagation();
       var row = e.target;
       while (row && row !== pk && row.nodeType === 1) {
-        var idx = row.getAttribute && row.getAttribute('data-fe-idx');
-        if (idx != null) { window.fePickAdd(parseInt(idx, 10)); return; }
+        var uid = row.getAttribute && row.getAttribute('data-fe-add');
+        if (uid) {
+          row.style.background = '#D1FAE5';
+          row.style.transition = 'background .3s';
+          setTimeout(function () { row.style.background = ''; }, 400);
+          window.feAdd21(uid);
+          return;
+        }
         row = row.parentNode;
       }
     }, false);
@@ -316,16 +296,48 @@ console.log('✝️ app18.js v6 loading...');
     sb.from('profiles').select('id,name,role,profile_pic').order('name').then(function (r) {
       var existing = (window._featured || []).map(function (f) { return f.user_id; });
       var available = (r.data || []).filter(function (u) { return existing.indexOf(u.id) === -1; });
-      window._feAvail = available;
       if (!available.length) { pk.innerHTML = '<div style="padding:10px;color:var(--text-lighter)">All members already featured.</div>'; return; }
       pk.innerHTML = '<div style="font-size:.75rem;color:var(--text-light);margin-bottom:6px;padding:0 6px">Tap any member to add ➕</div>' +
-        available.map(function (u, i) {
-          return '<div data-fe-add="' + u.id + '" data-fe-idx="' + i + '" onclick="fePickAdd(' + i + ')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;margin-bottom:4px;background:#F9FAFB;border:1px solid var(--border)">' +
+        available.map(function (u) {
+          return '<div data-fe-add="' + u.id + '" onclick="feAdd21(\'' + u.id + '\')" style="cursor:pointer;display:flex;align-items:center;gap:8px;padding:8px;border-radius:8px;margin-bottom:4px;background:#F9FAFB;border:1px solid var(--border)">' +
             (u.profile_pic ? '<img src="' + u.profile_pic + '" style="width:32px;height:32px;border-radius:50%;object-fit:cover;flex-shrink:0">' : '<div class="post-avatar" style="width:32px;height:32px;font-size:.7rem;flex-shrink:0">' + ini(u.name) + '</div>') +
             '<div style="flex:1;min-width:0"><div style="font-weight:600">' + E(u.name) + '</div><div style="font-size:.7rem;color:var(--text-light);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">' + E(u.role) + '</div></div>' +
             '<i class="fas fa-plus" style="color:var(--accent);font-size:1rem"></i></div>';
         }).join('');
     }).catch(function (err) { pk.innerHTML = '<div style="padding:10px;color:#991B1B">Load failed: ' + (err && err.message ? err.message : err) + '</div>'; });
+  };
+
+window.feAdd21 = function (uid) {
+    if (!uid) return alert('No member id received.');
+    window._feBusy = window._feBusy || {};
+    if (window._feBusy[uid]) return; // ignore double-tap / double-fire
+    window._feBusy[uid] = true;
+    function unbusy() { delete window._feBusy[uid]; }
+    var dup = (window._featured || []).some(function (p) { return p.user_id === uid; });
+    if (dup) { unbusy(); return alert('This member is already featured.'); }
+    rolesFor(uid).then(function (info) {
+      if (!info || !info.name) { unbusy(); return alert('⚠️ Could not load user info.'); }
+      var payload = { user_id: uid, name: info.name, role: info.role, image_url: info.pic || null, sort: (window._featured || []).length };
+      (function tryInsert(p) {
+        sb.from('featured_people').insert([p]).then(function (r) {
+          if (r && r.error) {
+            if (/sort/.test(r.error.message)) { delete p.sort; return tryInsert(p); }
+            unbusy();
+            return alert('⚠️ Could not add: ' + r.error.message + '\n\n' + FE_SQL);
+          }
+          loadFeatured().then(function () {
+            unbusy();
+            feRender21();
+            feShowPicker21(true);
+            renderFeaturedLanding();
+            alert('✅ ' + info.name + ' added — now showing in the list above!');
+          });
+        }).catch(function (err) {
+          unbusy();
+          alert('⚠️ Insert failed: ' + (err && err.message ? err.message : err) + '\n\n' + FE_SQL);
+        });
+      })(payload);
+    }).catch(function (err) { unbusy(); alert('⚠️ ' + (err && err.message ? err.message : err)); });
   };
 
   window.feSave21 = function () {
@@ -344,7 +356,7 @@ console.log('✝️ app18.js v6 loading...');
     if (panel && !g('discMgr21')) { var d = document.createElement('div'); d.id = 'discMgr21'; d.style.cssText = 'display:flex;gap:6px;flex-wrap:wrap;margin-top:6px'; d.innerHTML = '<button class="btn btn-warm btn-block btn-sm" onclick="openFeaturedMgr()"><i class="fas fa-star"></i> Featured Members</button><button class="btn btn-warm btn-block btn-sm" onclick="openDocsMgr()"><i class="fas fa-file"></i> Documents</button><button class="btn btn-warm btn-block btn-sm" onclick="openSocialsEditor()"><i class="fas fa-share-alt"></i> Social Links</button>'; panel.appendChild(d); }
   }, 2500);
 })();
-console.log('✝️ app18.js v7 main active');
+console.log('✝️ app18.js v6 main active');
 
 /* ═══════════════════════════════════════════════════════════
    BRANCHES
@@ -387,4 +399,4 @@ console.log('✝️ app18.js v7 main active');
   setInterval(fixBranches, 2000);
   if (window.loadChurchBranding) window.loadChurchBranding().then(fixBranches);
 })();
-console.log('✝️ app18.js v7 complete');
+console.log('✝️ app18.js v6 complete — taps fixed');
