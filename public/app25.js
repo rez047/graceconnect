@@ -1,8 +1,9 @@
-// public/app26.js — UNIFIED COMMUNITY ENGINE
-// Rebuilds Department + Ushirika identically. Replaces app23/24/25.
+// public/app26.js — UNIFIED COMMUNITY ENGINE (v2 fixes)
+// Fixes: department_members has no id column (use user_id),
+// duplicate Department nav button removed, scrollable bottom nav.
 
 (function () {
-  console.log('✝️ app26.js — Unified Community Engine');
+  console.log('✝️ app26.js v2 — Unified Community Engine');
 
   window._c26 = Object.assign({
     myDept: [], myUsh: [], catalog: [],
@@ -34,13 +35,12 @@
     };
   }
 
-  // Smart icon picker (Font Awesome, loaded from CDN)
   function iconFor(name, custom) {
     if (custom) return custom;
     const n = String(name || '').toLowerCase();
     const map = [
       [/ict|media|tech|computer|sound|audio|video|multimedia|it\b/, 'fa-laptop-code'],
-      [/choir|music|worship|sing/, 'fa-music'],
+      [/choir|music|worship|sing|praise/, 'fa-music'],
       [/youth|young/, 'fa-user-graduate'],
       [/women|ladies|mama/, 'fa-venus'],
       [/men|baba|father/, 'fa-mars'],
@@ -100,7 +100,55 @@
     return '<a href="'+url+'" target="_blank" class="btn btn-secondary btn-sm" style="margin-top:8px"><i class="fas fa-paperclip"></i> Attachment</a>';
   }
 
-  // ============ SECTION / NAV ============
+  // ============ NAV (scrollable + duplicate cleanup) ============
+  function c26NavCss() {
+    if (document.getElementById('c26NavCss')) return;
+    const s = document.createElement('style');
+    s.id = 'c26NavCss';
+    s.textContent =
+      '.bottom-nav{overflow-x:auto;overflow-y:hidden;justify-content:flex-start;gap:2px;scrollbar-width:none;-webkit-overflow-scrolling:touch}' +
+      '.bottom-nav::-webkit-scrollbar{display:none}' +
+      '.bottom-nav .nav-item{flex:0 0 auto;min-width:62px;font-size:.6rem}';
+    document.head.appendChild(s);
+  }
+
+  function c26CleanNav() {
+    // remove leftover buttons from old app23/app24
+    ['d43NavBtn', 'dp23NavBtn'].forEach(function (id) {
+      const el = document.getElementById(id);
+      if (el) el.remove();
+    });
+    // remove any duplicate Department buttons that are not ours
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) {
+      if (b.id !== 'c26NavBtn' && /department/i.test(b.textContent || '')) b.remove();
+    });
+  }
+
+  function c26InjectNav() {
+    c26CleanNav();
+    const nav = document.querySelector('.bottom-nav');
+    if (!nav || document.getElementById('c26NavBtn')) return;
+    const b = document.createElement('button');
+    b.id = 'c26NavBtn'; b.className = 'nav-item';
+    b.innerHTML = '<i class="fas fa-building"></i>Dept';
+    b.onclick = function () { c26OpenHome('department'); };
+    const items = Array.from(nav.querySelectorAll('.nav-item'));
+    const g = document.getElementById('ggNavBtn') || items.find(x=>/groups/i.test(x.textContent||''));
+    const u = items.find(x=>/ushirika/i.test(x.textContent||''));
+    const d = items.find(x=>/discover/i.test(x.textContent||''));
+    if (g) nav.insertBefore(b, g); else if (u) u.after(b); else if (d) nav.insertBefore(b, d); else nav.appendChild(b);
+  }
+
+  const _origSwitch = window.switchSection;
+  window.switchSection = function (name) {
+    if (name === 'ushirika') { c26OpenHome('ushirika'); return; }
+    if (name === 'department') { c26OpenHome('department'); return; }
+    if (_origSwitch) return _origSwitch.apply(this, arguments);
+  };
+
+  window.c26Back = function () { if (_origSwitch) _origSwitch('home'); };
+
+  // ============ SECTION ============
   function ensureSection() {
     let s = document.getElementById('section-c26');
     if (s) return s;
@@ -120,30 +168,6 @@
     if (r) r.innerHTML = html;
     window.scrollTo({ top: 0 });
   }
-
-  function c26InjectNav() {
-    const nav = document.querySelector('.bottom-nav');
-    if (!nav || document.getElementById('c26NavBtn')) return;
-    const b = document.createElement('button');
-    b.id = 'c26NavBtn'; b.className = 'nav-item';
-    b.innerHTML = '<i class="fas fa-building"></i>Department';
-    b.onclick = function () { c26OpenHome('department'); };
-    const items = Array.from(nav.querySelectorAll('.nav-item'));
-    const g = document.getElementById('ggNavBtn') || items.find(x=>/groups/i.test(x.textContent||''));
-    const u = items.find(x=>/ushirika/i.test(x.textContent||''));
-    const d = items.find(x=>/discover/i.test(x.textContent||''));
-    if (g) nav.insertBefore(b, g); else if (u) u.after(b); else if (d) nav.insertBefore(b, d); else nav.appendChild(b);
-  }
-
-  // Intercept Ushirika + Department nav
-  const _origSwitch = window.switchSection;
-  window.switchSection = function (name) {
-    if (name === 'ushirika') { c26OpenHome('ushirika'); return; }
-    if (name === 'department') { c26OpenHome('department'); return; }
-    if (_origSwitch) return _origSwitch.apply(this, arguments);
-  };
-
-  window.c26Back = function () { if (window.switchSection && _origSwitch) _origSwitch('home'); };
 
   // ============ PERMISSIONS ============
   async function loadMy() {
@@ -179,7 +203,7 @@
     (data || []).forEach(g => {
       const mine = isMember(type, g.id);
       html += '<div class="card" style="margin-bottom:12px"><div style="display:flex;gap:12px;align-items:center">'
-        + '<div class="dept-icon" style="width:52px;height:52px;border-radius:16px;background:' + cf.gradient + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;flex-shrink:0"><i class="fas ' + iconFor(g.name, g.icon) + '"></i></div>'
+        + '<div style="width:52px;height:52px;border-radius:16px;background:' + cf.gradient + ';display:flex;align-items:center;justify-content:center;color:#fff;font-size:1.3rem;flex-shrink:0"><i class="fas ' + iconFor(g.name, g.icon) + '"></i></div>'
         + '<div style="flex:1;min-width:0"><div style="font-weight:800">' + esc(g.name) + '</div><div style="font-size:.83rem;color:var(--text-light)">' + esc(g.description || g.location || cf.label) + '</div>'
         + (mine ? '<div style="font-size:.72rem;color:var(--accent);margin-top:2px"><i class="fas fa-check"></i> Member</div>' : '') + '</div>'
         + '<div style="display:flex;flex-direction:column;gap:6px">'
@@ -256,7 +280,7 @@
     if (t === 'meetings') loadMeetings();
   };
 
-  // ============ FEED (posts + comments + media) ============
+  // ============ FEED ============
   async function loadFeed() {
     const box = document.getElementById('c26-feed'); if (!box) return;
     box.innerHTML = '<div class="card">Loading...</div>';
@@ -331,7 +355,7 @@
     loadFeed();
   };
 
-  // ============ MEMBERS + CUSTOM ROLES ============
+  // ============ MEMBERS (user_id based — no id column needed) ============
   async function roleOptions(selected) {
     const std = ['Member','Leader','Chairman','Secretary','Treasurer','Teacher'];
     const cat = await sb().from('community_role_catalog').select('*')
@@ -352,25 +376,27 @@
       const u = users.find(x => x.id === m.user_id);
       const self = me() && m.user_id === me().id;
       html += '<div class="card" style="margin-bottom:10px"><div style="display:flex;gap:10px;align-items:center"><div class="post-avatar">' + ini(u && u.name) + '</div><div style="flex:1"><div style="font-weight:700">' + esc((u && u.name) || 'Member') + '</div><div style="font-size:.75rem;color:var(--text-light)">' + esc(m.role || 'Member') + '</div></div></div>'
-        + (manage && !self ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="c26ChangeRole(\''+m.id+'\',this.value)">' + (await roleOptions(m.role)) + '</select><button class="btn btn-danger btn-sm" onclick="c26RemoveMember(\''+m.id+'\')"><i class="fas fa-trash"></i></button></div>' : '')
+        + (manage && !self ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="c26ChangeRole(\''+m.user_id+'\',this.value)">' + (await roleOptions(m.role)) + '</select><button class="btn btn-danger btn-sm" onclick="c26RemoveMember(\''+m.user_id+'\')"><i class="fas fa-trash"></i></button></div>' : '')
         + '</div>';
     }
     box.innerHTML = html;
   }
 
-  window.c26ChangeRole = async function (memberId, role) {
+  window.c26ChangeRole = async function (userId, role) {
     const cf = cfg(C.currentType);
-    const { error } = await sb().from(cf.memberTable).update({ role: role }).eq('id', memberId);
+    const q = {}; q[cf.fk] = C.currentId;
+    const { error } = await sb().from(cf.memberTable).update({ role: role }).eq(cf.fk, C.currentId).eq('user_id', userId);
     if (error) return alert(error.message);
     const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
     C.members = m.data || [];
     loadMembers(); loadLeadership();
   };
 
-  window.c26RemoveMember = async function (memberId) {
+  window.c26RemoveMember = async function (userId) {
     if (!confirm('Remove this member?')) return;
     const cf = cfg(C.currentType);
-    await sb().from(cf.memberTable).delete().eq('id', memberId);
+    const { error } = await sb().from(cf.memberTable).delete().eq(cf.fk, C.currentId).eq('user_id', userId);
+    if (error) return alert(error.message);
     const m = await sb().from(cf.memberTable).select('*').eq(cf.fk, C.currentId);
     C.members = m.data || [];
     loadMembers(); loadLeadership();
@@ -472,7 +498,7 @@
     c26OpenHome(type);
   };
 
-  // ============ MEETINGS (new module) ============
+  // ============ MEETINGS ============
   async function loadMeetings() {
     const box = document.getElementById('c26-meetings'); if (!box) return;
     box.innerHTML = '<div class="card">Loading...</div>';
@@ -552,9 +578,10 @@
       total_members_present: total
     };
     if (url) p.media_url = url;
+    p[cf.fk] = C.currentId;
     let r;
-    if (meetingId) { p[cf.fk] = C.currentId; r = await sb().from(cf.meetingTable).update(p).eq('id', meetingId); }
-    else { p[cf.fk] = C.currentId; p.created_by = me().id; r = await sb().from(cf.meetingTable).insert([p]); }
+    if (meetingId) r = await sb().from(cf.meetingTable).update(p).eq('id', meetingId);
+    else { p.created_by = me().id; r = await sb().from(cf.meetingTable).insert([p]); }
     if (r.error) return alert(r.error.message);
     window._c26Media.meeting = null;
     c26Close('c26Meeting'); loadMeetings();
@@ -578,7 +605,7 @@
     c26Close('c26Apology'); alert('Apology submitted.'); loadMeetings();
   };
 
-  // ============ SERVICE TIMER (days/h/m/s) ============
+  // ============ SERVICE TIMER ============
   function injectTimers() {
     document.querySelectorAll('.service-card').forEach(card => {
       if (card.querySelector('.c26-timer')) return;
@@ -633,7 +660,7 @@
     });
   }
 
-  // ============ MOVE FORUM + PLANS TO HOME ============
+  // ============ FORUM + PLANS TO HOME ============
   function moveForumPlans() {
     const home = document.querySelector('#section-home') || document.querySelector('#home-main');
     if (!home) return;
@@ -644,8 +671,10 @@
   }
 
   // ============ INIT ============
-  c26InjectNav(); injectTimers(); updateTimers(); moveForumPlans();
+  c26NavCss(); c26InjectNav(); injectTimers(); updateTimers(); moveForumPlans();
+  setInterval(c26NavCss, 2000);
   setInterval(c26InjectNav, 1000);
+  setInterval(c26CleanNav, 1200);
   setInterval(injectTimers, 2000);
   setInterval(updateTimers, 1000);
   setInterval(moveForumPlans, 3000);
