@@ -547,4 +547,44 @@
       window[n]._gcJ = true;
     }
   });
+// ============ BLOCK K — Fix apology context bleed ============
+  if (window.c26SaveApology && !window.c26SaveApology._gcFix) {
+    var _origApology = window.c26SaveApology;
+    window.c26SaveApology = async function (meetingId) {
+      var reason = document.getElementById('c26aReason').value.trim();
+      if (!reason) return alert('Enter a reason.');
+      var name = (window.profile && window.profile.name) || 'Member';
+      
+      // Verify this meeting belongs to the current group context
+      var cf = window.cfg ? window.cfg(window.C && window.C.currentType) : null;
+      if (!cf) return _origApology.apply(this, arguments);
+      
+      var meeting = await sb().from(cf.meetingTable).select(cf.fk).eq('id', meetingId).single();
+      if (!meeting.data || meeting.data[cf.fk] !== (window.C && window.C.currentId)) {
+        return alert('⚠️ Context mismatch. Please refresh and try again.');
+      }
+      
+      // Save only to THIS meeting
+      var cur = await sb().from(cf.meetingTable).select('absent_with_apology').eq('id', meetingId).single();
+      var existing = (cur.data && cur.data.absent_with_apology) || '';
+      await sb().from(cf.meetingTable).update({ 
+        absent_with_apology: existing ? existing + '\n' + name + ': ' + reason : name + ': ' + reason 
+      }).eq('id', meetingId);
+      
+      if (window.c26Close) window.c26Close('c26Apology');
+      alert('✅ Apology submitted for this meeting only.');
+      if (window.loadMeetings) window.loadMeetings();
+    };
+    window.c26SaveApology._gcFix = true;
+  }
+  
+  // Clear context when switching sections
+  if (window.switchSection && !window.switchSection._gcClear) {
+    var _swClear = window.switchSection;
+    window.switchSection = function (name) {
+      if (window.C) { window.C.currentId = null; window.C.currentType = null; }
+      return _swClear.apply(this, arguments);
+    };
+    window.switchSection._gcClear = true;
+  }
 })();
