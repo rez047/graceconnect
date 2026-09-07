@@ -418,6 +418,55 @@ function verseText() {
     h30SyncMinistries();
   };
 
+
+  // === CATEGORIES, OFFERINGS & SYSTEM-WIDE MEDIA UPLOADS ===
+window._gcInitCategories = function(groupId) {
+    const tabs = document.querySelector('.group-tabs');
+    if(tabs && !tabs.querySelector('.tab-categories')) {
+        tabs.insertAdjacentHTML('beforeend', '<div class="tab tab-categories" onclick="window._gcShowCategories(\''+groupId+'\')">Categories</div>');
+    }
+};
+
+window._gcShowCategories = function(groupId) {
+    alert('Categories interface loading for group: ' + groupId + '. (Ensure categories table exists in DB)');
+    // Logic to render categories, forums, and assign roles (teacher, leader, chairman) goes here
+};
+
+// Hide offering from normal members
+setInterval(() => {
+    if (!window.isAdmin || !window.isAdmin()) {
+        document.querySelectorAll('.offering-section, [id*="offering"]').forEach(el => {
+            if(el && !el.closest('.admin-only')) el.style.display = 'none';
+        });
+    }
+    // Total offering placeholder injection
+    const catList = document.getElementById('categoriesList');
+    if(catList && !document.getElementById('totalOfferingPlaceholder')) {
+        catList.insertAdjacentHTML('afterend', '<div id="totalOfferingPlaceholder" class="card" style="margin-top:10px; background:var(--gradient-green); color:white; text-align:center;"><b>Total Group Offering:</b> Calculating...</div>');
+    }
+}, 2000);
+
+// Delete Prayers
+window._gcDeletePrayer = function(id) {
+    if(!confirm('Delete this prayer?')) return;
+    if(window.sb) {
+        window.sb.from('prayers').delete().eq('id', id).then(() => {
+            if(window.loadPrayerWall) window.loadPrayerWall();
+        });
+    }
+};
+
+// Inject delete buttons into prayer wall dynamically
+setInterval(() => {
+    const prayers = document.querySelectorAll('.prayer-item, .sermon-card');
+    prayers.forEach(p => {
+        if(!p.querySelector('.prayer-del-btn') && window.isAdmin && window.isAdmin()) {
+            const id = p.getAttribute('data-id') || p.id;
+            if(id) p.insertAdjacentHTML('beforeend', '<button class="prayer-del-btn btn btn-danger btn-sm" style="position:absolute;top:5px;right:5px;" onclick="window._gcDeletePrayer(\''+id+'\')"><i class="fas fa-trash"></i></button>');
+        }
+    });
+}, 1500);
+  
   // =====================================================
   // 6) profile-pic freshness
   // =====================================================
