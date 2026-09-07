@@ -335,4 +335,60 @@
       window[n]._h32w = true;
     });
   }, 2000);
+
+// =====================================================
+  // STABILIZER v2 — crash fix: dedupe floods, one sub-page per section, old pages never render
+  // =====================================================
+  if (window.showSubPage && !window.showSubPage._h32w2) {
+    var _sp2 = window.showSubPage;
+    window.showSubPage = function (p) {
+      window._h32LastSub = String(p);
+      if (OLD_PAGE_RE.test(String(p))) { setTimeout(function () { h32EscapeOld2(p); }, 120); return; } // block old page entirely
+      return _sp2.apply(this, arguments);
+    };
+    window.showSubPage._h32w2 = true;
+  }
+  async function h32EscapeOld2(p) {
+    try {
+      var el = document.getElementById(p); if (!el) return;
+      el.classList.remove('active');
+      var cache = await h32MyCache();
+      var txt = el.textContent || '';
+      var hit = null;
+      cache.list.slice().sort(function (a, b) { return b.name.length - a.name.length; }).forEach(function (m) { if (!hit && m.name && txt.indexOf(m.name) !== -1) hit = m; });
+      if (hit) { window[H32_OC[hit.type]](hit.id); return; }
+      var home = document.getElementById('section-home');
+      if (home && !home.querySelector('.sub-page.active')) { var hm = document.getElementById('home-main'); if (hm) hm.classList.add('active'); }
+    } catch (e) {}
+  }
+  setInterval(function () {
+    try {
+      // (a) Edit Ministry Info flood: keep ONE and move it INSIDE the banner so the original guard finally sees it
+      var eds = document.querySelectorAll('[data-h30edit]');
+      if (eds.length) {
+        for (var i = 1; i < eds.length; i++) { if (eds[i].parentNode) eds[i].parentNode.removeChild(eds[i]); }
+        var b0 = document.querySelector('[data-h30edit]');
+        var ban = b0 && b0.previousElementSibling;
+        if (b0 && ban && ban.classList && ban.classList.contains('dept-banner') && !ban.querySelector('[data-h30edit]')) ban.appendChild(b0);
+      }
+      // (b) duplicate "Edit Weekly Meeting" buttons: one per section
+      var seen = {};
+      document.querySelectorAll('button').forEach(function (bt) {
+        var t = (bt.textContent || '').trim();
+        if (/^Edit Weekly Meeting/i.test(t)) {
+          var sec = bt.closest('.section'); var key = (sec && sec.id) || (bt.parentElement && bt.parentElement.id) || 'x';
+          if (seen[key]) { if (bt.parentNode) bt.parentNode.removeChild(bt); } else seen[key] = 1;
+        }
+      });
+      // (c) exactly one active sub-page per section
+      document.querySelectorAll('.section').forEach(function (sec) {
+        var act = sec.querySelectorAll('.sub-page.active');
+        if (act.length < 2) return;
+        var keep = act[0];
+        if (window._h32LastSub) for (var j = 0; j < act.length; j++) if (act[j].id === window._h32LastSub) keep = act[j];
+        for (var k = 0; k < act.length; k++) if (act[k] !== keep) act[k].classList.remove('active');
+      });
+    } catch (e) {}
+  }, 700);
+  
 })();
