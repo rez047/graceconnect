@@ -280,17 +280,6 @@
       })();
     }
 
-    // TILES ONLY (no modules at bottom)
-    if (!document.getElementById('h27-quicktiles')) {
-      const tiles = document.createElement('div');
-      tiles.id = 'h27-quicktiles';
-      tiles.style.cssText = 'display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:16px';
-      tiles.innerHTML =
-        '<div onclick="h27OpenPage(\'prayer\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#8B5CF6,#EC4899);cursor:pointer;box-shadow:0 8px 20px -8px rgba(139,92,246,.5)"><i class="fas fa-hands-praying" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Prayer Wall</div></div>'
-        + '<div onclick="h27OpenPage(\'forum\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#4F46E5,#06B6D4);cursor:pointer;box-shadow:0 8px 20px -8px rgba(79,70,229,.5)"><i class="fas fa-comments" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Public Forum</div></div>'
-        + '<div onclick="h27OpenPage(\'plans\')" style="border-radius:18px;padding:16px 10px;text-align:center;color:#fff;background:linear-gradient(135deg,#F59E0B,#EF4444);cursor:pointer;box-shadow:0 8px 20px -8px rgba(245,158,11,.5)"><i class="fas fa-calendar-check" style="font-size:1.3rem"></i><div style="font-weight:800;font-size:.75rem;margin-top:6px">Plans</div></div>';
-      home.appendChild(tiles);
-    }
   }
 
   function h27QuickActionsFab() {
