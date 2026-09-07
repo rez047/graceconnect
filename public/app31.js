@@ -13,6 +13,31 @@
   function avatarHtml(u, s) { s = s || 38; if (u && u.profile_pic) return '<img src="' + u.profile_pic + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block">'; return '<div class="post-avatar" style="width:' + s + 'px;height:' + s + 'px">' + ini(u && u.name) + '</div>'; }
   window._gcMedia = window._gcMedia || {};
   window.gcAttach = function (key, labelId) { var i = document.createElement('input'); i.type = 'file'; i.accept = '*/*'; i.onchange = function () { var f = i.files && i.files[0]; if (!f) return; window._gcMedia[key] = f; var l = document.getElementById(labelId); if (l) l.innerHTML = '<i class="fas fa-check-circle"></i> ' + esc(f.name); }; i.click(); };
+  // ---- RESTORE core navigation helpers if the deleted app30.js removed them ----
+  if (typeof window.showSubPage !== 'function') {
+    window.showSubPage = function (id) {
+      var el = document.getElementById(id); if (!el) return;
+      var sec = el.closest('.section');
+      if (sec) { document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); }); sec.classList.add('active'); sec.querySelectorAll('.sub-page').forEach(function (sp) { sp.classList.remove('active'); }); }
+      var target = el.classList.contains('sub-page') ? el : el.closest('.sub-page'); if (target) target.classList.add('active');
+      window._gcLastSub = id; window.scrollTo({ top: 0 });
+      try {
+        if (id === 'home-trivia' && window.loadRandomTrivia) window.loadRandomTrivia();
+        if (id === 'home-bibleReader' && window.loadBibleChapter && !window._bibleVerses) window.loadBibleChapter();
+        if (id === 'home-devotional' && window.loadDevotional) window.loadDevotional();
+        if (id === 'home-characters' && window.loadCharacters) window.loadCharacters();
+      } catch (e) {}
+    };
+  }
+  if (typeof window.switchSection !== 'function') {
+    window.switchSection = function (name) {
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      var sec = document.getElementById('section-' + name); if (sec) sec.classList.add('active');
+      var navs = document.querySelectorAll('.bottom-nav .nav-item'); var map = { home: 0, ushirika: 1, dept: 2, groups: 3, discover: 4, event: 5, giving: 6 };
+      navs.forEach(function (b) { b.classList.remove('active'); }); if (navs[map[name]]) navs[map[name]].classList.add('active');
+      window.scrollTo({ top: 0 });
+    };
+  }
   (function () { var s = document.createElement('style'); s.textContent = '.btn-secondary{background:#EEF2FF;color:#3730A3;border:2px solid #C7D2FE;backdrop-filter:none}.public-landing .btn-secondary,.hero-section .btn-secondary{background:rgba(255,255,255,.2);color:#fff;border:2px solid rgba(255,255,255,.4);backdrop-filter:blur(10px)}'; document.head.appendChild(s); })();
 
   // ============ NAV: one page per tap, scroll top ============
