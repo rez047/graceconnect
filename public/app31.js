@@ -515,59 +515,88 @@
   }, 4000);
 
 // ==========================================
-  // 11. BLOCK H v2 — white-screen fix, trio removal, 50% taps, SPEED
+  // 11. BLOCK H — ALL FIXES (FINAL)
   // ==========================================
-  // (a) FIX WHITE SCREEN: ensure every section always has an active sub-page
-  (function () {
-    var cur = window.switchSection; if (!cur || cur._gcfix2) return;
+
+  // --- A. FIX BLANK DISCOVER/EVENTS/GIVING ---
+  // The switchSection wrapper was killing default sub-pages. Override it properly.
+  if (window.switchSection) {
+    var _origSw2 = window.switchSection._gcfixed ? window.switchSection : window.switchSection;
+    // Find the TRUE original (before any wrapping)
+    while (_origSw2._gcOrig) _origSw2 = _origSw2._gcOrig;
     window.switchSection = function (name) {
-      var r = cur.apply(this, arguments);
-      setTimeout(function () {
-        var sec = document.getElementById('section-' + name);
-        if (sec && sec.classList.contains('active') && !sec.querySelector('.sub-page.active')) {
-          var first = sec.querySelector('.sub-page'); if (first) first.classList.add('active');
-        }
-        window.scrollTo({ top: 0 });
-      }, 25);
-      return r;
-    };
-    window.switchSection._gcfix2 = true;
-  })();
-
-  // (b) REMOVE OLD TRIO (match by title text, any card-like element, never mini-cards)
-  function gcRemoveOldTrio() {
-    var host = document.getElementById('home-main'); if (!host) return;
-    var titles = ['Prayer Wall', 'Public Forum', 'Plans'];
-    Array.prototype.slice.call(host.querySelectorAll('div,a,button')).forEach(function (el) {
-      if (el.classList.contains('mini-card') || el.closest('.mini-card') || el.closest('.my-depts-scroll') || el.closest('.grid-3')) return;
-      var t = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      var hit = titles.some(function (x) { return t === x || (t.indexOf(x) === 0 && t.length <= x.length + 12); });
-      if (!hit) return;
-      var cls = String(el.className || ''), sty = el.getAttribute('style') || '';
-      if (/card|gradient|tile/i.test(cls) || /gradient/i.test(sty)) {
-        var grid = el.parentElement; el.remove();
-        if (grid && !grid.children.length) grid.remove();
+      // Clear stale sub-pages from OTHER sections only
+      document.querySelectorAll('.section').forEach(function (sec) {
+        if (sec.id === 'section-' + name) return;
+        sec.querySelectorAll('.sub-page').forEach(function (sp) { sp.classList.remove('active'); });
+        sec.classList.remove('active');
+      });
+      var res = _origSw2.apply(this, arguments);
+      // Ensure target section + its default sub-page are active
+      var sec = document.getElementById('section-' + name);
+      if (sec) {
+        sec.classList.add('active');
+        var def = sec.querySelector('.sub-page');
+        if (def && !sec.querySelector('.sub-page.active')) def.classList.add('active');
       }
-    });
+      if (name === 'home') {
+        var hm = document.getElementById('home-main');
+        if (hm) { if (!hm.classList.contains('sub-page')) hm.classList.add('sub-page'); hm.classList.add('active'); }
+      }
+      window.scrollTo({ top: 0 });
+      return res;
+    };
+    window.switchSection._gcOrig = _origSw2;
+    window.switchSection._gcfixed = true;
   }
-  setInterval(gcRemoveOldTrio, 1500); setTimeout(gcRemoveOldTrio, 400);
 
-  // (c) FIX 50% TAPS: delegated listener (single fire, survives DOM churn)
+  // --- B. FIX 50% TAP via delegated click ---
   (function () {
-    var tiles = { 'Public Forum': 'h28OpenForum', 'Plans': 'h30OpenPlans', 'Prayer Wall': 'h28OpenPrayer' };
+    var tiles = {
+      'Public Forum': function () { if (window.h28OpenForum) window.h28OpenForum(); else if (window.h27OpenPage) window.h27OpenPage('forum'); },
+      'Plans': function () { if (window.h30OpenPlans) window.h30OpenPlans(); else if (window.h27OpenPage) window.h27OpenPage('plans'); },
+      'Prayer Wall': function () { if (window.h28OpenPrayer) window.h28OpenPrayer(); else if (window.h27OpenPage) window.h27OpenPage('prayer'); }
+    };
     document.addEventListener('click', function (e) {
       var card = e.target && e.target.closest ? e.target.closest('#home-main .mini-card') : null;
       if (!card) return;
-      var t = card.querySelector('.mc-title'); var title = t ? t.textContent.trim() : '';
-      var fn = tiles[title];
-      if (fn && typeof window[fn] === 'function') { e.preventDefault(); e.stopPropagation(); window[fn](); }
+      var t = card.querySelector('.mc-title');
+      var title = t ? t.textContent.trim() : '';
+      if (tiles[title]) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); tiles[title](); }
     }, true);
   })();
 
-  // (d) SPEED: parallel cache (2 round trips total) + instant badge
-  async function gcMyCacheFast(fresh) {
+  // --- C. REMOVE OLD GRADIENT TRIO (aggressive) ---
+  function gcRemoveOldTrio() {
+    document.querySelectorAll('#home-main .card-gradient, #home-main .card').forEach(function (c) {
+      var t = (c.textContent || '').trim();
+      if (/^(🙏\s*Prayer Wall|💬\s*Public Forum|📅\s*Plans|Prayer Wall|Public Forum|Plans\b)/i.test(t) && !c.classList.contains('mini-card')) {
+        var p = c.parentElement;
+        c.remove();
+        if (p && p.children.length === 0 && p !== document.getElementById('home-main')) p.remove();
+      }
+    });
+  }
+  setInterval(gcRemoveOldTrio, 800);
+  setTimeout(gcRemoveOldTrio, 500);
+
+  // --- D. DEDUPLICATE QUICK TILES ---
+  setInterval(function () {
+    var grid = document.querySelector('#home-main .grid-3'); if (!grid) return;
+    var seen = {};
+    Array.prototype.slice.call(grid.querySelectorAll('.mini-card')).forEach(function (card) {
+      var t = card.querySelector('.mc-title');
+      var title = t ? t.textContent.trim() : '';
+      if (title === 'Public Forum' || title === 'Plans' || title === 'Prayer Wall') {
+        if (seen[title]) card.remove(); else seen[title] = 1;
+      }
+    });
+  }, 2000);
+
+  // --- E. FAST PARALLEL CACHE (replaces sequential) ---
+  async function gcMyCacheFast(force) {
     if (!me()) return { list: [], byId: {} };
-    if (!fresh && _gcCache && Date.now() - _gcCacheT < 30000) return _gcCache;
+    if (!force && _gcCache && Date.now() - _gcCacheT < 30000) return _gcCache;
     var uid = me().id;
     var ms = await Promise.all([
       sb().from('department_members').select('*').eq('user_id', uid),
@@ -575,45 +604,77 @@
       sb().from('church_group_members').select('*').eq('user_id', uid),
       sb().from('church_group_category_members').select('*').eq('user_id', uid)
     ]);
-    var d = ms[0].data || [], u = ms[1].data || [], g = ms[2].data || [], c = ms[3].data || [];
     var spec = [
-      ['departments', 'department_id', d, 'department'],
-      ['ushirikas', 'ushirika_id', u, 'ushirika'],
-      ['church_groups', 'group_id', g, 'group'],
-      ['church_group_categories', 'category_id', c, 'category']
+      ['departments', 'department_id', ms[0].data || [], 'department'],
+      ['ushirikas', 'ushirika_id', ms[1].data || [], 'ushirika'],
+      ['church_groups', 'group_id', ms[2].data || [], 'group'],
+      ['church_group_categories', 'category_id', ms[3].data || [], 'category']
     ];
-    var nm = await Promise.all(spec.map(function (s) { var ids = s[2].map(function (x) { return x[s[1]]; }); return ids.length ? sb().from(s[0]).select('id,name').in('id', ids) : { data: [] }; }));
+    var nm = await Promise.all(spec.map(function (s) {
+      var ids = s[2].map(function (x) { return x[s[1]]; });
+      return ids.length ? sb().from(s[0]).select('id,name').in('id', ids) : { data: [] };
+    }));
     var list = [];
-    spec.forEach(function (s, i) { var map = {}; (nm[i].data || []).forEach(function (x) { map[x.id] = x.name; }); s[2].forEach(function (x) { list.push({ type: s[3], id: x[s[1]], name: map[x[s[1]]] || s[3], role: x.role || 'Member' }); }); });
+    spec.forEach(function (s, i) {
+      var map = {}; (nm[i].data || []).forEach(function (x) { map[x.id] = x.name; });
+      s[2].forEach(function (x) { list.push({ type: s[3], id: x[s[1]], name: map[x[s[1]]] || s[3], role: x.role || 'Member' }); });
+    });
     var byId = {}; list.forEach(function (m) { byId[m.id] = m; });
     _gcCache = { list: list, byId: byId }; _gcCacheT = Date.now();
     return _gcCache;
   }
+
+  // --- F. INSTANT BADGE COUNT ---
   async function gcFastCount() {
-    if (!me()) return;
+    if (!me()) return 0;
     var uid = me().id;
-    var q = function (t) { return sb().from(t).select('id', { count: 'exact', head: true }).eq('user_id', uid).then(function (r) { return r.count || 0; }, function () { return 0; }); };
+    var q = function (t) { return sb().from(t).select('id', { count: 'exact', head: true }).eq('user_id', uid).then(function (r) { return r.count || 0; }).catch(function () { return 0; }); };
     var res = await Promise.all([q('department_members'), q('ushirika_members'), q('church_group_members'), q('church_group_category_members')]);
-    var el = document.getElementById('myDeptsCount'); if (el) el.textContent = (res[0] + res[1] + res[2] + res[3]) + ' joined';
+    var n = res[0] + res[1] + res[2] + res[3];
+    gcUpdateCount(n);
+    return n;
   }
 
-  // (e) instant side-scroll strip
+  // --- G. INSTANT STRIP (horizontal scroll, all memberships) ---
+  var _gcStripBusy = false;
   async function gcInstantStrip() {
+    if (_gcStripBusy) return;
     var sc = document.querySelector('.my-depts-scroll'); if (!sc || !me()) return;
-    gcFastCount();
-    var cache = await gcMyCacheFast(false);
-    var html = cache.list.map(function (m) { return '<div class="my-dept-mini" style="background:' + GC_GRAD[m.type] + '" onclick="' + GC_OC[m.type] + '(\'' + m.id + '\')"><div class="my-dept-mini-icon"><i class="fas ' + GC_ICON[m.type] + '"></i></div><div class="my-dept-mini-name">' + esc(m.name) + '</div><div style="margin-top:6px"><span class="my-dept-mini-role-badge">' + esc(m.role) + '</span></div><div style="font-size:.58rem;opacity:.9;margin-top:4px;text-transform:uppercase">' + m.type + '</div></div>'; }).join('');
-    html += '<div class="my-dept-join-more" onclick="gcOpenMyList()"><i class="fas fa-list" style="font-size:1.2rem;margin-bottom:6px"></i><div style="font-size:.75rem;font-weight:700">View Full List</div></div>';
-    sc.innerHTML = html; sc.setAttribute('data-gc', '1');
+    _gcStripBusy = true;
+    try {
+      gcFastCount();
+      var cache = await gcMyCacheFast(true);
+      var html = cache.list.map(function (m) {
+        return '<div class="my-dept-mini" style="background:' + GC_GRAD[m.type] + '" onclick="' + GC_OC[m.type] + '(\'' + m.id + '\')">'
+          + '<div class="my-dept-mini-icon"><i class="fas ' + GC_ICON[m.type] + '"></i></div>'
+          + '<div class="my-dept-mini-name">' + esc(m.name) + '</div>'
+          + '<div style="margin-top:6px"><span class="my-dept-mini-role-badge">' + esc(m.role) + '</span></div>'
+          + '<div style="font-size:.58rem;opacity:.9;margin-top:4px;text-transform:uppercase">' + m.type + '</div></div>';
+      }).join('');
+      html += '<div class="my-dept-join-more" onclick="gcOpenMyList()"><i class="fas fa-list" style="font-size:1.2rem;margin-bottom:6px"></i><div style="font-size:.75rem;font-weight:700">View Full List</div></div>';
+      sc.innerHTML = html;
+      sc.setAttribute('data-gc', '1');
+      gcUpdateCount(cache.list.length);
+    } catch (e) {}
+    _gcStripBusy = false;
   }
-  setTimeout(function () { gcInstantStrip(); }, 250);
-  setInterval(function () { if (!me()) return; var sc = document.querySelector('.my-depts-scroll'); if (sc && sc.getAttribute('data-gc') !== '1') gcInstantStrip(); }, 1500);
-  setInterval(function () { if (me() && !document.hidden) gcFastCount(); }, 20000);
-  document.addEventListener('visibilitychange', function () { if (!document.hidden && me()) { gcFastCount(); gcInstantStrip(); } }, { passive: true });
 
-  // (f) FAST MY LIST PAGE: render from cache instantly, refresh in background
-  function gcRenderList(cache) {
+  // Kick strip + count ASAP after login
+  function gcHomeActive() { var h = document.getElementById('section-home'); return !!(h && h.classList.contains('active')); }
+  setTimeout(gcInstantStrip, 200);
+  setTimeout(gcInstantStrip, 800);
+  setInterval(function () {
+    if (!me()) return;
+    var sc = document.querySelector('.my-depts-scroll');
+    if (gcHomeActive() && sc && sc.getAttribute('data-gc') !== '1') gcInstantStrip();
+  }, 1500);
+  setInterval(function () { if (me() && gcHomeActive()) gcFastCount(); }, 25000);
+
+  // --- H. FAST gcLoadMyList (uses parallel cache) ---
+  var _origLoadMyList = gcLoadMyList;
+  gcLoadMyList = async function () {
     var box = document.getElementById('gclist-body'); if (!box) return;
+    var cache = await gcMyCacheFast(true);
     var T = { department: '🏛️ My Departments', ushirika: '🏘️ My Ushirika', group: '👥 My Groups', category: '🧒 My Categories' };
     var html = '';
     ['department', 'ushirika', 'group', 'category'].forEach(function (tp) {
@@ -621,29 +682,23 @@
       html += '<div class="section-title-app" style="font-size:1rem;margin-top:12px">' + T[tp] + ' (' + rows.length + ')</div>';
       html += rows.map(function (m) { return '<div class="card" style="display:flex;gap:10px;align-items:center;cursor:pointer;margin-bottom:8px" onclick="' + GC_OC[tp] + '(\'' + m.id + '\')"><div style="width:42px;height:42px;border-radius:12px;background:' + GC_GRAD[tp] + ';color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas ' + GC_ICON[tp] + '"></i></div><div style="flex:1;min-width:0"><b style="font-size:.9rem">' + esc(m.name) + '</b><div style="font-size:.72rem;color:var(--text-light)">Role: ' + esc(m.role) + '</div></div><i class="fas fa-chevron-right" style="color:var(--text-lighter)"></i></div>'; }).join('') || '<div class="card">None yet.</div>';
     });
-    box.innerHTML = html;
-    var el = document.getElementById('myDeptsCount'); if (el) el.textContent = cache.list.length + ' joined';
-  }
-  window.gcOpenMyList = async function () {
-    if (!me()) return alert('Please log in first.');
-    var sec = document.getElementById('section-gclist');
-    if (!sec) { sec = document.createElement('div'); sec.id = 'section-gclist'; sec.className = 'section'; sec.innerHTML = '<div id="gclist-root" class="sub-page active"></div>'; (document.querySelector('main') || document.body).appendChild(sec); }
-    document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
-    sec.classList.add('active');
-    document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) { b.classList.remove('active'); });
-    document.getElementById('gclist-root').innerHTML = '<button class="back-btn" onclick="gcListBack()"><i class="fas fa-arrow-left"></i> Back</button><div style="border-radius:20px;padding:16px;color:#fff;background:linear-gradient(135deg,#8B5CF6,#EC4899);font-weight:800;font-size:1.15rem;margin-bottom:14px"><i class="fas fa-list"></i> My List</div><div id="gclist-body"></div>';
-    window.scrollTo({ top: 0 });
-    gcRenderList(await gcMyCacheFast(false));   // instant (cache or parallel fetch)
-    gcRenderList(await gcMyCacheFast(true));    // then fresh data
+    box.innerHTML = html; gcUpdateCount(cache.list.length);
   };
 
-  // (g) PREFETCH everything at boot + idle so no section ever shows long "Loading..."
-  var GC_LOADERS = ['loadCauses', 'loadGiving', 'loadEvents', 'loadChatInbox', 'loadChats', 'loadFeatured', 'loadLeaders', 'loadNotifs', 'loadDocuments', 'loadPreachings', 'loadPlans', 'loadPrayerWall', 'loadDiscover'];
-  function gcPrefetch() { GC_LOADERS.forEach(function (n) { try { if (typeof window[n] === 'function') window[n](); } catch (e) {} }); gcMyCacheFast(true); }
-  var _gcPf = false;
-  function gcPrefetchOnce() { if (_gcPf || !me()) return; _gcPf = true; gcPrefetch(); }
-  setTimeout(gcPrefetchOnce, 600);
-  setInterval(gcPrefetchOnce, 1200);
-  if ('requestIdleCallback' in window) { requestIdleCallback(function () { gcPrefetchOnce(); }, { timeout: 2500 }); }
+  // --- I. PREFETCH ALL SECTIONS AT BOOT ---
+  var _gcPF = false;
+  function gcPrefetchAll() {
+    if (_gcPF || !me()) return;
+    _gcPF = true;
+    var fns = ['loadCauses', 'loadGiving', 'loadEvents', 'loadChatInbox', 'loadChats', 'loadFeatured', 'loadLeaders', 'loadNotifs', 'loadDocuments', 'loadPreachings', 'loadPrayerWall', 'loadForumPosts', 'loadUshirikas', 'loadDepartments'];
+    fns.forEach(function (n) { try { if (typeof window[n] === 'function') window[n](); } catch (e) {} });
+    gcMyCacheFast(true);
+  }
+  setTimeout(gcPrefetchAll, 500);
+  setInterval(function () { if (me() && !_gcPF) gcPrefetchAll(); }, 1200);
+
+  // --- J. PAUSE WHEN TAB HIDDEN ---
+  var _gcTabHidden = false;
+  document.addEventListener('visibilitychange', function () { _gcTabHidden = document.hidden; }, { passive: true });
 
 })();
