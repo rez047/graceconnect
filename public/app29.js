@@ -385,7 +385,7 @@ function verseText() {
     const role = await sb().from('church_group_members').select('role').eq('group_id', gid).eq('user_id', me().id).limit(1);
     const rl = String(((role.data||[])[0]||{}).role||'').toLowerCase();
     if (!isAdmin() && !['leader','chairman'].includes(rl)) return;
-    if (banner.querySelector('[data-h30edit]')) return;
+    if (banner.querySelector('[data-h30edit]') || (banner.parentNode && banner.parentNode.querySelector('[data-h30edit]'))) return;
 
     const b = document.createElement('button');
     b.setAttribute('data-h30edit','1');
