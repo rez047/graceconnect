@@ -665,7 +665,9 @@
     <div class="grid-3">
       <div class="mini-card mc-purple" onclick="showSubPage('home-trivia')"><i class="fas fa-brain"></i><div class="mc-title">Trivia</div><div class="mc-sub">Test knowledge</div></div>
       <div class="mini-card mc-gold" onclick="showSubPage('home-bibleReader')"><i class="fas fa-book-bible"></i><div class="mc-title">Bible</div><div class="mc-sub">Read & Study</div></div>
-      <div class="mini-card mc-green" onclick="switchSection('discover')"><i class="fas fa-inbox"></i><div class="mc-title">My Inbox</div><div class="mc-sub">Messages</div></div>
+      <div class="mini-card mc-blue" onclick="if(window.h28OpenForum)window.h28OpenForum();else if(window.h27OpenPage)window.h27OpenPage('forum')"><i class="fas fa-comments"></i><div class="mc-title">Public Forum</div><div class="mc-sub">Community</div></div>
+      <div class="mini-card mc-gold" onclick="if(window.h30OpenPlans)window.h30OpenPlans();else if(window.h27OpenPage)window.h27OpenPage('plans')"><i class="fas fa-calendar-check"></i><div class="mc-title">Plans</div><div class="mc-sub">Goals</div></div>
+      <div class="mini-card mc-green" onclick="if(window.h28OpenPrayer)window.h28OpenPrayer();else if(window.h27OpenPage)window.h27OpenPage('prayer')"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer Wall</div><div class="mc-sub">Community</div></div>
       <div class="mini-card mc-blue" onclick="openPreachings()"><i class="fas fa-microphone"></i><div class="mc-title">Preachings</div><div class="mc-sub">Sermons & Live</div></div>
       <div class="mini-card mc-pink" onclick="showSubPage('home-characters')"><i class="fas fa-users"></i><div class="mc-title">Characters</div><div class="mc-sub">Explore</div></div>
       <div class="mini-card mc-red" onclick="showSubPage('home-devotional')"><i class="fas fa-sun"></i><div class="mc-title">Devotional</div><div class="mc-sub">Daily</div></div>
