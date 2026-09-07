@@ -739,7 +739,7 @@
         + (m.minutes ? '<div style="margin-top:6px"><b>Minutes</b><div style="white-space:pre-wrap">' + esc(m.minutes) + '</div></div>' : '')
         + mediaHtml(m.media_url) + '</details>'
         + '<div style="display:flex;gap:8px;margin-top:10px">'
-        + (mem ? '<button class="btn btn-secondary btn-sm" onclick="c26ApologyModal(\''+m.id+'\')"><i class="fas fa-hand-paper"></i> Apology</button>' : '')
+        + '<button class="btn btn-secondary btn-sm" onclick="c26ApologyModal(\''+m.id+'\')"><i class="fas fa-hand-paper"></i> Apology</button>'
         + (can ? '<button class="btn btn-primary btn-sm" onclick="c26MeetingModal(\''+m.id+'\')"><i class="fas fa-edit"></i> Edit</button>' : '')
         + '</div></div>';
     });
