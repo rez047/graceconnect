@@ -135,4 +135,85 @@
   async function gcCatMeetings() { var cat = window._gcCat, box = document.getElementById('gcc-meetings'); if (!box) return; var cm = await gcCatManage(cat); var r = (await sb().from('church_group_category_records').select('*').eq('category_id', cat.id).order('record_date', { ascending: false }).limit(100)).data || []; var html = ''; if (cm) html += '<div class="card"><b>📝 Take Attendance / Meeting</b><div class="grid-2" style="margin-top:8px"><input class="form-input" id="gcmDate" type="date"><input class="form-input" id="gcmPresent" type="number" placeholder="No. present"></div><textarea class="form-textarea" id="gcmNames" rows="2" placeholder="Names known attendance" style="margin-top:8px"></textarea><input class="form-input" id="gcmLesson" placeholder="Lesson / theme" style="margin-top:8px"><input class="form-input" id="gcmOffering" type="number" step="0.01" placeholder="Total offering" style="margin-top:8px"><div class="media-upload" id="gcmUp" style="margin-top:8px" onclick="gcAttach(\'mmedia\',\'gcmUp\')"><i class="fas fa-cloud-upload-alt"></i><span>Upload media (optional)</span></div><button class="btn btn-primary btn-block" onclick="gcSaveRecord()"><i class="fas fa-save"></i> Save Record</button></div>'; var tp = 0, to = 0; r.forEach(function (x) { tp += Number(x.students_present || 0); to += Number(x.total_offering || 0); html += '<div class="card"><b>' + esc(x.lesson || 'Meeting') + '</b><div style="font-size:.78rem;color:var(--text-light)">' + esc(x.record_date || '') + '</div><div style="margin-top:4px"><i class="fas fa-users"></i> ' + esc(x.students_present || 0) + ' present' + (cm ? ' &nbsp;<i class="fas fa-coins"></i> ' + Number(x.total_offering || 0).toFixed(2) : '') + '</div>' + (x.student_names ? '<div style="font-size:.78rem;white-space:pre-wrap;margin-top:4px">' + esc(x.student_names) + '</div>' : '') + mediaHtml(x.media_url) + '</div>'; }); html += '<div class="card" style="text-align:center;font-weight:800">Total Students Present: ' + tp + (cm ? '<br>Total Offering: ' + to.toFixed(2) : '<br><span style="font-size:.72rem;color:var(--text-lighter)">Offering visible to leadership/teacher only</span>') + '</div>'; box.innerHTML = html; }
   window.gcSaveRecord = async function () { var cat = window._gcCat, f = window._gcMedia.mmedia; var url = f ? await upload(f, 'category-records') : null; var r = await sb().from('church_group_category_records').insert([{ category_id: cat.id, group_id: cat.group_id, record_date: document.getElementById('gcmDate').value, student_names: document.getElementById('gcmNames').value.trim(), students_present: Number(document.getElementById('gcmPresent').value || 0), total_offering: Number(document.getElementById('gcmOffering').value || 0), lesson: document.getElementById('gcmLesson').value.trim(), media_url: url }]); if (r.error) return alert(r.error.message); window._gcMedia.mmedia = null; gcCatMeetings(); };
   async function gcCatReports() { var cat = window._gcCat, box = document.getElementById('gcc-reports'); if (!box) return; var cm = await gcCatManage(cat); var r = (await sb().from('church_group_category_records').select('*').eq('category_id', cat.id)).data || []; var tp = 0, to = 0; r.forEach(function (x) { tp += Number(x.students_present || 0); to += Number(x.total_offering || 0); }); box.innerHTML = '<div class="card" style="text-align:center;font-weight:800">Total Students Present: ' + tp + (cm ? '<br>Total Offering: ' + to.toFixed(2) : '<br><span style="font-size:.72rem;color:var(--text-lighter)">Offering totals hidden for members</span>') + '</div>' + (cm ? '<div class="card">' + r.map(function (x) { return '<div style="display:flex;justify-content:space-between;font-size:.82rem;padding:4px 0;border-bottom:1px solid var(--border)"><span>' + esc(x.record_date || '') + ' • ' + esc(x.lesson || 'Record') + '</span><b>' + Number(x.total_offering || 0).toFixed(2) + '</b></div>'; }).join('') + '</div>' : ''); }
+  // ============ BLOCK C — quick-tile sub-pages + featured tap-to-add (photo/name/titles/info) ============
+  // 1) Robust showSubPage override (fixes Trivia/Bible/Characters/Devotional tiles)
+  window.showSubPage = function (id) {
+    var el = document.getElementById(id); if (!el) return;
+    var sec = el.closest('.section');
+    if (sec) {
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      sec.classList.add('active');
+      sec.querySelectorAll('.sub-page').forEach(function (sp) { sp.classList.remove('active'); });
+    }
+    var target = el.classList.contains('sub-page') ? el : el.closest('.sub-page');
+    if (target) target.classList.add('active');
+    window._gcLastSub = id;
+    window.scrollTo({ top: 0 });
+    try {
+      if (id === 'home-trivia' && window.loadRandomTrivia) window.loadRandomTrivia();
+      if (id === 'home-bibleReader' && window.loadBibleChapter && !(window._bibleVerses || []).length) window.loadBibleChapter();
+      if (id === 'home-devotional' && window.loadDevotional) window.loadDevotional();
+      if (id === 'home-characters' && window.loadCharacters) window.loadCharacters();
+    } catch (e) {}
+  };
+
+  // 2) Featured: tapping a member now opens the enrich form (photo option, editable system name,
+  //    titles = all system roles with add/edit/remove, optional additional info)
+  window._gcFeEdit = { uid: null, pic: null, roles: [] };
+  window.feAdd21 = function (uid) { window.gcFeOpenForm(uid); };
+  window.gcFeOpenForm = async function (uid) {
+    var us = await users();
+    var u = us.find(function (x) { return x.id === uid; }); if (!u) return alert('Member not found.');
+    var roles = [];
+    if (u.role && u.role !== 'member') roles.push(u.role);
+    var d = (await sb().from('department_members').select('role,departments(name)').eq('user_id', uid)).data || [];
+    d.forEach(function (m) { roles.push((m.role || 'Member') + ' – ' + ((m.departments || {}).name || 'Department')); });
+    var uu = (await sb().from('ushirika_members').select('role,ushirikas(name)').eq('user_id', uid)).data || [];
+    uu.forEach(function (m) { if ((m.role || 'Member') !== 'member') roles.push(m.role + ' – ' + ((m.ushirikas || {}).name || 'Ushirika')); });
+    var g = (await sb().from('church_group_members').select('role,church_groups(name)').eq('user_id', uid)).data || [];
+    g.forEach(function (m) { if ((m.role || 'Member') !== 'member') roles.push(m.role + ' – ' + ((m.church_groups || {}).name || 'Group')); });
+    var c = (await sb().from('church_group_category_members').select('role,church_group_categories(name)').eq('user_id', uid)).data || [];
+    c.forEach(function (m) { if ((m.role || 'Member') !== 'member') roles.push(m.role + ' – ' + ((m.church_group_categories || {}).name || 'Category')); });
+    if (!roles.length) roles.push('Member');
+    window._gcFeEdit = { uid: uid, pic: u.profile_pic || null, roles: roles };
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-overlay show" id="gcFeForm" style="display:flex" onclick="if(event.target===this)this.remove()"><div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>'
+      + '<div class="modal-title"><i class="fas fa-star"></i> Add to Front Page</div>'
+      + '<div style="display:flex;gap:10px;align-items:center;margin-bottom:10px"><div id="gcFePic">' + (u.profile_pic ? '<img src="' + u.profile_pic + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block">' : '<div class="post-avatar" style="width:56px;height:56px">' + ini(u.name) + '</div>') + '</div><div style="flex:1"><b>' + esc(u.name) + '</b></div></div>'
+      + '<button class="btn btn-secondary btn-sm" onclick="gcFePicUpload()"><i class="fas fa-camera"></i> Tap to choose photo</button> '
+      + '<button class="btn btn-secondary-alt btn-sm" onclick="gcFePicProfile()"><i class="fas fa-user"></i> Use profile picture</button>'
+      + '<div class="form-group" style="margin-top:10px"><label class="form-label">Name (system name — editable)</label><input class="form-input" id="gcFeName" value="' + esc(u.name || '') + '"></div>'
+      + '<div class="form-group"><label class="form-label">Title / roles to display (add • edit ✎ • remove ✕)</label><div id="gcFeChips" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:6px"></div>'
+      + '<div style="display:flex;gap:6px"><input class="form-input" id="gcFeRoleAdd" placeholder="Add a title..." style="flex:1"><button class="btn btn-primary btn-sm" onclick="gcFeRoleAdd()"><i class="fas fa-plus"></i></button></div></div>'
+      + '<div class="form-group"><label class="form-label">Additional info (optional)</label><textarea class="form-textarea" id="gcFeInfo" rows="2" placeholder="e.g. Serving since 2015…"></textarea></div>'
+      + '<button class="btn btn-warm btn-block" onclick="gcFeSave()"><i class="fas fa-star"></i> Add to front page</button>'
+      + '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="document.getElementById(\'gcFeForm\').remove()">Cancel</button>'
+      + '</div></div>');
+    gcFeChipsRender();
+  };
+  window.gcFePicUpload = function () { var i = document.createElement('input'); i.type = 'file'; i.accept = 'image/*'; i.onchange = function () { var f = i.files && i.files[0]; if (!f) return; upload(f, 'featured').then(function (url) { window._gcFeEdit.pic = url; var b = document.getElementById('gcFePic'); if (b) b.innerHTML = '<img src="' + url + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block">'; }); }; i.click(); };
+  window.gcFePicProfile = async function () { var us = await users(); var u = us.find(function (x) { return x.id === window._gcFeEdit.uid; }); window._gcFeEdit.pic = (u && u.profile_pic) || null; var b = document.getElementById('gcFePic'); if (b) b.innerHTML = window._gcFeEdit.pic ? '<img src="' + window._gcFeEdit.pic + '" style="width:56px;height:56px;border-radius:50%;object-fit:cover;display:block">' : '<div class="post-avatar" style="width:56px;height:56px">' + ini(u && u.name) + '</div>'; };
+  window.gcFeRoleAdd = function (v) { v = (v || (document.getElementById('gcFeRoleAdd') || {}).value || '').trim(); if (!v) return; window._gcFeEdit.roles.push(v); var i = document.getElementById('gcFeRoleAdd'); if (i) i.value = ''; gcFeChipsRender(); };
+  window.gcFeRoleDel = function (i) { window._gcFeEdit.roles.splice(i, 1); gcFeChipsRender(); };
+  window.gcFeRoleEdit = function (i) { var v = prompt('Edit title:', window._gcFeEdit.roles[i]); if (v === null) return; v = v.trim(); if (!v) return; window._gcFeEdit.roles[i] = v; gcFeChipsRender(); };
+  function gcFeChipsRender() { var c = document.getElementById('gcFeChips'); if (!c) return; c.innerHTML = window._gcFeEdit.roles.map(function (r, i) { return '<span class="chip chip-green" style="font-size:.72rem">' + esc(r) + ' <b onclick="gcFeRoleEdit(' + i + ')" style="cursor:pointer;margin-left:4px;color:#3730A3">✎</b><b onclick="gcFeRoleDel(' + i + ')" style="cursor:pointer;margin-left:4px;color:#991B1B">✕</b></span>'; }).join('') || '<span style="font-size:.7rem;color:var(--text-lighter)">Add at least one title.</span>'; }
+  window.gcFeSave = async function () {
+    var fe = window._gcFeEdit;
+    var name = (document.getElementById('gcFeName').value || '').trim(); if (!name) return alert('Name required.');
+    if (!fe.roles.length) return alert('Add at least one title.');
+    var info = (document.getElementById('gcFeInfo').value || '').trim();
+    var payload = { user_id: fe.uid, name: name, role: fe.roles.join(' • '), image_url: fe.pic || null, sort: (window._featured || []).length, additional_info: info || null };
+    (function tryInsert(p) {
+      sb().from('featured_people').insert([p]).then(function (r) {
+        if (r && r.error) {
+          if (/sort/.test(r.error.message)) { delete p.sort; return tryInsert(p); }
+          if (/additional_info/.test(r.error.message)) { delete p.additional_info; return tryInsert(p); }
+          return alert('⚠️ Could not add: ' + r.error.message);
+        }
+        var m = document.getElementById('gcFeForm'); if (m) m.remove();
+        if (window.loadFeatured) window.loadFeatured().then(function () { if (window.feShowPicker21) window.feShowPicker21(true); });
+        alert('✅ ' + name + ' added to front page.');
+      });
+    })(payload);
+  };
 })();
