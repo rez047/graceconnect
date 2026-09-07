@@ -490,4 +490,61 @@
     window.showSubPage._gcBlank = true;
   }
   gcEnsureVisibleSubPage();
+
+// ============ BLOCK J — live scrollable membership strip + fast idle count ============
+  function gcStripEl() { return document.getElementById('myDeptsScroll') || document.querySelector('.my-depts-scroll'); }
+  function gcStripIsMine() { var sc = gcStripEl(); return !!(sc && sc.querySelector('[data-gcmini]')); }
+
+  async function gcBuildStrip() {
+    var sc = gcStripEl(); if (!sc || !me()) return;
+    var cache = await gcMyCache(true);
+    var html = cache.list.map(function (m) {
+      return '<div class="my-dept-mini" data-gcmini="1" style="background:' + GC_GRAD[m.type] + '" onclick="' + GC_OC[m.type] + '(\'' + m.id + '\')">'
+        + '<div class="my-dept-mini-icon"><i class="fas ' + GC_ICON[m.type] + '"></i></div>'
+        + '<div class="my-dept-mini-name">' + esc(m.name) + '</div>'
+        + '<div style="margin-top:6px"><span class="my-dept-mini-role-badge">' + esc(m.role) + '</span></div>'
+        + '<div style="font-size:.58rem;opacity:.9;margin-top:4px;text-transform:uppercase">' + m.type + '</div></div>';
+    }).join('');
+    html += '<div class="my-dept-join-more" data-gcmini="1" onclick="gcOpenMyList()"><i class="fas fa-list" style="font-size:1.2rem;margin-bottom:6px"></i><div style="font-size:.75rem;font-weight:700">View Full List</div></div>';
+    sc.innerHTML = html || '<div class="my-dept-join-more" data-gcmini="1" onclick="gcOpenMyList()"><div style="font-size:.75rem;font-weight:700">View Full List</div></div>';
+    gcUpdateCount(cache.list.length);
+  }
+
+  // fast count: 4 parallel head-only queries (one round trip), safe to run often
+  var _gcCountBusy = false;
+  async function gcFastCount() {
+    if (!me() || _gcCountBusy) return;
+    _gcCountBusy = true;
+    try {
+      var uid = me().id;
+      var q = function (t) { return sb().from(t).select('id', { count: 'exact', head: true }).eq('user_id', uid).then(function (r) { return r.count || 0; }).catch(function () { return 0; }); };
+      var res = await Promise.all([q('department_members'), q('ushirika_members'), q('church_group_members'), q('church_group_category_members')]);
+      gcUpdateCount(res[0] + res[1] + res[2] + res[3]);
+    } catch (e) {}
+    _gcCountBusy = false;
+  }
+
+  // boot: strip + count as soon as logged in
+  setTimeout(function () { if (me()) { gcFastCount(); gcBuildStrip(); } }, 300);
+  setTimeout(function () { if (me()) { gcFastCount(); if (!gcStripIsMine()) gcBuildStrip(); } }, 1200);
+
+  // idle on homepage: keep count fresh every 10s, re-win the strip if the old renderer overwrote it
+  setInterval(function () {
+    var h = document.getElementById('section-home');
+    if (!me() || !h || !h.classList.contains('active')) return;
+    gcFastCount();
+    if (!gcStripIsMine()) gcBuildStrip();
+  }, 10000);
+
+  // instant refresh when returning to the tab
+  document.addEventListener('visibilitychange', function () { if (!document.hidden && me()) { gcFastCount(); if (!gcStripIsMine()) gcBuildStrip(); } }, { passive: true });
+
+  // refresh after membership changes (join/leave category, etc.)
+  ['gcJoinCat', 'gcCatAdd', 'gcCatRemove'].forEach(function (n) {
+    var fn = window[n];
+    if (typeof fn === 'function' && !fn._gcJ) {
+      window[n] = function () { var r = fn.apply(this, arguments); setTimeout(function () { _gcCache = null; gcFastCount(); gcBuildStrip(); }, 800); return r; };
+      window[n]._gcJ = true;
+    }
+  });
 })();
