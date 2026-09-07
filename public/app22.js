@@ -1212,7 +1212,7 @@
           </details>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:10px">
-            ${isMember ? '<button class="btn btn-secondary btn-sm" onclick="ggApologyModal(\'' + m.id + '\')"><i class="fas fa-hand-paper"></i> Submit Apology</button>' : ''}
+            <button class="btn btn-secondary btn-sm" onclick="ggApologyModal(\'' + m.id + '\')"><i class="fas fa-hand-paper"></i> Submit Apology</button>
             ${canManage ? '<button class="btn btn-primary btn-sm" onclick="ggMeetingModal(\'' + m.id + '\')"><i class="fas fa-edit"></i> Edit Meeting</button>' : ''}
           </div>
         </div>
