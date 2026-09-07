@@ -642,7 +642,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
 
     <div class="my-depts-section">
       <div class="my-depts-header">
-        <div class="my-depts-header" onclick="h32OpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div>
+        <div class="my-depts-header" onclick="gcOpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div> 
       </div>
       <div class="my-depts-scroll" id="myDeptsScroll">
         <div class="my-dept-join-more" onclick="openModal('deptPickerModal')">
@@ -794,10 +794,7 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
     <div id="home-trivia" class="sub-page">
     <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
     <div class="section-title-app">🧠 Bible Trivia Challenge</div>
-    <div id="triviaBox2"></div>
-    <div style="display:flex;gap:8px;margin-top:10px; justify-content: center;">
-      <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> Next Question</button>
-    </div>
+    <div id="triviaBox2"></div>     <div style="display:flex;gap:8px;margin-top:10px; justify-content: center;">       <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> Next Question</button>     </div>
 </div>
   </div>
 
