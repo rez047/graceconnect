@@ -514,4 +514,93 @@
     });
   }, 4000);
 
+
+// ==========================================
+  // 11. FIX 50% TAP + INSTANT DATA (BLOCK H)
+  // ==========================================
+  // Fix 50% taps via delegated click listener (survives DOM churn)
+  (function () {
+    var tiles = { 'Public Forum': 'h28OpenForum', 'Plans': 'h30OpenPlans', 'Prayer Wall': 'h28OpenPrayer' };
+    document.addEventListener('click', function (e) {
+      var card = e.target && e.target.closest ? e.target.closest('#home-main .mini-card') : null;
+      if (!card) return;
+      var t = card.querySelector('.mc-title'); var title = t ? t.textContent.trim() : '';
+      var fn = tiles[title];
+      if (fn && typeof window[fn] === 'function') { e.preventDefault(); e.stopPropagation(); window[fn](); }
+    }, true);
+  })();
+
+  // Remove the old bottom gradient trio (Prayer Wall/Public Forum/Plans cards) at runtime
+  function gcRemoveOldTrio() {
+    document.querySelectorAll('#home-main .card-gradient').forEach(function (c) {
+      var t = (c.textContent || '').trim();
+      if (/^(Prayer Wall|Public Forum|Plans)/i.test(t)) { var p = c.parentElement; c.remove(); if (p && !p.children.length) p.remove(); }
+    });
+  }
+  setInterval(gcRemoveOldTrio, 2000);
+
+  // INSTANT BADGE: 4 parallel head-count queries (one round trip instead of 8)
+  async function gcFastCount() {
+    if (!me()) return;
+    var uid = me().id;
+    var q = function (t) { return sb().from(t).select('id', { count: 'exact', head: true }).eq('user_id', uid).then(function (r) { return r.count || 0; }, function () { return 0; }); };
+    var res = await Promise.all([q('department_members'), q('ushirika_members'), q('church_group_members'), q('church_group_category_members')]);
+    var n = res[0] + res[1] + res[2] + res[3];
+    var el = document.getElementById('myDeptsCount'); if (el) el.textContent = n + ' joined';
+    return n;
+  }
+
+  // FAST STRIP: parallel membership queries + horizontal scroll
+  async function gcMyCacheFast() {
+    if (!me()) return { list: [], byId: {} };
+    if (_gcCache && Date.now() - _gcCacheT < 30000) return _gcCache;
+    var uid = me().id;
+    var ms = await Promise.all([
+      sb().from('department_members').select('*').eq('user_id', uid),
+      sb().from('ushirika_members').select('*').eq('user_id', uid),
+      sb().from('church_group_members').select('*').eq('user_id', uid),
+      sb().from('church_group_category_members').select('*').eq('user_id', uid)
+    ]);
+    var d = ms[0].data || [], u = ms[1].data || [], g = ms[2].data || [], c = ms[3].data || [];
+    var spec = [
+      ['departments', 'department_id', d, 'department'],
+      ['ushirikas', 'ushirika_id', u, 'ushirika'],
+      ['church_groups', 'group_id', g, 'group'],
+      ['church_group_categories', 'category_id', c, 'category']
+    ];
+    var nm = await Promise.all(spec.map(function (s) { var ids = s[2].map(function (x) { return x[s[1]]; }); return ids.length ? sb().from(s[0]).select('id,name').in('id', ids) : { data: [] }; }));
+    var list = [];
+    spec.forEach(function (s, i) { var map = {}; (nm[i].data || []).forEach(function (x) { map[x.id] = x.name; }); s[2].forEach(function (x) { list.push({ type: s[3], id: x[s[1]], name: map[x[s[1]]] || s[3], role: x.role || 'Member' }); }); });
+    var byId = {}; list.forEach(function (m) { byId[m.id] = m; });
+    _gcCache = { list: list, byId: byId }; _gcCacheT = Date.now();
+    return _gcCache;
+  }
+
+  async function gcInstantStrip() {
+    var sc = document.querySelector('.my-depts-scroll'); if (!sc || !me()) return;
+    gcFastCount();
+    var cache = await gcMyCacheFast();
+    var html = cache.list.map(function (m) {
+      return '<div class="my-dept-mini" style="background:' + GC_GRAD[m.type] + '" onclick="' + GC_OC[m.type] + '(\'' + m.id + '\')"><div class="my-dept-mini-icon"><i class="fas ' + GC_ICON[m.type] + '"></i></div><div class="my-dept-mini-name">' + esc(m.name) + '</div><div style="margin-top:6px"><span class="my-dept-mini-role-badge">' + esc(m.role) + '</span></div><div style="font-size:.58rem;opacity:.9;margin-top:4px;text-transform:uppercase">' + m.type + '</div></div>';
+    }).join('');
+    html += '<div class="my-dept-join-more" onclick="gcOpenMyList()"><i class="fas fa-list" style="font-size:1.2rem;margin-bottom:6px"></i><div style="font-size:.75rem;font-weight:700">View Full List</div></div>';
+    sc.innerHTML = html; sc.setAttribute('data-gc', '1');
+  }
+  setTimeout(gcInstantStrip, 300);
+  setInterval(function () { if (!me()) return; var sc = document.querySelector('.my-depts-scroll'); if (homeActive && homeActive() && sc && sc.getAttribute('data-gc') !== '1') gcInstantStrip(); }, 2000);
+  setInterval(function () { if (me()) gcFastCount(); }, 30000);
+
+  // PREFETCH bottom sections at boot so they load instantly on tap
+  var _gcPrefetch = false;
+  setTimeout(function () {
+    if (_gcPrefetch || !me()) return; _gcPrefetch = true;
+    ['loadCauses', 'loadGiving', 'loadEvents', 'loadChatInbox', 'loadChats', 'loadFeatured', 'loadLeaders', 'loadNotifs', 'loadDocuments', 'loadPreachings'].forEach(function (n) { try { if (typeof window[n] === 'function') window[n](); } catch (e) {} });
+    gcMyCacheFast();
+  }, 700);
+  setInterval(function () { if (me() && !_gcPrefetch) { _gcPrefetch = true; ['loadCauses', 'loadGiving', 'loadEvents', 'loadChatInbox', 'loadChats', 'loadFeatured', 'loadLeaders', 'loadNotifs', 'loadDocuments', 'loadPreachings'].forEach(function (n) { try { if (typeof window[n] === 'function') window[n](); } catch (e) {} }); gcMyCacheFast(); } }, 1500);
+
+  // Pause ticker when tab hidden (saves battery + bandwidth)
+  var _gcHidden = false;
+  document.addEventListener('visibilitychange', function () { _gcHidden = document.hidden; }, { passive: true });
+
 })();
