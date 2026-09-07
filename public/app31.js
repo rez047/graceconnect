@@ -396,4 +396,63 @@
       var give = card.querySelector('.btn-accent, [onclick*="give"], [onclick*="Give"]'); if (give) card.insertBefore(d, give); else card.appendChild(d);
     });
   }, 4000);
+
+// ============ BLOCK G — conform Trivia/Bible/Characters/Devotional to the working page system ============
+  (function () {
+    var PAGES = {
+      'home-trivia': { load: function () { if (window.loadRandomTrivia) window.loadRandomTrivia(); } },
+      'home-bibleReader': { load: function () { if (window.loadBibleChapter && !(window._bibleVerses || []).length) window.loadBibleChapter(); } },
+      'home-characters': { load: function () { if (window.loadCharacters) window.loadCharacters(); } },
+      'home-devotional': { load: function () { if (window.loadDevotional) window.loadDevotional(); } }
+    };
+    window.gcBackHome = window.gcBackHome || function () {
+      if (window.gcListBack) return window.gcListBack();
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      var h = document.getElementById('section-home'); if (h) h.classList.add('active');
+      var hm = document.getElementById('home-main'); if (hm) hm.classList.add('active');
+      window.scrollTo({ top: 0 });
+    };
+    function ensurePageSection(id) {
+      var sid = 'section-gcpage-' + id;
+      var sec = document.getElementById(sid);
+      if (sec) return sec;
+      var el = document.getElementById(id); if (!el) return null;
+      sec = document.createElement('div'); sec.id = sid; sec.className = 'section';
+      var root = document.createElement('div'); root.className = 'sub-page active';
+      var back = document.createElement('button'); back.className = 'back-btn';
+      back.innerHTML = '<i class="fas fa-arrow-left"></i> Back';
+      back.onclick = function () { window.gcBackHome(); };
+      root.appendChild(back);
+      el.classList.remove('sub-page'); el.classList.remove('active'); el.style.display = '';
+      root.appendChild(el);
+      sec.appendChild(root);
+      (document.querySelector('main') || document.body).appendChild(sec);
+      return sec;
+    }
+    function openPage(id) {
+      var sec = ensurePageSection(id); if (!sec) return;
+      document.querySelectorAll('.sub-page.active').forEach(function (p) { p.classList.remove('active'); });
+      document.querySelectorAll('.section.active').forEach(function (s) { s.classList.remove('active'); });
+      sec.classList.add('active');
+      var root = sec.firstElementChild; if (root) root.classList.add('active');
+      document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) { b.classList.remove('active'); });
+      window._gcLastSub = id;
+      window.scrollTo({ top: 0 });
+      try { PAGES[id].load(); } catch (e) {}
+    }
+    window.gcOpenTrivia = function () { openPage('home-trivia'); };
+    window.gcOpenBible = function () { openPage('home-bibleReader'); };
+    window.gcOpenCharacters = function () { openPage('home-characters'); };
+    window.gcOpenDevotional = function () { openPage('home-devotional'); };
+    var TILEMAP = { 'Trivia': window.gcOpenTrivia, 'Bible': window.gcOpenBible, 'Characters': window.gcOpenCharacters, 'Devotional': window.gcOpenDevotional };
+    document.addEventListener('click', function (e) {
+      var card = e.target && e.target.closest ? e.target.closest('#home-main .mini-card') : null;
+      if (!card) return;
+      var t = card.querySelector('.mc-title'); var title = t ? t.textContent.trim() : '';
+      var fn = TILEMAP[title];
+      if (fn) { e.preventDefault(); e.stopPropagation(); e.stopImmediatePropagation(); fn(); }
+    }, true);
+    // pre-build the four sections at boot so the first tap is instant
+    setTimeout(function () { Object.keys(PAGES).forEach(ensurePageSection); }, 400);
+  })();
 })();
