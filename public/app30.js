@@ -335,4 +335,92 @@
       window[n]._h32w = true;
     });
   }, 2000);
+
+// =====================================================
+  // MY LIST — new unique function: full page of ushirika / departments / groups / categories
+  // =====================================================
+  window.h32OpenDept = function (id) { if (window.c26OpenGroup) window.c26OpenGroup('department', id); else if (window.c26OpenHome) window.c26OpenHome('department'); };
+  window.h32OpenUsh = function (id) { if (window.c26OpenGroup) window.c26OpenGroup('ushirika', id); else if (window.c26OpenHome) window.c26OpenHome('ushirika'); };
+  window.h32OpenGrp = function (id) { if (window.ggOpenGroup) window.ggOpenGroup(id); };
+  window.h32OpenCat = function (id) { if (window.ggOpenCategory) window.ggOpenCategory(id); };
+
+  window.h32OpenMyList = async function () {
+    if (!me()) return alert('Please log in first.');
+    var sec = document.getElementById('section-h32list');
+    if (!sec) {
+      sec = document.createElement('div'); sec.id = 'section-h32list'; sec.className = 'section';
+      sec.innerHTML = '<div id="h32list-root" class="sub-page active"></div>';
+      (document.querySelector('main') || document.body).appendChild(sec);
+    }
+    document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+    sec.classList.add('active');
+    document.querySelectorAll('.bottom-nav .nav-item').forEach(function (b) { b.classList.remove('active'); });
+    document.getElementById('h32list-root').innerHTML =
+      '<button class="back-btn" onclick="h32ListBack()"><i class="fas fa-arrow-left"></i> Back</button>'
+      + '<div style="border-radius:20px;padding:16px;color:#fff;background:linear-gradient(135deg,#8B5CF6,#EC4899);font-weight:800;font-size:1.15rem;margin-bottom:14px"><i class="fas fa-list"></i> My List</div>'
+      + '<div id="h32list-body"><div class="card">Loading...</div></div>';
+    window.scrollTo({ top: 0 });
+    h32LoadMyList();
+  };
+  window.h32ListBack = function () {
+    document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+    var home = document.getElementById('section-home'); if (home) home.classList.add('active');
+    var nav = document.querySelectorAll('.bottom-nav .nav-item'); if (nav[0]) nav[0].classList.add('active');
+  };
+  async function h32Names(table, fk, rows) {
+    if (!rows.length) return {};
+    var r = await sb().from(table).select('id,name').in('id', rows.map(function (x) { return x[fk]; }));
+    var m = {}; (r.data || []).forEach(function (x) { m[x.id] = x.name; }); return m;
+  }
+  function h32Row(icon, grad, title, sub, oc) {
+    return '<div class="card" style="display:flex;gap:10px;align-items:center;cursor:pointer;margin-bottom:8px" onclick="' + oc + '">'
+      + '<div style="width:42px;height:42px;border-radius:12px;background:' + grad + ';color:#fff;display:flex;align-items:center;justify-content:center;flex-shrink:0"><i class="fas ' + icon + '"></i></div>'
+      + '<div style="flex:1;min-width:0"><b style="font-size:.9rem">' + esc(title) + '</b><div style="font-size:.72rem;color:var(--text-light)">' + esc(sub) + '</div></div>'
+      + '<i class="fas fa-chevron-right" style="color:var(--text-lighter)"></i></div>';
+  }
+  async function h32LoadMyList() {
+    var box = document.getElementById('h32list-body'); if (!box || !me()) return;
+    var uid = me().id;
+    var d = (await sb().from('department_members').select('*').eq('user_id', uid)).data || [];
+    var u = (await sb().from('ushirika_members').select('*').eq('user_id', uid)).data || [];
+    var g = (await sb().from('church_group_members').select('*').eq('user_id', uid)).data || [];
+    var c = (await sb().from('church_group_category_members').select('*').eq('user_id', uid)).data || [];
+    var dn = await h32Names('departments', 'department_id', d);
+    var un = await h32Names('ushirikas', 'ushirika_id', u);
+    var gn = await h32Names('church_groups', 'group_id', g);
+    var cn = {}, cg = {};
+    if (c.length) {
+      var cr = (await sb().from('church_group_categories').select('id,name,group_id').in('id', c.map(function (x) { return x.category_id; }))).data || [];
+      cr.forEach(function (x) { cn[x.id] = x.name; cg[x.id] = x.group_id; });
+    }
+    var extra = {};
+    var need = Object.keys(cg).map(function (k) { return cg[k]; }).filter(function (id, i, arr) { return !gn[id] && arr.indexOf(id) === i; });
+    if (need.length) { var gr = (await sb().from('church_groups').select('id,name').in('id', need)).data || []; gr.forEach(function (x) { extra[x.id] = x.name; }); }
+    function gname(id) { return gn[id] || extra[id] || 'Group'; }
+    var html = '';
+    html += '<div class="section-title-app" style="font-size:1rem">🏛️ My Departments (' + d.length + ')</div>'
+      + (d.map(function (r) { return h32Row('fa-briefcase', 'var(--gradient-dept)', dn[r.department_id] || 'Department', 'Role: ' + (r.role || 'Member'), "h32OpenDept('" + r.department_id + "')"); }).join('') || '<div class="card">None yet.</div>');
+    html += '<div class="section-title-app" style="font-size:1rem;margin-top:14px">🏘️ My Ushirika (' + u.length + ')</div>'
+      + (u.map(function (r) { return h32Row('fa-people-group', 'var(--gradient-chat)', un[r.ushirika_id] || 'Ushirika', 'Role: ' + (r.role || 'Member'), "h32OpenUsh('" + r.ushirika_id + "')"); }).join('') || '<div class="card">None yet.</div>');
+    html += '<div class="section-title-app" style="font-size:1rem;margin-top:14px">👥 My Groups (' + g.length + ')</div>'
+      + (g.map(function (r) { return h32Row('fa-users', 'var(--gradient)', gn[r.group_id] || 'Group', 'Role: ' + (r.role || 'Member'), "h32OpenGrp('" + r.group_id + "')"); }).join('') || '<div class="card">None yet.</div>');
+    html += '<div class="section-title-app" style="font-size:1rem;margin-top:14px">🧒 My Categories (' + c.length + ')</div>'
+      + (c.map(function (r) { return h32Row('fa-child', 'var(--gradient-warm)', cn[r.category_id] || 'Category', 'In ' + gname(cg[r.category_id]) + ' • Role: ' + (r.role || 'Member'), "h32OpenCat('" + r.category_id + "')"); }).join('') || '<div class="card">None yet.</div>');
+    box.innerHTML = html;
+    h32UpdateMyCount(d.length + u.length + g.length + c.length);
+  }
+  function h32UpdateMyCount(n) { var el = document.getElementById('myDeptsCount'); if (el) el.textContent = n + ' joined'; }
+  async function h32SilentCount() {
+    if (!me()) return;
+    var uid = me().id;
+    var a = (await sb().from('department_members').select('id', { count: 'exact', head: true }).eq('user_id', uid)).count || 0;
+    var b = (await sb().from('ushirika_members').select('id', { count: 'exact', head: true }).eq('user_id', uid)).count || 0;
+    var c = (await sb().from('church_group_members').select('id', { count: 'exact', head: true }).eq('user_id', uid)).count || 0;
+    var e = (await sb().from('church_group_category_members').select('id', { count: 'exact', head: true }).eq('user_id', uid)).count || 0;
+    h32UpdateMyCount(a + b + c + e);
+  }
+  setInterval(function () {
+    var home = document.getElementById('section-home');
+    if (me() && home && home.classList.contains('active')) h32SilentCount();
+  }, 30000);
 })();
