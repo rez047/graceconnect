@@ -641,7 +641,7 @@
       <div class="streak-days"><div class="streak-dot">M</div><div class="streak-dot">T</div><div class="streak-dot">W</div><div class="streak-dot">T</div><div class="streak-dot">F</div><div class="streak-dot">S</div><div class="streak-dot">S</div></div>
     </div>
     <div class="my-depts-section">
-      <div class="my-depts-header"><div class="my-depts-title"><i class="fas fa-briefcase"></i> My Departments</div><div class="my-depts-count" id="myDeptsCount">0 serving</div></div>
+      <div class="my-depts-header"><div class="my-depts-title"><i class="fas fa-list"></i> My List</div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div>
       <div class="my-depts-scroll" id="myDeptsScroll"><div class="my-dept-join-more" onclick="openModal('deptPickerModal')"><i class="fas fa-plus-circle"></i><div style="font-size:.78rem;font-weight:700">Join Another</div><div style="font-size:.65rem">Serve in more ministries</div></div></div>
     </div>
     <div class="section-title-app">💝 How are you feeling?</div>
@@ -666,7 +666,7 @@
     <div class="grid-3">
       <div class="mini-card mc-purple" onclick="showSubPage('home-trivia')"><i class="fas fa-brain"></i><div class="mc-title">Trivia</div><div class="mc-sub">Test knowledge</div></div>
       <div class="mini-card mc-gold" onclick="showSubPage('home-bibleReader')"><i class="fas fa-book-bible"></i><div class="mc-title">Bible</div><div class="mc-sub">Read & Study</div></div>
-      <div class="mini-card mc-green" onclick="openModal('prayerModal');loadPrayerWall()"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer</div><div class="mc-sub">Request</div></div>
+      <div class="mini-card mc-green" onclick="switchSection('discover')"><i class="fas fa-inbox"></i><div class="mc-title">My Inbox</div><div class="mc-sub">Messages</div></div>
       <div class="mini-card mc-blue" onclick="openPreachings()"><i class="fas fa-microphone"></i><div class="mc-title">Preachings</div><div class="mc-sub">Sermons & Live</div></div>
       <div class="mini-card mc-pink" onclick="showSubPage('home-characters')"><i class="fas fa-users"></i><div class="mc-title">Characters</div><div class="mc-sub">Explore</div></div>
       <div class="mini-card mc-red" onclick="showSubPage('home-devotional')"><i class="fas fa-sun"></i><div class="mc-title">Devotional</div><div class="mc-sub">Daily</div></div>
@@ -677,7 +677,6 @@
       <div id="triviaBox"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> New Question</button>
-        <button class="btn btn-dept btn-sm" onclick="openModal('multiplayerModal')"><i class="fas fa-gamepad"></i> Multiplayer</button>
       </div>
       <div style="text-align:center;margin-top:10px;font-weight:700;color:var(--primary);font-size:.85rem" id="triviaScore">Score: 0/0</div>
     </div>
@@ -723,7 +722,10 @@
     <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
     <div class="section-title-app">🧠 Bible Trivia Challenge</div>
     <div id="triviaBox2"></div>
-  </div>
+    <div style="display:flex;gap:8px;margin-top:10px; justify-content: center;">
+      <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> Next Question</button>
+    </div>
+</div>
 
   <div id="home-bibleReader" class="sub-page">
     <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
