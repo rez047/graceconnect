@@ -216,4 +216,77 @@
       });
     })(payload);
   };
+// ============ BLOCK D — rally progress (goal vs raised) + sub-page stacking fix ============
+  // 1) showSubPage: clear EVERY active sub-page anywhere, then show only the tapped one
+  window.showSubPage = function (id) {
+    document.querySelectorAll('.sub-page.active').forEach(function (p) { p.classList.remove('active'); });
+    var el = document.getElementById(id); if (!el) return;
+    var sec = el.closest('.section');
+    if (sec) { document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); }); sec.classList.add('active'); }
+    var target = el.classList.contains('sub-page') ? el : el.closest('.sub-page');
+    if (target) target.classList.add('active'); else el.classList.add('active');
+    window._gcLastSub = id; window.scrollTo({ top: 0 });
+    try {
+      if (id === 'home-trivia' && window.loadRandomTrivia) window.loadRandomTrivia();
+      if (id === 'home-bibleReader' && window.loadBibleChapter && !(window._bibleVerses || []).length) window.loadBibleChapter();
+      if (id === 'home-devotional' && window.loadDevotional) window.loadDevotional();
+      if (id === 'home-characters' && window.loadCharacters) window.loadCharacters();
+    } catch (e) {}
+  };
+
+  // 2) Rally Cause: show current raised amount vs goal + fill the progress bar
+  var GC_GIVE_TABLES = ['giving', 'contributions', 'payments', 'transactions', 'mpesa_transactions', 'giving_transactions', 'rally_contributions'];
+  var GC_GIVE_FKS = ['cause_id', 'rally_id', 'causeId', 'campaign_id'];
+  var _gcGiveSchema = null;
+  async function gcGiveSchema() {
+    if (_gcGiveSchema) return _gcGiveSchema;
+    for (var i = 0; i < GC_GIVE_TABLES.length; i++) {
+      for (var j = 0; j < GC_GIVE_FKS.length; j++) {
+        var r = await sb().from(GC_GIVE_TABLES[i]).select('id,' + GC_GIVE_FKS[j] + ',amount').limit(1);
+        if (!r.error) { _gcGiveSchema = { table: GC_GIVE_TABLES[i], fk: GC_GIVE_FKS[j] }; return _gcGiveSchema; }
+      }
+    }
+    _gcGiveSchema = { table: null, fk: null }; return _gcGiveSchema;
+  }
+  function gcNum(s) { return Number(String(s || '').replace(/[^0-9.]/g, '')) || 0; }
+  async function gcUpdateRallyProgress() {
+    var box = document.getElementById('dyn-causes'); if (!box) return;
+    var cards = box.querySelectorAll('.card'); if (!cards.length) return;
+    var sch = await gcGiveSchema();
+    var sums = {};
+    if (sch.table) {
+      var r = await sb().from(sch.table).select(sch.fk + ',amount,status');
+      if (r.error) r = await sb().from(sch.table).select(sch.fk + ',amount');
+      (r.data || []).forEach(function (row) {
+        var st = String(row.status || '').toLowerCase();
+        if (st && !/success|completed|paid|confirmed|done/.test(st)) return;
+        sums[row[sch.fk]] = (sums[row[sch.fk]] || 0) + Number(row.amount || 0);
+      });
+    }
+    cards.forEach(function (card) {
+      var idm = (card.innerHTML || '').match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      var raised = idm ? (sums[idm[1]] || 0) : 0;
+      var goal = 0, goalEl = null, kesEl = null;
+      card.querySelectorAll('div,span,b').forEach(function (e) {
+        var t = (e.textContent || '').trim();
+        if (!goalEl && e.children.length === 0 && /^Goal:/i.test(t)) goalEl = e;
+        if (!kesEl && e.children.length === 0 && /^KES/i.test(t)) kesEl = e;
+      });
+      if (goalEl) goal = gcNum(goalEl.textContent);
+      if (kesEl) kesEl.textContent = 'KES ' + raised.toLocaleString() + ' raised';
+      var pct = goal > 0 ? Math.min(100, (raised / goal) * 100) : 0;
+      var fill = null, bars = card.querySelectorAll('div');
+      for (var k = 0; k < bars.length; k++) { var bar = bars[k]; if (bar.offsetHeight > 0 && bar.offsetHeight <= 12 && bar.querySelector('div')) { fill = bar.querySelector('div'); break; } }
+      if (fill) { fill.style.width = pct + '%'; if (!fill.style.background || fill.style.background === 'none') fill.style.background = 'linear-gradient(90deg,#10B981,#059669)'; }
+      var pctEl = card.querySelector('[data-gcpct]');
+      if (!pctEl && kesEl) { pctEl = document.createElement('div'); pctEl.setAttribute('data-gcpct', '1'); pctEl.style.cssText = 'font-size:.68rem;color:var(--text-light);margin-top:2px'; kesEl.parentNode.insertBefore(pctEl, kesEl.nextSibling); }
+      if (pctEl) pctEl.textContent = goal > 0 ? pct.toFixed(0) + '% of goal reached' : '';
+    });
+  }
+  setInterval(gcUpdateRallyProgress, 4000);
+  if (window.confirmGiving && !window.confirmGiving._gcr) {
+    var _cg = window.confirmGiving;
+    window.confirmGiving = function () { var r = _cg.apply(this, arguments); setTimeout(gcUpdateRallyProgress, 1500); setTimeout(gcUpdateRallyProgress, 4000); return r; };
+    window.confirmGiving._gcr = true;
+  }
 })();
