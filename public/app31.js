@@ -455,23 +455,5 @@
     // pre-build the four sections at boot so the first tap is instant
     setTimeout(function () { Object.keys(PAGES).forEach(ensurePageSection); }, 400);
   })();
-// ============ BLOCK H — remove old bottom gradient trio (Prayer Wall / Public Forum / Plans) ============
-  function gcKillOldTrio() {
-    var titles = { 'Prayer Wall': 1, 'Public Forum': 1, 'Plans': 1 };
-    var scope = document.getElementById('home-main') || document.getElementById('section-home');
-    if (!scope) return;
-    var nodes = scope.querySelectorAll('div, a, button');
-    for (var i = 0; i < nodes.length; i++) {
-      var el = nodes[i];
-      if (el.classList.contains('mini-card') || el.closest('.mini-card')) continue; // keep quick tiles
-      if (el.querySelector('.mini-card')) continue;
-      var t = (el.textContent || '').replace(/\s+/g, ' ').trim();
-      if (!titles[t]) continue;
-      var p = el.parentElement;
-      el.remove();
-      if (p && p.children.length === 0 && p.id !== 'home-main' && p.id !== 'section-home') p.remove();
-    }
-  }
-  setTimeout(gcKillOldTrio, 500);
-  setInterval(gcKillOldTrio, 1200);
+
 })();
