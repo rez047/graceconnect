@@ -641,8 +641,7 @@
       <div class="streak-days"><div class="streak-dot">M</div><div class="streak-dot">T</div><div class="streak-dot">W</div><div class="streak-dot">T</div><div class="streak-dot">F</div><div class="streak-dot">S</div><div class="streak-dot">S</div></div>
     </div>
     <div class="my-depts-section">
-      <div class="my-depts-header" onclick="h32OpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div></div>
-      <div class="my-depts-scroll" id="myDeptsScroll"><div class="my-dept-join-more" onclick="openModal('deptPickerModal')"><i class="fas fa-plus-circle"></i><div style="font-size:.78rem;font-weight:700">Join Another</div><div style="font-size:.65rem">Serve in more ministries</div></div></div>
+      <div class="my-depts-header" onclick="gcOpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div> </div>
     </div>
     <div class="section-title-app">💝 How are you feeling?</div>
     <div class="emotional-card">
@@ -721,10 +720,7 @@
   <div id="home-trivia" class="sub-page">
     <button class="back-btn" onclick="showSubPage('home-main')"><i class="fas fa-arrow-left"></i> Back</button>
     <div class="section-title-app">🧠 Bible Trivia Challenge</div>
-    <div id="triviaBox2"></div>
-    <div style="display:flex;gap:8px;margin-top:10px; justify-content: center;">
-      <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> Next Question</button>
-    </div>
+    <div id="triviaBox2"></div>     <div style="display:flex;gap:8px;margin-top:10px; justify-content: center;">       <button class="btn btn-secondary-alt btn-sm" onclick="loadRandomTrivia()"><i class="fas fa-random"></i> Next Question</button>     </div>
 </div>
 
   <div id="home-bibleReader" class="sub-page">
@@ -902,7 +898,7 @@
     <div class="modal-title">Quick Actions</div>
     <div class="grid-2">
       <div class="mini-card mc-purple" onclick="closeModalDirect();openAskFlow()"><i class="fas fa-question-circle"></i><div class="mc-title">Ask</div></div>
-      <div class="mini-card mc-green" onclick="closeModalDirect();openModal('prayerModal');loadPrayerWall()"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer</div></div>
+      <div class="mini-card mc-green" onclick="closeModalDirect();gcOpenPrayer()"><i class="fas fa-hands-praying"></i><div class="mc-title">Prayer Wall</div></div>
       <div class="mini-card mc-gold" onclick="closeModalDirect();openModal('postModal')"><i class="fas fa-pen"></i><div class="mc-title">Post</div></div>
       <div class="mini-card mc-red" onclick="closeModalDirect();openModal('giveModal')"><i class="fas fa-hand-holding-heart"></i><div class="mc-title">Give</div></div>
     </div>
