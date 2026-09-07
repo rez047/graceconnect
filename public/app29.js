@@ -71,16 +71,20 @@
   // =====================================================
   // 1) BIBLE VERSE SHARE → FORUM + PRIVATE INBOX (fixed)
   // =====================================================
-  function verseText() {
+function verseText() {
     let ref = '';
     const refEl = document.querySelector('[style*="92400E"]');
     if (refEl) ref = (refEl.textContent || '').trim();
     const sel = window._selectedVerses || [];
     let body = '';
     if (sel.length) {
-      body = sel.map(v => (typeof v === 'string') ? v : ((v.verse ? v.verse + ' ' : '') + (v.text || ''))).join('\n');
+      body = sel.map(v => {
+        const num = (typeof v === 'string') ? '' : (v.verse ? 'Verse ' + v.verse + ': ' : '');
+        const txt = (typeof v === 'string') ? v : (v.text || '');
+        return ref + ' ' + num + '"' + txt + '"';
+      }).join('\n');
     } else if (window._bibleVerses && window._bibleVerses.length) {
-      body = window._bibleVerses.map(v => (v.verse ? v.verse + ' ' : '') + (v.text || '')).join('\n');
+      body = window._bibleVerses.map(v => ref + ' Verse ' + v.verse + ': "' + (v.text || '') + '"').join('\n');
     }
     return { ref: ref, body: body };
   }
