@@ -13,22 +13,7 @@
   function avatarHtml(u, s) { s = s || 38; if (u && u.profile_pic) return '<img src="' + u.profile_pic + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block">'; return '<div class="post-avatar" style="width:' + s + 'px;height:' + s + 'px">' + ini(u && u.name) + '</div>'; }
   window._gcMedia = window._gcMedia || {};
   window.gcAttach = function (key, labelId) { var i = document.createElement('input'); i.type = 'file'; i.accept = '*/*'; i.onchange = function () { var f = i.files && i.files[0]; if (!f) return; window._gcMedia[key] = f; var l = document.getElementById(labelId); if (l) l.innerHTML = '<i class="fas fa-check-circle"></i> ' + esc(f.name); }; i.click(); };
-  // ---- RESTORE core navigation helpers if the deleted app30.js removed them ----
-  if (typeof window.showSubPage !== 'function') {
-    window.showSubPage = function (id) {
-      var el = document.getElementById(id); if (!el) return;
-      var sec = el.closest('.section');
-      if (sec) { document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); }); sec.classList.add('active'); sec.querySelectorAll('.sub-page').forEach(function (sp) { sp.classList.remove('active'); }); }
-      var target = el.classList.contains('sub-page') ? el : el.closest('.sub-page'); if (target) target.classList.add('active');
-      window._gcLastSub = id; window.scrollTo({ top: 0 });
-      try {
-        if (id === 'home-trivia' && window.loadRandomTrivia) window.loadRandomTrivia();
-        if (id === 'home-bibleReader' && window.loadBibleChapter && !window._bibleVerses) window.loadBibleChapter();
-        if (id === 'home-devotional' && window.loadDevotional) window.loadDevotional();
-        if (id === 'home-characters' && window.loadCharacters) window.loadCharacters();
-      } catch (e) {}
-    };
-  }
+
   if (typeof window.switchSection !== 'function') {
     window.switchSection = function (name) {
       document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
@@ -40,11 +25,7 @@
   }
   (function () { var s = document.createElement('style'); s.textContent = '.btn-secondary{background:#EEF2FF;color:#3730A3;border:2px solid #C7D2FE;backdrop-filter:none}.public-landing .btn-secondary,.hero-section .btn-secondary{background:rgba(255,255,255,.2);color:#fff;border:2px solid rgba(255,255,255,.4);backdrop-filter:blur(10px)}'; document.head.appendChild(s); })();
 
-  // ============ NAV: one page per tap, scroll top ============
-  function gcNav(fn) { var before = {}; document.querySelectorAll('.section.active').forEach(function (s) { before[s.id || s.className] = 1; }); fn(); setTimeout(function () { var acts = document.querySelectorAll('.section.active'); var keep = null; acts.forEach(function (s) { if (!keep && !before[s.id || s.className]) keep = s; }); if (!keep && acts.length) keep = acts[acts.length - 1]; acts.forEach(function (s) { if (s !== keep) s.classList.remove('active'); }); window.scrollTo({ top: 0 }); }, 90); }
-  function gcWrap(name) { var fn = window[name]; if (typeof fn !== 'function' || fn._gcw) return; window[name] = function () { var a = arguments; gcNav(function () { fn.apply(window, a); }); }; window[name]._gcw = true; }
-  setInterval(function () { ['h27OpenPage', 'h28OpenForum', 'h28OpenPrayer', 'h30OpenForum', 'h30OpenPlans', 'c26OpenGroup', 'c26OpenHome', 'ggOpenGroup', 'ggOpenHome'].forEach(gcWrap); }, 1500);
-  if (window.showSubPage && !window.showSubPage._gcw) { var _sp = window.showSubPage; window.showSubPage = function (p) { var r = _sp.apply(this, arguments); window._gcLastSub = String(p); setTimeout(function () { var el = document.getElementById(String(p)); var sec = el && el.closest('.section'); if (sec) sec.querySelectorAll('.sub-page.active').forEach(function (x) { if (x.id !== String(p)) x.classList.remove('active'); }); window.scrollTo({ top: 0 }); }, 60); return r; }; window.showSubPage._gcw = true; }
+  
   window.gcOpenPrayer = function () { gcNav(function () { if (window.h28OpenPrayer) window.h28OpenPrayer(); else if (window.h27OpenPage) window.h27OpenPage('prayer'); }); };
 
   // ============ STABILIZER (flood + duplicate + stacked sub-pages) ============
