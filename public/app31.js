@@ -289,4 +289,111 @@
     window.confirmGiving = function () { var r = _cg.apply(this, arguments); setTimeout(gcUpdateRallyProgress, 1500); setTimeout(gcUpdateRallyProgress, 4000); return r; };
     window.confirmGiving._gcr = true;
   }
+
+// ============ BLOCK E — home-main visibility fix (stops tile pages stacking under Home) ============
+  function gcFixHomeMain() {
+    var hm = document.getElementById('home-main'); if (!hm) return;
+    if (!hm.classList.contains('sub-page')) {
+      hm.classList.add('sub-page');
+      var sec = document.getElementById('section-home');
+      if (sec && !sec.querySelector('.sub-page.active')) hm.classList.add('active');
+    }
+  }
+  gcFixHomeMain(); setInterval(gcFixHomeMain, 1500);
+  window.showSubPage = function (id) {
+    gcFixHomeMain();
+    document.querySelectorAll('.sub-page.active').forEach(function (p) { p.classList.remove('active'); });
+    var el = document.getElementById(id); if (!el) return;
+    var sec = el.closest('.section');
+    if (sec) { document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); }); sec.classList.add('active'); }
+    var target = el.classList.contains('sub-page') ? el : el.closest('.sub-page');
+    if (target) target.classList.add('active'); else el.classList.add('active');
+    window._gcLastSub = id; window.scrollTo({ top: 0 });
+    try {
+      if (id === 'home-trivia' && window.loadRandomTrivia) window.loadRandomTrivia();
+      if (id === 'home-bibleReader' && window.loadBibleChapter && !(window._bibleVerses || []).length) window.loadBibleChapter();
+      if (id === 'home-devotional' && window.loadDevotional) window.loadDevotional();
+      if (id === 'home-characters' && window.loadCharacters) window.loadCharacters();
+    } catch (e) {}
+  };
+  if (window.switchSection && !window.switchSection._gce) {
+    var _ssE = window.switchSection;
+    window.switchSection = function (n) {
+      var r = _ssE.apply(this, arguments);
+      if (n === 'home') setTimeout(function () { gcFixHomeMain(); var sec = document.getElementById('section-home'); if (sec && !sec.querySelector('.sub-page.active')) { var hm = document.getElementById('home-main'); if (hm) hm.classList.add('active'); } window.scrollTo({ top: 0 }); }, 60);
+      return r;
+    };
+    window.switchSection._gce = true;
+  }
+
+  // ============ BLOCK F — Rally Cause: payment methods at creation + shown on card ============
+  var _gcCauseTable = null;
+  async function gcCauseTable() { if (_gcCauseTable) return _gcCauseTable; var t = ['rally_causes', 'causes', 'giving_causes']; for (var i = 0; i < t.length; i++) { var r = await sb().from(t[i]).select('id').limit(1); if (!r.error) { _gcCauseTable = t[i]; return _gcCauseTable; } } _gcCauseTable = 'rally_causes'; return _gcCauseTable; }
+  function gcInjectGiveFields() {
+    var modal = document.getElementById('givingModal'); if (!modal || document.getElementById('gcPayMethod')) return;
+    var goal = document.getElementById('causeGoal'); if (!goal) return;
+    var wrap = document.createElement('div');
+    wrap.innerHTML =
+      '<div class="form-group"><label class="form-label">Payment method</label><select class="form-select" id="gcPayMethod" onchange="gcPayMethodChange()"><option value="cash">Cash</option><option value="mpesa">M-Pesa</option><option value="bank">Bank</option></select></div>' +
+      '<div id="gcMpesaBox" style="display:none"><div class="form-group"><label class="form-label">How to pay via M-Pesa</label><select class="form-select" id="gcMpesaType" onchange="gcMpesaTypeChange()"><option value="send">Send Money (phone number)</option><option value="till">Buy Goods & Services (Till)</option><option value="paybill">PayBill (+ account number)</option></select></div>' +
+      '<div class="form-group"><label class="form-label" id="gcMpesaNumLabel">M-Pesa number</label><input class="form-input" id="gcMpesaNumber" placeholder="e.g. 07XX XXX XXX"></div>' +
+      '<div class="form-group" id="gcMpesaAccBox" style="display:none"><label class="form-label">Account number</label><input class="form-input" id="gcMpesaAcc"></div></div>' +
+      '<div id="gcBankBox" style="display:none"><div class="form-group"><label class="form-label">Bank name</label><input class="form-input" id="gcBankName" placeholder="e.g. KCB / Equity / Co-op"></div>' +
+      '<div class="form-group"><label class="form-label">Account number</label><input class="form-input" id="gcBankAcc"></div></div>';
+    goal.closest('.form-group').insertAdjacentElement('afterend', wrap);
+  }
+  window.gcPayMethodChange = function () { var v = (document.getElementById('gcPayMethod') || {}).value || 'cash'; var m = document.getElementById('gcMpesaBox'), b = document.getElementById('gcBankBox'); if (m) m.style.display = v === 'mpesa' ? 'block' : 'none'; if (b) b.style.display = v === 'bank' ? 'block' : 'none'; };
+  window.gcMpesaTypeChange = function () { var t = (document.getElementById('gcMpesaType') || {}).value || 'send'; var a = document.getElementById('gcMpesaAccBox'); if (a) a.style.display = t === 'paybill' ? 'block' : 'none'; var l = document.getElementById('gcMpesaNumLabel'); if (l) l.textContent = t === 'till' ? 'Till number' : (t === 'paybill' ? 'PayBill number' : 'M-Pesa number'); };
+  setInterval(gcInjectGiveFields, 1500);
+  if (window.createCause && !window.createCause._gcf) {
+    var _ccF = window.createCause;
+    window.createCause = function () {
+      var method = (document.getElementById('gcPayMethod') || {}).value || 'cash';
+      var pay = { payment_method: method };
+      if (method === 'mpesa') {
+        pay.mpesa_type = (document.getElementById('gcMpesaType') || {}).value || 'send';
+        pay.mpesa_number = ((document.getElementById('gcMpesaNumber') || {}).value || '').trim();
+        if (pay.mpesa_type === 'paybill') pay.mpesa_account = ((document.getElementById('gcMpesaAcc') || {}).value || '').trim();
+        if (!pay.mpesa_number) return alert('Enter the ' + (pay.mpesa_type === 'till' ? 'Till' : pay.mpesa_type === 'paybill' ? 'PayBill' : 'M-Pesa') + ' number.');
+      }
+      if (method === 'bank') {
+        pay.bank_name = ((document.getElementById('gcBankName') || {}).value || '').trim();
+        pay.bank_account = ((document.getElementById('gcBankAcc') || {}).value || '').trim();
+        if (!pay.bank_name || !pay.bank_account) return alert('Enter the bank name and account number.');
+      }
+      gcCauseTable().then(async function (tbl) {
+        var before = (await sb().from(tbl).select('id').order('created_at', { ascending: false }).limit(1)).data || [];
+        var r = _ccF.apply(this, arguments);
+        if (r && r.then) await r;
+        setTimeout(async function () {
+          var after = (await sb().from(tbl).select('id').order('created_at', { ascending: false }).limit(1)).data || [];
+          var newId = (after[0] && (!before.length || after[0].id !== before[0].id)) ? after[0].id : (before[0] && before[0].id);
+          if (!newId) return;
+          var ur = await sb().from(tbl).update(pay).eq('id', newId);
+          if (ur.error) { // columns missing → append to description so nothing is lost
+            var c = (await sb().from(tbl).select('description').eq('id', newId).single()).data;
+            var extra = '\n💳 ' + (method === 'mpesa' ? ('M-Pesa ' + pay.mpesa_type + ': ' + pay.mpesa_number + (pay.mpesa_account ? ' / Acc: ' + pay.mpesa_account : '')) : method === 'bank' ? ('Bank: ' + pay.bank_name + ' / Acc: ' + pay.bank_account) : 'Cash');
+            await sb().from(tbl).update({ description: ((c && c.description) || '') + extra }).eq('id', newId);
+          }
+        }, 900);
+        return r;
+      });
+    };
+    window.createCause._gcf = true;
+  }
+  // show payment info on the cause card
+  setInterval(async function () {
+    var box = document.getElementById('dyn-causes'); if (!box) return;
+    var tbl = await gcCauseTable();
+    var rows = (await sb().from(tbl).select('*')).data || [];
+    box.querySelectorAll('.card').forEach(function (card) {
+      if (card.querySelector('[data-gcpay]')) return;
+      var m = (card.innerHTML || '').match(/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i);
+      var row = m ? rows.find(function (x) { return x.id === m[1]; }) : null; if (!row) return;
+      var txt = row.payment_method === 'mpesa' ? ('💳 M-Pesa ' + (row.mpesa_type || '') + ': ' + (row.mpesa_number || '') + (row.mpesa_account ? ' / Acc: ' + row.mpesa_account : '')) : row.payment_method === 'bank' ? ('💳 Bank: ' + (row.bank_name || '') + ' / Acc: ' + (row.bank_account || '')) : row.payment_method === 'cash' ? '💳 Cash' : ((row.description || '').match(/💳.*/) || [null])[0];
+      if (!txt) return;
+      var d = document.createElement('div'); d.setAttribute('data-gcpay', '1'); d.style.cssText = 'font-size:.72rem;color:var(--text-light);margin:6px 0'; d.textContent = txt;
+      var give = card.querySelector('.btn-accent, [onclick*="give"], [onclick*="Give"]'); if (give) card.insertBefore(d, give); else card.appendChild(d);
+    });
+  }, 4000);
 })();
