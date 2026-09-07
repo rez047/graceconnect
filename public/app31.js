@@ -422,7 +422,6 @@
       var back = document.createElement('button'); back.className = 'back-btn';
       back.innerHTML = '<i class="fas fa-arrow-left"></i> Back';
       back.onclick = function () { window.gcBackHome(); };
-      root.appendChild(back);
       el.classList.remove('sub-page'); el.classList.remove('active'); el.style.display = '';
       root.appendChild(el);
       sec.appendChild(root);
