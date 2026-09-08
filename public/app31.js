@@ -587,4 +587,158 @@
     };
     window.switchSection._gcClear = true;
   }
+
+// ============ BLOCK N — YouTube LIVE fix (live links play like normal videos) ============
+(function () {
+  function sbx() { return window.sb; }
+  function meN() { return window.user; }
+
+  // Parse ANY YouTube format → { kind:'video', id } | { kind:'channel', uc } | { kind:'handle', handle } | null
+  function gcParseYouTube(url) {
+    if (!url) return null;
+    url = String(url).trim();
+    if (/^[a-zA-Z0-9_-]{11}$/.test(url)) return { kind: 'video', id: url };
+    var m = url.match(/(?:youtube\.com\/(?:watch\?(?:[^#]*&)?v=|embed\/|shorts\/|v\/|live\/)|youtu\.be\/)([a-zA-Z0-9_-]{11})/);
+    if (m) return { kind: 'video', id: m[1] };
+    m = url.match(/youtube\.com\/channel\/(UC[a-zA-Z0-9_-]{22})(?:\/live)?/);
+    if (m) return { kind: 'channel', uc: m[1] };
+    m = url.match(/[?&]channel=(UC[a-zA-Z0-9_-]{22})/);
+    if (m) return { kind: 'channel', uc: m[1] };
+    m = url.match(/youtube\.com\/(@[a-zA-Z0-9_.-]+)\/live/);
+    if (m) return { kind: 'handle', handle: m[1] };
+    m = url.match(/youtube\.com\/(@[a-zA-Z0-9_.-]+)$/);
+    if (m) return { kind: 'handle', handle: m[1] };
+    return null;
+  }
+
+  function gcEmbedFor(p) {
+    if (!p) return null;
+    if (p.kind === 'video') return 'https://www.youtube.com/embed/' + p.id + '?autoplay=1&rel=0&modestbranding=1&playsinline=1&enablejsapi=1';
+    if (p.kind === 'channel') return 'https://www.youtube.com/embed/live_stream?channel=' + p.uc + '&autoplay=1&enablejsapi=1';
+    return null;
+  }
+
+  // Resolve @handle/live by reading the live page through a CORS proxy (finds the real videoId/channelId)
+  async function gcResolveHandle(handle) {
+    var target = 'https://www.youtube.com/' + handle + '/live';
+    var proxies = ['https://api.allorigins.win/raw?url=' + encodeURIComponent(target), 'https://corsproxy.io/?url=' + encodeURIComponent(target)];
+    for (var i = 0; i < proxies.length; i++) {
+      try {
+        var r = await fetch(proxies[i], { cache: 'no-store' });
+        if (!r.ok) continue;
+        var html = await r.text();
+        var mv = html.match(/"videoId":"([a-zA-Z0-9_-]{11})"/); if (mv) return { kind: 'video', id: mv[1] };
+        var mc = html.match(/"channelId":"(UC[a-zA-Z0-9_-]{22})"/); if (mc) return { kind: 'channel', uc: mc[1] };
+        var mc2 = html.match(/"externalChannelId":"(UC[a-zA-Z0-9_-]{22})"/); if (mc2) return { kind: 'channel', uc: mc2[1] };
+      } catch (e) {}
+    }
+    return null;
+  }
+
+  async function gcResolveYouTube(url) {
+    var p = gcParseYouTube(url);
+    if (p && p.kind === 'handle') { var res = await gcResolveHandle(p.handle); if (res) return res; return null; }
+    return p;
+  }
+
+  function gcLiveIframe(embed) {
+    return '<iframe src="' + embed + '" style="width:100%;aspect-ratio:16/9;border-radius:12px;border:none;display:block;background:#000" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen referrerpolicy="strict-origin-when-cross-origin"></iframe>';
+  }
+  function gcRenderLiveBox(embed, title) {
+    var box = document.getElementById('sermonLiveBox'); if (!box) return;
+    box.innerHTML = (title ? '<div style="font-weight:800;margin-bottom:8px">🔴 ' + (window.esc ? window.esc(title) : title) + '</div>' : '')
+      + gcLiveIframe(embed)
+      + '<div style="text-align:center;margin-top:10px"><button class="btn btn-danger btn-sm" onclick="endLive()"><i class="fas fa-stop"></i> End Live</button></div>';
+  }
+
+  // Adaptive DB helpers (auto-drop unknown columns so inserts never fail)
+  async function gcAdaptiveInsert(table, row) {
+    var keys = Object.keys(row);
+    for (;;) {
+      var payload = {}; keys.forEach(function (k) { payload[k] = row[k]; });
+      var r = await sbx().from(table).insert([payload]);
+      if (!r.error) return r;
+      var mm = String(r.error.message || '').match(/column\s+["']?([a-zA-Z_]+)["']?/);
+      var col = mm && mm[1];
+      if (col && keys.indexOf(col) > -1) { keys = keys.filter(function (k) { return k !== col; }); continue; }
+      return r;
+    }
+  }
+  async function gcAdaptiveUpdate(table, id, row) {
+    var keys = Object.keys(row);
+    for (;;) {
+      var payload = {}; keys.forEach(function (k) { payload[k] = row[k]; });
+      var r = await sbx().from(table).update(payload).eq('id', id);
+      if (!r.error) return r;
+      var mm = String(r.error.message || '').match(/column\s+["']?([a-zA-Z_]+)["']?/);
+      var col = mm && mm[1];
+      if (col && keys.indexOf(col) > -1) { keys = keys.filter(function (k) { return k !== col; }); continue; }
+      return r;
+    }
+  }
+
+  // START LIVE — accepts every YouTube format
+  window.startLive = async function () {
+    var t = ((document.getElementById('liveTitle') || {}).value || '').trim();
+    var u = ((document.getElementById('liveYouTube') || {}).value || '').trim();
+    if (!t || !u) return alert('Title and YouTube URL are required.');
+    var parsed = await gcResolveYouTube(u);
+    if (!parsed) return alert('⚠️ Could not read that YouTube link.\n\nWorks with:\n• youtube.com/watch?v=ID\n• youtu.be/ID\n• youtube.com/live/ID\n• youtube.com/@channel/live\n• youtube.com/channel/UC…/live\n• or the 11-character video ID');
+    var embed = gcEmbedFor(parsed);
+    if (!embed) return alert('⚠️ Could not build the live player for that link.');
+    try {
+      if (sbx()) await gcAdaptiveInsert('live_sermons', { title: t, youtube_url: u, video_id: parsed.kind === 'video' ? parsed.id : null, embed_url: embed, is_live: true, started_at: new Date().toISOString(), started_by: meN() ? meN().id : null });
+    } catch (e) {}
+    var m = document.getElementById('liveModal'); if (m) m.classList.remove('show');
+    gcRenderLiveBox(embed, t);
+    alert('🔴 You are live!');
+  };
+
+  // END LIVE
+  window.endLive = async function () {
+    try {
+      if (sbx()) {
+        var r = await sbx().from('live_sermons').select('id').eq('is_live', true).order('started_at', { ascending: false }).limit(1);
+        if (r.data && r.data[0]) await gcAdaptiveUpdate('live_sermons', r.data[0].id, { is_live: false, ended_at: new Date().toISOString() });
+      }
+    } catch (e) {}
+    var box = document.getElementById('sermonLiveBox');
+    if (box) box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-lighter)">No live sermon right now.</div>';
+    alert('✅ Live ended.');
+  };
+
+  // Re-render the live player correctly whenever the LIVE tab is opened
+  async function gcRefreshLive() {
+    var box = document.getElementById('sermonLiveBox'); if (!box || !sbx()) return;
+    try {
+      var r = await sbx().from('live_sermons').select('*').eq('is_live', true).order('started_at', { ascending: false }).limit(1);
+      var row = (r.data && r.data[0]) || null;
+      if (!row) { box.innerHTML = '<div style="text-align:center;padding:20px;color:var(--text-lighter)">No live sermon right now.</div>'; return; }
+      var embed = row.embed_url || gcEmbedFor(gcParseYouTube(row.video_id || row.youtube_url));
+      if (!embed) { box.innerHTML = '<div style="text-align:center;padding:20px;color:#991B1B">⚠️ Saved live link could not be parsed. End Live and start again with a direct link.</div>'; return; }
+      gcRenderLiveBox(embed, row.title);
+    } catch (e) {}
+  }
+  if (window.switchPreachTab && !window.switchPreachTab._gcN) {
+    var _spt = window.switchPreachTab;
+    window.switchPreachTab = function (tabEl, name) { var r = _spt.apply(this, arguments); if (name === 'live') setTimeout(gcRefreshLive, 150); return r; };
+    window.switchPreachTab._gcN = true;
+  }
+
+  // Normalize sermon YouTube links before saving so posted preachings always embed
+  if (window.postPreaching && !window.postPreaching._gcN) {
+    var _pp = window.postPreaching;
+    window.postPreaching = async function () {
+      var el = document.getElementById('preachYouTube');
+      if (el && el.value.trim()) {
+        var p = await gcResolveYouTube(el.value.trim());
+        if (p && p.kind === 'video') el.value = 'https://www.youtube.com/watch?v=' + p.id;
+        else if (p && p.kind === 'channel') el.value = 'https://www.youtube.com/embed/live_stream?channel=' + p.uc;
+        else if (!p) return alert('⚠️ Could not read that YouTube link. Paste a watch / youtu.be / live link or the 11-character video ID.');
+      }
+      return _pp.apply(this, arguments);
+    };
+    window.postPreaching._gcN = true;
+  }
+})();
 })();
