@@ -708,8 +708,7 @@
     /* ============================================================
    CYCLING / RANDOM TRIVIA ENGINE
    ============================================================ */
-
-   window.gcNorm = function (v, n) {
+window.gcNorm = function (v, n) {
   v = String(v == null ? '' : v).trim().toUpperCase();
   if (/^[A-Z]$/.test(v)) return v.charCodeAt(0) - 65;   // A→0 … D→3
   var x = parseInt(v, 10); if (isNaN(x)) return 0;
