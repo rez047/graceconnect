@@ -1452,37 +1452,7 @@ function correctTriviaIndex(
 }
 
 
-function normalizeCorrectAnswer(correctAnswer, options) {
-    if (correctAnswer === null || correctAnswer === undefined) {
-        return -1;
-    }
 
-    const value = String(correctAnswer).trim().toUpperCase();
-
-    // Letter: A, B, C, D...
-    if (/^[A-Z]$/.test(value)) {
-        const index = value.charCodeAt(0) - 65;
-        return index >= 0 && index < options.length ? index : -1;
-    }
-
-    // 1-based index: 1=A, 2=B, 3=C, 4=D...
-    if (/^\d+$/.test(value)) {
-        const number = Number(value);
-
-        if (number >= 1 && number <= options.length) {
-            return number - 1;
-        }
-    }
-
-    // Also allow the actual answer text
-    const textIndex = options.findIndex(
-        option =>
-            String(option).trim().toLowerCase() ===
-            value.toLowerCase()
-    );
-
-    return textIndex;
-}
 /* ============================================================
    RENDER TRIVIA
    ============================================================ */
