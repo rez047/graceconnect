@@ -706,370 +706,815 @@
     window.gc33IsEmailBlocked = isEmailBlocked;
 
     /* ============================================================
-       NON-REPEATING TRIVIA
-       ============================================================ */
+   CYCLING / RANDOM TRIVIA ENGINE
+   ============================================================ */
 
-    async function getRandomTriviaQuestion() {
+const TRIVIA_CYCLE_KEY =
+    "graceconnect_trivia_cycle_v2";
 
-        const client = db();
+/*
+ * Keep the completed-question cycle separately for each
+ * authenticated user.
+ *
+ * localStorage survives page refreshes, unlike the old
+ * in-memory Set.
+ */
+function triviaCycleStorageKey(userId) {
+    return (
+        TRIVIA_CYCLE_KEY +
+        ":" +
+        String(userId || "guest")
+    );
+}
 
-        if (!client) {
-            notify(
-                "Supabase is unavailable.",
-                "error"
+/*
+ * Read completed questions for the current cycle.
+ */
+function getTriviaCycle(userId) {
+
+    try {
+
+        const raw =
+            localStorage.getItem(
+                triviaCycleStorageKey(userId)
             );
-            return null;
+
+        if (!raw) {
+            return [];
         }
 
-        const user = await currentUser();
+        const parsed =
+            JSON.parse(raw);
 
-        if (!user) {
-            notify(
-                "Please sign in to use Bible Trivia.",
-                "error"
-            );
-            return null;
+        if (!Array.isArray(parsed)) {
+            return [];
         }
 
-        /*
-         * Primary method:
-         *
-         * get_random_trivia_question(p_user_id uuid)
-         *
-         * The database function should:
-         * - choose a random approved question
-         * - exclude questions already recorded for this user
-         * - return one question
-         * - not mark it seen until the user answers
-         */
+        return Array.from(
+            new Set(
+                parsed.map(function (id) {
+                    return String(id);
+                })
+            )
+        );
 
-        try {
+    } catch (error) {
 
-            const result = await client.rpc(
+        console.warn(
+            "Unable to read trivia cycle:",
+            error
+        );
+
+        return [];
+    }
+}
+
+/*
+ * Save completed questions.
+ */
+function saveTriviaCycle(
+    userId,
+    ids
+) {
+
+    try {
+
+        localStorage.setItem(
+            triviaCycleStorageKey(userId),
+            JSON.stringify(
+                Array.from(
+                    new Set(
+                        (ids || []).map(
+                            function (id) {
+                                return String(id);
+                            }
+                        )
+                    )
+                )
+            )
+        );
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to save trivia cycle:",
+            error
+        );
+    }
+}
+
+/*
+ * Fisher-Yates shuffle.
+ */
+function shuffleTriviaQuestions(
+    questions
+) {
+
+    const copy =
+        Array.isArray(questions)
+            ? questions.slice()
+            : [];
+
+    for (
+        let index = copy.length - 1;
+        index > 0;
+        index--
+    ) {
+
+        const randomIndex =
+            Math.floor(
+                Math.random() *
+                (index + 1)
+            );
+
+        const temp =
+            copy[index];
+
+        copy[index] =
+            copy[randomIndex];
+
+        copy[randomIndex] =
+            temp;
+    }
+
+    return copy;
+}
+
+
+/* ============================================================
+   GET RANDOM TRIVIA QUESTION
+   ============================================================ */
+
+async function getRandomTriviaQuestion() {
+
+    const client = db();
+
+    if (!client) {
+
+        notify(
+            "Supabase is unavailable.",
+            "error"
+        );
+
+        return null;
+    }
+
+    const user =
+        await currentUser();
+
+    if (!user) {
+
+        notify(
+            "Please sign in to use Bible Trivia.",
+            "error"
+        );
+
+        return null;
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * FIRST: TRY THE DATABASE RPC
+     * ----------------------------------------------------------
+     *
+     * If your Supabase function exists and can provide an
+     * unanswered question, use it.
+     */
+
+    try {
+
+        const result =
+            await client.rpc(
                 "get_random_trivia_question",
                 {
-                    p_user_id: user.id
+                    p_user_id:
+                        user.id
                 }
             );
 
-            if (!result.error && result.data) {
-
-                const question =
-                    Array.isArray(result.data)
-                        ? result.data[0]
-                        : result.data;
-
-                if (question) {
-                    triviaState.question = question;
-                    triviaState.answered = false;
-
-                    return question;
-                }
-            }
-
-            /*
-             * Fallback if RPC is not available.
-             */
-            console.warn(
-                "Trivia RPC unavailable; using client-side fallback."
-            );
-
-        } catch (error) {
-            console.warn(
-                "Trivia RPC failed:",
-                error
-            );
-        }
-
-        /*
-         * Client-side fallback.
-         *
-         * This is less secure than the database RPC but still
-         * prevents repetition during the current browser session.
-         */
-
-        try {
-
-            const result = await client
-                .from(TRIVIA_TABLE)
-                .select("*")
-                .eq("approved", true)
-                .limit(500);
-
-            if (result.error) {
-                throw result.error;
-            }
-
-            const pool = (result.data || [])
-                .filter(function (item) {
-                    return !triviaState.seen.has(item.id);
-                });
-
-            if (!pool.length) {
-
-                notify(
-                    "You have completed all currently available trivia questions.",
-                    "info"
-                );
-
-                return null;
-            }
+        if (
+            !result.error &&
+            result.data
+        ) {
 
             const question =
-                pool[
-                    Math.floor(
-                        Math.random() * pool.length
-                    )
-                ];
+                Array.isArray(
+                    result.data
+                )
+                    ? result.data[0]
+                    : result.data;
 
-            triviaState.question = question;
-            triviaState.answered = false;
+            if (question) {
 
-            return question;
+                triviaState.question =
+                    question;
 
-        } catch (error) {
+                triviaState.answered =
+                    false;
 
-            console.error(
-                "Trivia loading failed:",
-                error
-            );
-
-            notify(
-                "Unable to load Bible Trivia.",
-                "error"
-            );
-
-            return null;
-        }
-    }
-
-    async function markTriviaSeen(questionId) {
-
-        if (!questionId) {
-            return;
+                return question;
+            }
         }
 
-        triviaState.seen.add(questionId);
+    } catch (error) {
 
-        const client = db();
-
-        if (!client) {
-            return;
-        }
-
-        const user = await currentUser();
-
-        if (!user) {
-            return;
-        }
-
-        try {
-
-            await client.rpc(
-                "mark_trivia_question_seen",
-                {
-                    p_user_id: user.id,
-                    p_question_id: questionId
-                }
-            );
-
-        } catch (error) {
-
-            console.warn(
-                "Unable to mark trivia question seen:",
-                error
-            );
-        }
-    }
-
-    function triviaOptions(question) {
-
-        if (
-            Array.isArray(question.options) &&
-            question.options.length
-        ) {
-            return question.options;
-        }
-
-        if (
-            question.options &&
-            typeof question.options === "object"
-        ) {
-            return Object.values(question.options);
-        }
-
-        return [
-            question.option_a,
-            question.option_b,
-            question.option_c,
-            question.option_d
-        ].filter(Boolean);
-    }
-
-    function correctTriviaIndex(question, options) {
-
-        if (
-            question.correct_index !== undefined &&
-            question.correct_index !== null
-        ) {
-            return Number(question.correct_index);
-        }
-
-        if (
-            question.correct !== undefined &&
-            typeof question.correct === "number"
-        ) {
-            return Number(question.correct);
-        }
-
-        if (
-            question.correct &&
-            typeof question.correct === "string"
-        ) {
-            return options.indexOf(
-                question.correct
-            );
-        }
-
-        return 0;
-    }
-
-    async function renderTrivia() {
-
-        const host =
-            document.getElementById("home-trivia");
-
-        if (!host) {
-            return;
-        }
-
-        let root =
-            document.getElementById(
-                "gc33-trivia-root"
-            );
-
-        if (!root) {
-
-            root = document.createElement("div");
-
-            root.id =
-                "gc33-trivia-root";
-
-            host.appendChild(root);
-        }
-
-        root.innerHTML =
-            '<div class="section-title-app">' +
-            "🧠 Bible Trivia" +
-            "</div>" +
-
-            '<div class="gc33-help">' +
-            "Every question is selected randomly from " +
-            "the approved Bible-question library. " +
-            "Questions answered by your account are " +
-            "recorded so they are not served again." +
-            "</div>" +
-
-            '<div class="gc33-quiz">' +
-            "Loading a fresh Scripture question…" +
-            "</div>";
-
-        const question =
-            await getRandomTriviaQuestion();
-
-        if (!question) {
-
-            root.querySelector(
-                ".gc33-quiz"
-            ).innerHTML =
-                "No unseen Bible question is currently available.";
-
-            return;
-        }
-
-        drawTriviaQuestion(
-            root,
-            question
+        console.warn(
+            "Trivia RPC failed; using local cycling:",
+            error
         );
     }
 
-    function drawTriviaQuestion(
-        root,
-        question
+
+    /*
+     * ----------------------------------------------------------
+     * FALLBACK: LOAD APPROVED QUESTIONS
+     * ----------------------------------------------------------
+     */
+
+    try {
+
+        const result =
+            await client
+                .from(TRIVIA_TABLE)
+                .select("*")
+                .eq(
+                    "approved",
+                    true
+                )
+                .limit(500);
+
+        if (result.error) {
+            throw result.error;
+        }
+
+        const questions =
+            (result.data || [])
+                .filter(function (item) {
+
+                    return (
+                        item &&
+                        item.id
+                    );
+
+                });
+
+        /*
+         * There are genuinely no questions in the database.
+         */
+        if (!questions.length) {
+
+            notify(
+                "No Bible trivia questions are currently available.",
+                "info"
+            );
+
+            return null;
+        }
+
+
+        /*
+         * ------------------------------------------------------
+         * READ CURRENT LOCAL CYCLE
+         * ------------------------------------------------------
+         */
+
+        let completed =
+            getTriviaCycle(
+                user.id
+            );
+
+
+        /*
+         * Remove IDs belonging to questions that no longer
+         * exist in the database.
+         */
+
+        const availableIds =
+            new Set(
+                questions.map(
+                    function (item) {
+                        return String(
+                            item.id
+                        );
+                    }
+                )
+            );
+
+        completed =
+            completed.filter(
+                function (id) {
+
+                    return availableIds.has(
+                        String(id)
+                    );
+
+                }
+            );
+
+
+        /*
+         * ------------------------------------------------------
+         * FIND QUESTIONS NOT YET ANSWERED IN THIS CYCLE
+         * ------------------------------------------------------
+         */
+
+        let available =
+            questions.filter(
+                function (item) {
+
+                    return !completed.includes(
+                        String(item.id)
+                    );
+
+                }
+            );
+
+
+        /*
+         * ------------------------------------------------------
+         * CYCLE COMPLETE
+         * ------------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * DO NOT DISPLAY:
+         *
+         * "You have completed all currently available
+         * trivia questions."
+         *
+         * Instead, automatically reset the cycle and start
+         * another randomized round.
+         */
+
+        if (!available.length) {
+
+            completed = [];
+
+            saveTriviaCycle(
+                user.id,
+                []
+            );
+
+            available =
+                questions.slice();
+        }
+
+
+        /*
+         * ------------------------------------------------------
+         * RANDOMIZE
+         * ------------------------------------------------------
+         */
+
+        available =
+            shuffleTriviaQuestions(
+                available
+            );
+
+
+        /*
+         * Select the first random question.
+         */
+
+        const question =
+            available[0];
+
+
+        triviaState.question =
+            question;
+
+        triviaState.answered =
+            false;
+
+
+        return question;
+
+
+    } catch (error) {
+
+        console.error(
+            "Trivia loading failed:",
+            error
+        );
+
+        notify(
+            "Unable to load Bible Trivia.",
+            "error"
+        );
+
+        return null;
+    }
+}
+
+
+/* ============================================================
+   MARK TRIVIA QUESTION AS SEEN
+   ============================================================ */
+
+async function markTriviaSeen(
+    questionId
+) {
+
+    if (!questionId) {
+        return;
+    }
+
+
+    /*
+     * Keep the current in-memory state for compatibility.
+     */
+
+    triviaState.seen.add(
+        questionId
+    );
+
+
+    const client =
+        db();
+
+    if (!client) {
+        return;
+    }
+
+
+    const user =
+        await currentUser();
+
+    if (!user) {
+        return;
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * PERSIST LOCALLY
+     * ----------------------------------------------------------
+     *
+     * This survives page refreshes.
+     */
+
+    try {
+
+        const completed =
+            getTriviaCycle(
+                user.id
+            );
+
+        const normalizedId =
+            String(questionId);
+
+        if (
+            !completed.includes(
+                normalizedId
+            )
+        ) {
+
+            completed.push(
+                normalizedId
+            );
+
+            saveTriviaCycle(
+                user.id,
+                completed
+            );
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to persist local trivia cycle:",
+            error
+        );
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * ALSO PERSIST TO SUPABASE
+     * ----------------------------------------------------------
+     */
+
+    try {
+
+        const result =
+            await client.rpc(
+                "mark_trivia_question_seen",
+                {
+                    p_user_id:
+                        user.id,
+
+                    p_question_id:
+                        questionId
+                }
+            );
+
+        if (result.error) {
+
+            console.warn(
+                "Supabase trivia tracking failed:",
+                result.error
+            );
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to mark trivia question seen:",
+            error
+        );
+    }
+}
+
+
+/* ============================================================
+   TRIVIA OPTIONS
+   ============================================================ */
+
+function triviaOptions(
+    question
+) {
+
+    if (
+        Array.isArray(
+            question.options
+        ) &&
+        question.options.length
     ) {
 
-        const options =
-            triviaOptions(question);
+        return question.options;
+    }
 
-        const correctIndex =
-            correctTriviaIndex(
-                question,
-                options
+
+    if (
+        question.options &&
+        typeof question.options ===
+            "object"
+    ) {
+
+        return Object.values(
+            question.options
+        );
+    }
+
+
+    return [
+        question.option_a,
+        question.option_b,
+        question.option_c,
+        question.option_d
+    ].filter(Boolean);
+}
+
+
+/* ============================================================
+   CORRECT ANSWER INDEX
+   ============================================================ */
+
+function correctTriviaIndex(
+    question,
+    options
+) {
+
+    if (
+        question.correct_index !==
+            undefined &&
+        question.correct_index !==
+            null
+    ) {
+
+        return Number(
+            question.correct_index
+        );
+    }
+
+
+    if (
+        question.correct !==
+            undefined &&
+        typeof question.correct ===
+            "number"
+    ) {
+
+        return Number(
+            question.correct
+        );
+    }
+
+
+    if (
+        question.correct &&
+        typeof question.correct ===
+            "string"
+    ) {
+
+        return options.indexOf(
+            question.correct
+        );
+    }
+
+
+    return 0;
+}
+
+
+/* ============================================================
+   RENDER TRIVIA
+   ============================================================ */
+
+async function renderTrivia() {
+
+    const host =
+        document.getElementById(
+            "home-trivia"
+        );
+
+    if (!host) {
+        return;
+    }
+
+
+    let root =
+        document.getElementById(
+            "gc33-trivia-root"
+        );
+
+
+    if (!root) {
+
+        root =
+            document.createElement(
+                "div"
             );
+
+        root.id =
+            "gc33-trivia-root";
+
+        host.appendChild(
+            root
+        );
+    }
+
+
+    root.innerHTML =
+        '<div class="section-title-app">' +
+        "🧠 Bible Trivia" +
+        "</div>" +
+
+        '<div class="gc33-help">' +
+        "Every question is selected randomly from " +
+        "the approved Bible-question library. " +
+        "Questions you answer are remembered for " +
+        "the current cycle, including after refresh." +
+        "</div>" +
+
+        '<div class="gc33-quiz">' +
+        "Loading a fresh Scripture question…" +
+        "</div>";
+
+
+    const question =
+        await getRandomTriviaQuestion();
+
+
+    if (!question) {
 
         const quiz =
             root.querySelector(
                 ".gc33-quiz"
             );
 
-        quiz.innerHTML =
-            '<div style="font-size:11px;font-weight:800;opacity:.8">' +
-            escapeHTML(
-                question.category ||
-                "SCRIPTURE"
-            ) +
-            " · " +
-            escapeHTML(
-                question.difficulty ||
-                "NORMAL"
-            ) +
-            "</div>" +
+        if (quiz) {
 
-            '<div class="gc33-question">' +
-            escapeHTML(
-                question.question
-            ) +
-            "</div>" +
+            quiz.innerHTML =
+                "No Bible trivia question is currently available.";
+        }
 
-            '<div class="gc33-options">' +
+        return;
+    }
 
+
+    drawTriviaQuestion(
+        root,
+        question
+    );
+}
+
+
+/* ============================================================
+   DRAW TRIVIA QUESTION
+   ============================================================ */
+
+function drawTriviaQuestion(
+    root,
+    question
+) {
+
+    const options =
+        triviaOptions(
+            question
+        );
+
+
+    const correctIndex =
+        correctTriviaIndex(
+            question,
             options
-                .map(function (option, index) {
+        );
+
+
+    const quiz =
+        root.querySelector(
+            ".gc33-quiz"
+        );
+
+
+    if (!quiz) {
+        return;
+    }
+
+
+    quiz.innerHTML =
+
+        '<div style="font-size:11px;font-weight:800;opacity:.8">' +
+
+        escapeHTML(
+            question.category ||
+            "SCRIPTURE"
+        ) +
+
+        " · " +
+
+        escapeHTML(
+            question.difficulty ||
+            "NORMAL"
+        ) +
+
+        "</div>" +
+
+        '<div class="gc33-question">' +
+
+        escapeHTML(
+            question.question
+        ) +
+
+        "</div>" +
+
+        '<div class="gc33-options">' +
+
+        options
+            .map(
+                function (
+                    option,
+                    index
+                ) {
 
                     return (
+
                         '<button class="gc33-option" ' +
+
                         'data-index="' +
                         index +
                         '">' +
-                        escapeHTML(option) +
+
+                        escapeHTML(
+                            option
+                        ) +
+
                         "</button>"
                     );
-
-                })
-                .join("") +
-
-            "</div>" +
-
-            '<div id="gc33-trivia-feedback"></div>' +
-
-            (
-                question.reference
-                    ? (
-                        '<div style="margin-top:12px;font-size:11px;opacity:.8">' +
-                        "📖 Reference: " +
-                        escapeHTML(
-                            question.reference
-                        ) +
-                        "</div>"
-                    )
-                    : ""
-            );
-
-        Array.from(
-            quiz.querySelectorAll(
-                ".gc33-option"
+                }
             )
-        ).forEach(function (button) {
+            .join("") +
+
+        "</div>" +
+
+        '<div id="gc33-trivia-feedback"></div>' +
+
+        (
+            question.reference
+                ? (
+
+                    '<div style="margin-top:12px;font-size:11px;opacity:.8">' +
+
+                    "📖 Reference: " +
+
+                    escapeHTML(
+                        question.reference
+                    ) +
+
+                    "</div>"
+                )
+                : ""
+        );
+
+
+    Array.from(
+        quiz.querySelectorAll(
+            ".gc33-option"
+        )
+    ).forEach(
+        function (button) {
 
             button.addEventListener(
                 "click",
@@ -1081,13 +1526,16 @@
                         return;
                     }
 
+
                     triviaState.answered =
                         true;
+
 
                     const selected =
                         Number(
                             button.dataset.index
                         );
+
 
                     const buttons =
                         Array.from(
@@ -1096,16 +1544,22 @@
                             )
                         );
 
+
                     buttons.forEach(
-                        function (item, index) {
+                        function (
+                            item,
+                            index
+                        ) {
 
                             item.disabled =
                                 true;
+
 
                             if (
                                 index ===
                                 correctIndex
                             ) {
+
                                 item.classList.add(
                                     "correct"
                                 );
@@ -1114,68 +1568,97 @@
                         }
                     );
 
+
                     if (
                         selected !==
                         correctIndex
                     ) {
+
                         button.classList.add(
                             "wrong"
                         );
                     }
+
 
                     const feedback =
                         quiz.querySelector(
                             "#gc33-trivia-feedback"
                         );
 
-                    feedback.innerHTML =
-                        '<div style="margin-top:14px;line-height:1.65">' +
 
-                        (
-                            selected ===
-                            correctIndex
-                                ? "✓ Correct!"
-                                : "✗ Not quite."
-                        ) +
+                    if (feedback) {
 
-                        (
-                            question.explanation
-                                ? (
-                                    "<br><br>" +
-                                    escapeHTML(
-                                        question.explanation
+                        feedback.innerHTML =
+
+                            '<div style="margin-top:14px;line-height:1.65">' +
+
+                            (
+                                selected ===
+                                correctIndex
+
+                                    ? "✓ Correct!"
+
+                                    : "✗ Not quite."
+                            ) +
+
+                            (
+                                question.explanation
+                                    ? (
+
+                                        "<br><br>" +
+
+                                        escapeHTML(
+                                            question.explanation
+                                        )
                                     )
-                                )
-                                : ""
-                        ) +
+                                    : ""
+                            ) +
 
-                        "</div>" +
+                            "</div>" +
 
-                        '<button class="gc33-btn gc33-next" ' +
-                        'id="gc33-next-trivia">' +
-                        "Next Question" +
-                        "</button>";
+                            '<button class="gc33-btn gc33-next" ' +
+
+                            'id="gc33-next-trivia">' +
+
+                            "Next Question" +
+
+                            "</button>";
+                    }
+
+
+                    /*
+                     * Record the question before allowing
+                     * the next question.
+                     */
 
                     await markTriviaSeen(
                         question.id
                     );
+
 
                     const next =
                         document.getElementById(
                             "gc33-next-trivia"
                         );
 
+
                     if (next) {
+
                         next.onclick =
-                            renderTrivia;
+                            function () {
+
+                                renderTrivia();
+                            };
                     }
                 }
             );
-        });
-    }
+        }
+    );
+}
 
-    window.gc33RenderTrivia =
-        renderTrivia;
+
+window.gc33RenderTrivia =
+    renderTrivia;
 
     /* ============================================================
        BIBLE CHARACTERS
