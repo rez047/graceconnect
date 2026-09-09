@@ -522,125 +522,158 @@
      * This fixes the RLS error you showed in your screenshot.
      */
 
-    window.deleteUser = async function (userId, email) {
+window.deleteUser=async function(userId,email){
+  if(!(await admin())){
+    toast('Admin access required','error');
+    return false;
+  }
 
-        const allowed = await isAdmin();
+  if(!userId){
+    toast('User ID is missing. The account was not removed.','error');
+    return false;
+  }
 
-        if (!allowed) {
-            notify(
-                "Administrator access is required.",
-                "error"
-            );
-            return;
-        }
+  var c=db();
 
-        if (!userId) {
-            notify(
-                "The selected user has no valid ID.",
-                "error"
-            );
-            return;
-        }
+  if(!c||!c.rpc){
+    toast('Supabase RPC is unavailable. Check the Supabase client configuration.','error');
+    return false;
+  }
 
-        const confirmed = confirm(
-            "Remove this user permanently?\n\n" +
-            "Their email address will also be added to " +
-            "the blocked-email list so they cannot register " +
-            "again until an administrator unblocks it."
-        );
+  /* Prevent accidental self-deletion */
+  try{
+    var sessionUser=(await c.auth.getUser()).data.user;
 
-        if (!confirmed) {
-            return;
-        }
+    if(sessionUser&&sessionUser.id===userId){
+      toast(
+        'You cannot delete the administrator account currently signed in.',
+        'error'
+      );
+      return false;
+    }
+  }catch(e){
+    console.warn('[GraceConnect] Unable to verify current user:',e);
+  }
 
-        const client = db();
+  var accountLabel=email
+    ? '\n\nAccount: '+email
+    : '';
 
-        if (!client) {
-            notify(
-                "Supabase is not available.",
-                "error"
-            );
-            return;
-        }
+  var confirmed=confirm(
+    'PERMANENTLY DELETE USER?'+
+    accountLabel+
+    '\n\n'+
+    'The account will be removed from GraceConnect and its email '+
+    'will be blocked from registering again.'+
+    '\n\n'+
+    'This action cannot be undone.'
+  );
 
-        try {
+  if(!confirmed)return false;
 
-            /*
-             * Preferred secure RPC.
-             */
-            let result = await client.rpc(
-                "admin_remove_user",
-                {
-                    target_user_id: userId
-                }
-            );
+  try{
 
-            /*
-             * Compatibility with the alternative RPC name.
-             */
-            if (
-                result.error &&
-                String(result.error.message || "")
-                    .toLowerCase()
-                    .includes("function")
-            ) {
-                result = await client.rpc(
-                    "admin_delete_user",
-                    {
-                        target_user_id: userId
-                    }
-                );
-            }
+    toast('Deleting account…','info');
 
-            if (result.error) {
-                throw result.error;
-            }
+    var r=await c.rpc(
+      'admin_remove_user',
+      {
+        target_user_id:String(userId)
+      }
+    );
 
-            notify(
-                "User removed successfully and their email has been blocked.",
-                "success"
-            );
+    if(r.error){
+      throw r.error;
+    }
 
-            /*
-             * Re-open the moderation interface if App32 exposes it.
-             */
-            if (
-                typeof window.gc32OpenModeration ===
-                "function"
-            ) {
-                window.gc32OpenModeration();
-            }
+    var result=r.data;
 
-            /*
-             * Also refresh if the moderation panel has a
-             * generic refresh method.
-             */
-            if (
-                typeof window.refreshUsers ===
-                "function"
-            ) {
-                window.refreshUsers();
-            }
+    if(result&&typeof result==='object'&&result.success===false){
+      throw new Error(
+        result.message||
+        'The database rejected the deletion.'
+      );
+    }
 
-        } catch (error) {
+    toast(
+      'User deleted successfully and their email has been blocked.',
+      'success'
+    );
 
-            console.error(
-                "GraceConnect user deletion failed:",
-                error
-            );
+    /*
+      Refresh moderation panel without reloading the entire
+      application.
+    */
+    if(window.gc32OpenModeration){
+      await window.gc32OpenModeration();
+    }
 
-            notify(
-                "User deletion failed: " +
-                (
-                    error &&
-                    error.message
-                        ? error.message
-                        : "Unknown database error"
-                ),
-                "error"
-            );
-        }
-    };
+    return true;
+
+  }catch(e){
+
+    console.error(
+      '[GraceConnect] admin_remove_user failed:',
+      e
+    );
+
+    var message=
+      e&&e.message
+      ?e.message
+      :'Unknown Supabase deletion error.';
+
+    /*
+      Convert common PostgreSQL/Supabase errors into useful
+      administrator messages.
+    */
+
+    if(
+      /function .*admin_remove_user.*does not exist/i.test(message)||
+      /could not find the function/i.test(message)
+    ){
+      message=
+        'The admin_remove_user RPC is missing. Run the replacement SQL provided above in Supabase SQL Editor.';
+    }
+
+    else if(
+      /permission denied/i.test(message)||
+      /42501/i.test(message)
+    ){
+      message=
+        'Supabase denied the deletion. Make sure the RPC is SECURITY DEFINER and EXECUTE is granted to authenticated users.';
+    }
+
+    else if(
+      /foreign key/i.test(message)||
+      /violates.*constraint/i.test(message)
+    ){
+      message=
+        'A related database record is preventing deletion. The replacement RPC removes the known GraceConnect dependent records first.';
+    }
+
+    else if(
+      /not authenticated/i.test(message)
+    ){
+      message=
+        'Your login session has expired. Sign out, sign in again, and retry.';
+    }
+
+    else if(
+      /administrator privileges/i.test(message)||
+      /admin privileges/i.test(message)
+    ){
+      message=
+        'Your account is not being recognized as an administrator in the profiles table.';
+    }
+
+    toast(
+      'User deletion failed: '+message,
+      'error'
+    );
+
+    return false;
+  }
+};
 
     /* ============================================================
        BLOCKED EMAIL CHECK
