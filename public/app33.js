@@ -4545,6 +4545,140 @@ window.gc33RenderTrivia =
             return true;
         };
 
+
+
+// ============ SMART IMPORT — accepts JSON **or** plain text ============
+(function () {
+  function sbx() { return window.sb; }
+
+  // Normalize correct answer: "A"–"D", "1"–"4", or 0-based index → 0-based index
+  function normCorrect(val, optCount) {
+    var s = String(val == null ? '' : val).trim();
+    if (/^[A-Za-z]$/.test(s)) { var i = s.toUpperCase().charCodeAt(0) - 65; if (i >= 0 && i < optCount) return i; }
+    if (/^\d+$/.test(s)) { var n = parseInt(s, 10); if (n >= 1 && n <= optCount) return n - 1; if (n >= 0 && n < optCount) return n; }
+    return -1;
+  }
+
+  // ---- JSON parser (flexible keys) ----
+  function parseJSON(raw) {
+    var data = JSON.parse(raw);
+    if (!Array.isArray(data)) data = data.questions || data.items || data.data || [data];
+    return data.map(function (it) {
+      var opts = it.options || it.choices || it.answers || [];
+      var corr = (it.correct != null ? it.correct : (it.correct_index != null ? it.correct_index : (it.answer != null ? it.answer : it.correctIndex)));
+      if (opts.length) return { kind: 'trivia', question: it.question || it.q || it.title || '', options: opts, correct: normCorrect(corr, opts.length), reference: it.reference || it.verse || it.ref || '' };
+      if (it.name && (it.story || it.description)) return { kind: 'character', name: it.name, story: it.story || it.description, reference: it.reference || '' };
+      if (it.title && (it.body || it.content)) return { kind: 'devotional', title: it.title, body: it.body || it.content, verse: it.verse || it.reference || '' };
+      return null;
+    }).filter(Boolean);
+  }
+
+  // ---- Plain-text parser (blocks separated by blank lines) ----
+  // Example block:
+  //   Who built the ark?
+  //   A) Moses
+  //   B) Noah
+  //   C) Abraham
+  //   D) David
+  //   Answer: B
+  //   Reference: Genesis 6
+  function parseText(raw) {
+    var out = [];
+    raw.split(/\n\s*\n/).forEach(function (bl) {
+      var lines = bl.split('\n').map(function (l) { return l.trim(); }).filter(Boolean);
+      if (!lines.length) return;
+      var q = '', opts = [], corr = null, ref = '', name = '', story = '', title = '', body = '', verse = '';
+      lines.forEach(function (l) {
+        var m;
+        if ((m = l.match(/^(?:Name)\s*[:.)-]\s*(.+)$/i))) name = m[1];
+        else if ((m = l.match(/^(?:Story|Description)\s*[:.)-]\s*(.+)$/i))) story = m[1];
+        else if ((m = l.match(/^(?:Title)\s*[:.)-]\s*(.+)$/i))) title = m[1];
+        else if ((m = l.match(/^(?:Body|Content)\s*[:.)-]\s*(.+)$/i))) body = m[1];
+        else if ((m = l.match(/^(?:Verse)\s*[:.)-]\s*(.+)$/i))) verse = m[1];
+        else if ((m = l.match(/^(?:Reference|Ref)\s*[:.)-]\s*(.+)$/i))) ref = m[1];
+        else if ((m = l.match(/^(?:Answer|Correct)\s*[:.)-]\s*(.+)$/i))) corr = m[1];
+        else if ((m = l.match(/^([A-Da-d])\s*[:.)-]\s*(.+)$/))) opts.push(m[2]);
+        else if ((m = l.match(/^([1-9])\s*[:.)-]\s*(.+)$/))) opts.push(m[2]);
+        else if ((m = l.match(/^(?:Q|Question)\s*[:.)-]\s*(.+)$/i))) q = m[1];
+        else if (!q && !name && !title) q = l;
+        else if (opts.length && opts.length < 4) opts.push(l);
+        else if (name) story += (story ? ' ' : '') + l;
+        else if (title) body += (body ? ' ' : '') + l;
+      });
+      if (q && opts.length) out.push({ kind: 'trivia', question: q, options: opts, correct: normCorrect(corr, opts.length), reference: ref });
+      else if (name) out.push({ kind: 'character', name: name, story: story, reference: ref });
+      else if (title) out.push({ kind: 'devotional', title: title, body: body, verse: verse || ref });
+    });
+    return out;
+  }
+
+  function parseAuto(raw) {
+    raw = String(raw || '').trim();
+    if (!raw) return [];
+    if (raw.charAt(0) === '[' || raw.charAt(0) === '{') { try { return parseJSON(raw); } catch (e) { /* fall through to text */ } }
+    return parseText(raw);
+  }
+
+  // ---- Adaptive insert (drops unknown columns automatically) ----
+  async function adaptiveInsert(table, row) {
+    var keys = Object.keys(row).filter(function (k) { return row[k] !== undefined; });
+    for (;;) {
+      var payload = {}; keys.forEach(function (k) { payload[k] = row[k]; });
+      var r = await sbx().from(table).insert([payload]);
+      if (!r.error) return r;
+      var mm = String(r.error.message || '').match(/column\s+["']?([a-zA-Z_]+)["']?/);
+      var col = mm && mm[1];
+      if (col && keys.indexOf(col) > -1) { keys = keys.filter(function (k) { return k !== col; }); continue; }
+      return r;
+    }
+  }
+
+  async function runImport(raw) {
+    var items = parseAuto(raw);
+    if (!items.length) return alert('⚠️ Nothing could be parsed. Check the format examples.');
+    var ok = 0, fail = 0;
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i], r;
+      if (it.kind === 'trivia') r = await adaptiveInsert('trivia_questions', { question: it.question, options: it.options, correct_index: it.correct, reference: it.reference });
+      else if (it.kind === 'character') r = await adaptiveInsert('bible_characters', { name: it.name, story: it.story, description: it.story, reference: it.reference });
+      else r = await adaptiveInsert('devotionals', { title: it.title, body: it.body, content: it.body, verse: it.verse });
+      if (r && !r.error) ok++; else fail++;
+    }
+    alert('✅ Imported ' + ok + ' item(s)' + (fail ? ' (' + fail + ' failed)' : '') + '.');
+    if (window.loadTriviaLibrary) window.loadTriviaLibrary();
+    if (window.refreshContentManager) window.refreshContentManager();
+  }
+
+  // ---- Import modal (textarea: paste JSON or text) ----
+  function openImportModal() {
+    var old = document.getElementById('gcImportModal'); if (old) old.remove();
+    document.body.insertAdjacentHTML('beforeend',
+      '<div class="modal-overlay show" id="gcImportModal" style="display:flex" onclick="if(event.target===this)this.remove()">' +
+      '<div class="modal" onclick="event.stopPropagation()"><div class="modal-handle"></div>' +
+      '<div class="modal-title"><i class="fas fa-file-import"></i> Import — JSON or Text</div>' +
+      '<div class="form-group"><label class="form-label">Paste JSON or plain text</label>' +
+      '<textarea class="form-textarea" id="gcImportBox" rows="12" placeholder=\'JSON:\n[{"question":"Who built the ark?","options":["Moses","Noah","Abraham","David"],"correct":"B","reference":"Genesis 6"}]\n\n— or TEXT —\nWho built the ark?\nA) Moses\nB) Noah\nC) Abraham\nD) David\nAnswer: B\nReference: Genesis 6\'></textarea></div>' +
+      '<button class="btn btn-primary btn-block" onclick="gcRunImportFromBox()"><i class="fas fa-upload"></i> Import</button>' +
+      '<button class="btn btn-secondary-alt btn-block" style="margin-top:6px" onclick="document.getElementById(\'gcImportModal\').remove()">Cancel</button>' +
+      '</div></div>');
+  }
+  window.gcRunImportFromBox = function () {
+    var raw = (document.getElementById('gcImportBox') || {}).value || '';
+    document.getElementById('gcImportModal').remove();
+    runImport(raw);
+  };
+  window.gcOpenImportModal = openImportModal;
+
+  // ---- Rewire the existing "Import JSON" button to accept both formats ----
+  setInterval(function () {
+    document.querySelectorAll('button').forEach(function (b) {
+      if (/import\s*json/i.test(b.textContent || '') && !b.dataset.gcImp) {
+        b.dataset.gcImp = '1';
+        b.onclick = function (e) { e.preventDefault(); e.stopPropagation(); openImportModal(); };
+      }
+    });
+  }, 1500);
+})();
     /* ============================================================
        INITIALIZATION
        ============================================================ */
