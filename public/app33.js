@@ -522,68 +522,84 @@
      * This fixes the RLS error you showed in your screenshot.
      */
 
-window.deleteUser = async function (userId, email) {
-    const allowed = await isAdmin();
+    window.deleteUser = async function (userId, email) {
 
-    if (!allowed) {
-        notify(
-            "Administrator access is required.",
-            "error"
-        );
-        return;
-    }
+        const allowed = await isAdmin();
 
-    const confirmed = confirm(
-        "Are you sure you want to permanently delete this user?\n\n" +
-        "Email: " +
-        (email || "Unknown") +
-        "\n\nThis action cannot be undone."
-    );
-
-    if (!confirmed) {
-        return;
-    }
-
-    try {
-        const result = await client.rpc(
-            "admin_remove_user",
-            {
-                target_user_id: userId
-            }
-        );
-
-        if (result.error) {
-            throw new Error(
-                result.error.message ||
-                "Unable to remove the selected user."
+        if (!allowed) {
+            notify(
+                "Administrator access is required.",
+                "error"
             );
+            return;
         }
 
-        notify(
-            "User removed successfully and their email has been blocked.",
-            "success"
+        if (!userId) {
+            notify(
+                "The selected user has no valid ID.",
+                "error"
+            );
+            return;
+        }
+
+        const confirmed = confirm(
+            "Remove this user permanently?\n\n" +
+            "Their email address will also be added to " +
+            "the blocked-email list so they cannot register " +
+            "again until an administrator unblocks it."
         );
 
-        await loadUsers();
+        if (!confirmed) {
+            return;
+        }
 
-    } catch (error) {
-        console.error(
-            "GraceConnect user deletion failed:",
-            error
-        );
+        const client = db();
 
-        notify(
-            "User deletion failed: " +
-            (
-                error &&
-                error.message
-                    ? error.message
-                    : "Unknown database error"
-            ),
-            "error"
-        );
-    }
-};
+        if (!client) {
+            notify(
+                "Supabase is not available.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+
+            /*
+             * Preferred secure RPC.
+             */
+            let result = await client.rpc(
+                "admin_remove_user",
+                {
+                    target_user_id: userId
+                }
+            );
+
+            /*
+             * Compatibility with the alternative RPC name.
+             */
+            if (
+                result.error &&
+                String(result.error.message || "")
+                    .toLowerCase()
+                    .includes("function")
+            ) {
+                result = await client.rpc(
+                    "admin_delete_user",
+                    {
+                        target_user_id: userId
+                    }
+                );
+            }
+
+            if (result.error) {
+                throw result.error;
+            }
+
+            notify(
+                "User removed successfully and their email has been blocked.",
+                "success"
+            );
 
             /*
              * Re-open the moderation interface if App32 exposes it.
@@ -932,7 +948,7 @@ async function getRandomTriviaQuestion() {
             throw result.error;
         }
 
-         =
+        const questions =
             (result.data || [])
                 .filter(function (item) {
 
