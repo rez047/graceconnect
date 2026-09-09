@@ -522,259 +522,125 @@
      * This fixes the RLS error you showed in your screenshot.
      */
 
-window.deleteUser = async function (userId, email) {
+    window.deleteUser = async function (userId, email) {
 
-    /* ------------------------------------------------------------
-       1. Verify administrator
-       ------------------------------------------------------------ */
+        const allowed = await isAdmin();
 
-    const allowed = await isAdmin();
-
-    if (!allowed) {
-        notify(
-            "Administrator access is required.",
-            "error"
-        );
-        return false;
-    }
-
-    /* ------------------------------------------------------------
-       2. Validate target user
-       ------------------------------------------------------------ */
-
-    if (!userId) {
-        notify(
-            "The selected user has no valid ID.",
-            "error"
-        );
-        return false;
-    }
-
-    const client = db();
-
-    if (!client || typeof client.rpc !== "function") {
-        notify(
-            "Supabase is not available. Please refresh the application.",
-            "error"
-        );
-        return false;
-    }
-
-    /* ------------------------------------------------------------
-       3. Prevent administrator from deleting themselves
-       ------------------------------------------------------------ */
-
-    try {
-
-        const current = await currentUser();
-
-        if (
-            current &&
-            String(current.id) === String(userId)
-        ) {
+        if (!allowed) {
             notify(
-                "You cannot delete the administrator account currently signed in.",
+                "Administrator access is required.",
                 "error"
             );
-            return false;
+            return;
         }
 
-    } catch (error) {
+        if (!userId) {
+            notify(
+                "The selected user has no valid ID.",
+                "error"
+            );
+            return;
+        }
 
-        console.warn(
-            "GraceConnect self-delete check failed:",
-            error
-        );
-    }
-
-    /* ------------------------------------------------------------
-       4. Confirmation
-       ------------------------------------------------------------ */
-
-    const accountText = email
-        ? "\n\nAccount: " + email
-        : "";
-
-    const confirmed = confirm(
-        "PERMANENTLY DELETE USER?" +
-        accountText +
-        "\n\n" +
-        "This will remove the user's GraceConnect account " +
-        "and block the email address from registering again." +
-        "\n\n" +
-        "This action cannot be undone."
-    );
-
-    if (!confirmed) {
-        return false;
-    }
-
-    /* ------------------------------------------------------------
-       5. Execute secure Supabase RPC
-       ------------------------------------------------------------ */
-
-    try {
-
-        notify(
-            "Deleting user account...",
-            "info"
+        const confirmed = confirm(
+            "Remove this user permanently?\n\n" +
+            "Their email address will also be added to " +
+            "the blocked-email list so they cannot register " +
+            "again until an administrator unblocks it."
         );
 
-        let result = await client.rpc(
-            "admin_remove_user",
-            {
-                target_user_id: userId
-            }
-        );
+        if (!confirmed) {
+            return;
+        }
 
-        /*
-         * Compatibility with installations that still use
-         * admin_delete_user instead of admin_remove_user.
-         */
-        if (
-            result.error &&
-            /function|does not exist|could not find/i.test(
-                String(result.error.message || "")
-            )
-        ) {
+        const client = db();
 
-            result = await client.rpc(
-                "admin_delete_user",
+        if (!client) {
+            notify(
+                "Supabase is not available.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+
+            /*
+             * Preferred secure RPC.
+             */
+            let result = await client.rpc(
+                "admin_remove_user",
                 {
                     target_user_id: userId
                 }
             );
-        }
 
-        if (result.error) {
-            throw result.error;
-        }
+            /*
+             * Compatibility with the alternative RPC name.
+             */
+            if (
+                result.error &&
+                String(result.error.message || "")
+                    .toLowerCase()
+                    .includes("function")
+            ) {
+                result = await client.rpc(
+                    "admin_delete_user",
+                    {
+                        target_user_id: userId
+                    }
+                );
+            }
 
-        /* --------------------------------------------------------
-           6. Validate RPC response
-           -------------------------------------------------------- */
+            if (result.error) {
+                throw result.error;
+            }
 
-        const response = result.data;
+            notify(
+                "User removed successfully and their email has been blocked.",
+                "success"
+            );
 
-        if (
-            response &&
-            typeof response === "object" &&
-            response.success === false
-        ) {
-            throw new Error(
-                response.message ||
-                "The database rejected the user deletion."
+            /*
+             * Re-open the moderation interface if App32 exposes it.
+             */
+            if (
+                typeof window.gc32OpenModeration ===
+                "function"
+            ) {
+                window.gc32OpenModeration();
+            }
+
+            /*
+             * Also refresh if the moderation panel has a
+             * generic refresh method.
+             */
+            if (
+                typeof window.refreshUsers ===
+                "function"
+            ) {
+                window.refreshUsers();
+            }
+
+        } catch (error) {
+
+            console.error(
+                "GraceConnect user deletion failed:",
+                error
+            );
+
+            notify(
+                "User deletion failed: " +
+                (
+                    error &&
+                    error.message
+                        ? error.message
+                        : "Unknown database error"
+                ),
+                "error"
             );
         }
-
-        /* --------------------------------------------------------
-           7. Success
-           -------------------------------------------------------- */
-
-        notify(
-            "User removed successfully and their email has been blocked.",
-            "success"
-        );
-
-        /* Refresh existing moderation interface */
-        if (
-            typeof window.gc32OpenModeration ===
-            "function"
-        ) {
-            await window.gc32OpenModeration();
-        }
-
-        /* Compatibility with existing application refresh */
-        if (
-            typeof window.refreshUsers ===
-            "function"
-        ) {
-            await window.refreshUsers();
-        }
-
-        return true;
-
-    } catch (error) {
-
-        console.error(
-            "GraceConnect user deletion failed:",
-            error
-        );
-
-        let message =
-            error &&
-            error.message
-                ? error.message
-                : "Unknown database error.";
-
-        const lower =
-            String(message).toLowerCase();
-
-        /* --------------------------------------------------------
-           Friendly error handling
-           -------------------------------------------------------- */
-
-        if (
-            lower.includes("admin_remove_user") &&
-            (
-                lower.includes("does not exist") ||
-                lower.includes("could not find") ||
-                lower.includes("function")
-            )
-        ) {
-
-            message =
-                "The user-deletion database function is missing. " +
-                "The Supabase RPC admin_remove_user must be created.";
-
-        } else if (
-            lower.includes("permission denied") ||
-            lower.includes("42501")
-        ) {
-
-            message =
-                "Supabase denied the deletion request. " +
-                "Check the RPC SECURITY DEFINER setting and EXECUTE permission.";
-
-        } else if (
-            lower.includes("foreign key") ||
-            lower.includes("violates") ||
-            lower.includes("constraint")
-        ) {
-
-            message =
-                "The user cannot be deleted because another database " +
-                "record is still linked to this account.";
-
-        } else if (
-            lower.includes("not authenticated") ||
-            lower.includes("jwt") ||
-            lower.includes("session")
-        ) {
-
-            message =
-                "Your administrator session has expired. " +
-                "Please sign in again.";
-
-        } else if (
-            lower.includes("admin only") ||
-            lower.includes("administrator") ||
-            lower.includes("admin privileges")
-        ) {
-
-            message =
-                "Your account is not being recognized as an administrator.";
-
-        }
-
-        notify(
-            "User deletion failed: " + message,
-            "error"
-        );
-
-        return false;
-    }
-};
+    };
 
     /* ============================================================
        BLOCKED EMAIL CHECK
@@ -1450,7 +1316,6 @@ function correctTriviaIndex(
 
     return 0;
 }
-
 
 
 /* ============================================================
@@ -4344,575 +4209,194 @@ window.gc33RenderTrivia =
     }
 
     /* ============================================================
-   IMPORT TRIVIA JSON
-   ============================================================ */
+       IMPORT TRIVIA JSON
+       ============================================================ */
 
-function importTriviaJSON() {
+    function importTriviaJSON() {
 
-    const modal =
-        createModal(
-            "gc33-trivia-import",
-            `
-            <div class="gc33-head">
-                <h2>Import Bible Trivia JSON</h2>
+        const modal =
+            createModal(
 
-                <button
-                    class="gc33-close"
-                    type="button"
-                    id="gc33-trivia-import-close"
-                >
-                    ×
-                </button>
-            </div>
+                "gc33-trivia-import",
 
-            <div class="gc33-body">
+                '<div class="gc33-head">' +
 
-                <div class="gc33-help">
-                    Paste a JSON array of Bible questions.
-                    Each object should contain
-                    question, options, correct_index,
-                    reference, explanation, category,
-                    difficulty, source_name and source_url
-                    where available.
+                "<h2>Import Bible Trivia JSON</h2>" +
 
-                    <br><br>
+                '<button class="gc33-close" id="gc33-close-import">' +
+                "×" +
+                "</button>" +
 
-                    <strong>Correct answer format:</strong><br>
-                    A = 1 &nbsp; B = 2 &nbsp; C = 3 &nbsp;
-                    D = 4 &nbsp; E = 5 &nbsp; F = 6
+                "</div>" +
 
-                    <br><br>
+                '<div class="gc33-body">' +
 
-                    You may provide
-                    <code>correct_index</code> as a number
-                    such as <code>3</code>, a letter such as
-                    <code>"C"</code>, or the exact answer text.
-                </div>
+                '<div class="gc33-help">' +
 
-                <div class="gc33-field full">
+                "Paste a JSON array of Bible questions. " +
+                "Each object should contain question, " +
+                "options, correct_index, reference, " +
+                "explanation, category, difficulty, " +
+                "source_name and source_url where available." +
 
-                    <label for="gc33-trivia-json">
-                        JSON
-                    </label>
+                "<br><br>" +
 
-                    <textarea
-                        id="gc33-trivia-json"
-                        placeholder='[
-  {
-    "question": "Who denied Jesus three times?",
-    "options": [
-      "John",
-      "James",
-      "Peter",
-      "Andrew"
-    ],
-    "correct_index": 3,
-    "reference": "Matthew 26:69-75",
-    "explanation": "Peter denied knowing Jesus three times.",
-    "category": "New Testament",
-    "difficulty": "Easy"
-  }
-]'
-                    ></textarea>
+                "For a 10,000+ question library, import " +
+                "the questions in batches rather than placing " +
+                "them inside app33.js." +
 
-                </div>
+                "</div>" +
 
-                <div class="gc33-actions">
+                '<textarea id="gc33-json-import" ' +
+                'style="width:100%;min-height:320px;' +
+                'box-sizing:border-box;border:1px solid #dbe2ea;' +
+                'border-radius:12px;padding:12px;font:inherit">' +
+                "</textarea>" +
 
-                    <button
-                        class="gc33-btn gc33-primary"
-                        type="button"
-                        id="gc33-trivia-import-submit"
-                    >
-                        Import Questions
-                    </button>
+                '<div class="gc33-actions">' +
 
-                    <button
-                        class="gc33-btn gc33-muted"
-                        type="button"
-                        id="gc33-trivia-import-cancel"
-                    >
-                        Cancel
-                    </button>
+                '<button class="gc33-btn gc33-primary" id="gc33-run-import">' +
+                "Import Questions" +
+                "</button>" +
 
-                </div>
+                "</div>" +
 
-            </div>
-            `
-        );
+                "</div>"
+            );
 
-    document
-        .getElementById(
-            "gc33-trivia-import-close"
-        )
-        ?.addEventListener(
-            "click",
-            () =>
+        modal.querySelector(
+            "#gc33-close-import"
+        ).onclick =
+            function () {
+
                 closeElement(
                     "gc33-trivia-import"
-                )
-        );
+                );
+            };
 
-    document
-        .getElementById(
-            "gc33-trivia-import-cancel"
-        )
-        ?.addEventListener(
-            "click",
-            () =>
-                closeElement(
-                    "gc33-trivia-import"
-                )
-        );
-
-    document
-        .getElementById(
-            "gc33-trivia-import-submit"
-        )
-        ?.addEventListener(
-            "click",
+        modal.querySelector(
+            "#gc33-run-import"
+        ).onclick =
             async function () {
 
-                const textarea =
-                    document.getElementById(
-                        "gc33-trivia-json"
-                    );
-
-                if (!textarea) {
-                    notify(
-                        "JSON input field was not found.",
-                        "error"
-                    );
-                    return;
-                }
-
-                const text =
-                    textarea.value.trim();
-
-                if (!text) {
-                    notify(
-                        "Please paste the trivia JSON first.",
-                        "error"
-                    );
-                    return;
-                }
-
-                let parsed;
-
                 try {
 
-                    parsed =
-                        JSON.parse(text);
+                    const raw =
+                        modal.querySelector(
+                            "#gc33-json-import"
+                        ).value;
 
-                } catch (error) {
+                    const questions =
+                        JSON.parse(raw);
 
-                    console.error(
-                        "Trivia JSON parse failed:",
-                        error
-                    );
+                    if (
+                        !Array.isArray(
+                            questions
+                        )
+                    ) {
+                        throw new Error(
+                            "JSON must contain an array."
+                        );
+                    }
 
-                    notify(
-                        "Invalid JSON: " +
-                        (
-                            error.message ||
-                            "Unable to parse JSON."
-                        ),
-                        "error"
-                    );
+                    const client =
+                        db();
 
-                    return;
-                }
-
-                if (!Array.isArray(parsed)) {
-
-                    notify(
-                        "The JSON must be an array of questions.",
-                        "error"
-                    );
-
-                    return;
-                }
-
-                if (parsed.length === 0) {
-
-                    notify(
-                        "The JSON array contains no questions.",
-                        "error"
-                    );
-
-                    return;
-                }
-
-                try {
-
-                    /*
-                     * Normalize every imported question.
-                     *
-                     * Public/user-facing correct answer:
-                     *
-                     * A = 1
-                     * B = 2
-                     * C = 3
-                     * D = 4
-                     * E = 5
-                     * F = 6
-                     *
-                     * Database value remains zero-based:
-                     *
-                     * A = 0
-                     * B = 1
-                     * C = 2
-                     * D = 3
-                     * E = 4
-                     * F = 5
-                     */
+                    const userId =
+                        await currentUserId();
 
                     const rows =
-                        parsed.map(
-                            (item, index) => {
-
-                                if (
-                                    !item ||
-                                    typeof item !== "object" ||
-                                    Array.isArray(item)
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " must be a JSON object."
-                                    );
-                                }
-
-                                const question =
-                                    String(
-                                        item.question ||
-                                        ""
-                                    ).trim();
-
-                                if (!question) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " is missing the question text."
-                                    );
-                                }
-
-                                if (
-                                    !Array.isArray(
-                                        item.options
-                                    )
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " must contain an options array."
-                                    );
-                                }
-
-                                const options =
-                                    item.options.map(
-                                        option =>
-                                            String(
-                                                option === null ||
-                                                option === undefined
-                                                    ? ""
-                                                    : option
-                                            ).trim()
-                                    );
-
-                                if (
-                                    options.length < 2
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " must contain at least 2 options."
-                                    );
-                                }
-
-                                if (
-                                    options.length > 26
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " has too many options."
-                                    );
-                                }
-
-                                if (
-                                    options.some(
-                                        option => !option
-                                    )
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " contains an empty option."
-                                    );
-                                }
-
-                                let correctIndex =
-                                    item.correct_index;
-
-                                /*
-                                 * ------------------------------------------------
-                                 * STRING VALUE
-                                 * ------------------------------------------------
-                                 */
-
-                                if (
-                                    typeof correctIndex ===
-                                    "string"
-                                ) {
-
-                                    const raw =
-                                        correctIndex.trim();
-
-                                    /*
-                                     * A-F
-                                     */
-
-                                    if (
-                                        /^[A-Za-z]$/.test(
-                                            raw
-                                        )
-                                    ) {
-
-                                        const letter =
-                                            raw.toUpperCase();
-
-                                        const numericIndex =
-                                            letter.charCodeAt(
-                                                0
-                                            ) - 65;
-
-                                        if (
-                                            numericIndex < 0 ||
-                                            numericIndex >=
-                                                options.length
-                                        ) {
-                                            throw new Error(
-                                                "Question " +
-                                                (index + 1) +
-                                                " has invalid correct_index \"" +
-                                                raw +
-                                                "\". The letter must correspond to an available option."
-                                            );
-                                        }
-
-                                        correctIndex =
-                                            numericIndex;
-
-                                    /*
-                                     * Numeric string
-                                     *
-                                     * "1" = A
-                                     * "2" = B
-                                     * "3" = C
-                                     */
-
-                                    } else if (
-                                        /^\d+$/.test(
-                                            raw
-                                        )
-                                    ) {
-
-                                        const numeric =
-                                            Number(raw);
-
-                                        if (
-                                            numeric < 1 ||
-                                            numeric >
-                                                options.length
-                                        ) {
-                                            throw new Error(
-                                                "Question " +
-                                                (index + 1) +
-                                                " has invalid correct_index " +
-                                                numeric +
-                                                ". Use 1-" +
-                                                options.length +
-                                                "."
-                                            );
-                                        }
-
-                                        correctIndex =
-                                            numeric - 1;
-
-                                    /*
-                                     * Exact answer text
-                                     */
-
-                                    } else {
-
-                                        const answerIndex =
-                                            options.findIndex(
-                                                option =>
-                                                    option
-                                                        .toLowerCase()
-                                                        .trim() ===
-                                                    raw
-                                                        .toLowerCase()
-                                                        .trim()
-                                            );
-
-                                        if (
-                                            answerIndex ===
-                                            -1
-                                        ) {
-                                            throw new Error(
-                                                "Question " +
-                                                (index + 1) +
-                                                " has invalid correct_index \"" +
-                                                raw +
-                                                "\". Use a number, A-F, or the exact answer text."
-                                            );
-                                        }
-
-                                        correctIndex =
-                                            answerIndex;
-                                    }
-
-                                /*
-                                 * ------------------------------------------------
-                                 * NUMBER VALUE
-                                 * ------------------------------------------------
-                                 *
-                                 * Numbers are intentionally 1-based
-                                 * for imported/user-facing JSON.
-                                 *
-                                 * 1 = A
-                                 * 2 = B
-                                 * 3 = C
-                                 */
-
-                                } else if (
-                                    typeof correctIndex ===
-                                    "number"
-                                ) {
-
-                                    if (
-                                        !Number.isInteger(
-                                            correctIndex
-                                        )
-                                    ) {
-                                        throw new Error(
-                                            "Question " +
-                                            (index + 1) +
-                                            " correct_index must be a whole number."
-                                        );
-                                    }
-
-                                    if (
-                                        correctIndex < 1 ||
-                                        correctIndex >
-                                            options.length
-                                    ) {
-                                        throw new Error(
-                                            "Question " +
-                                            (index + 1) +
-                                            " has invalid correct_index " +
-                                            correctIndex +
-                                            ". Use 1-" +
-                                            options.length +
-                                            "."
-                                        );
-                                    }
-
-                                    correctIndex =
-                                        correctIndex - 1;
-
-                                } else {
-
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " is missing a valid correct_index."
-                                    );
-                                }
-
-                                /*
-                                 * Final internal validation.
-                                 */
-
-                                if (
-                                    !Number.isInteger(
-                                        correctIndex
-                                    ) ||
-                                    correctIndex < 0 ||
-                                    correctIndex >=
-                                        options.length
-                                ) {
-                                    throw new Error(
-                                        "Question " +
-                                        (index + 1) +
-                                        " has an invalid correct answer."
-                                    );
-                                }
-
-                                /*
-                                 * Preserve all supplied fields while
-                                 * normalizing the fields required by
-                                 * the trivia table.
-                                 */
+                        questions
+                            .map(function (item) {
 
                                 return {
-                                    ...item,
 
                                     question:
-                                        question,
+                                        String(
+                                            item.question ||
+                                            ""
+                                        ).trim(),
 
                                     options:
-                                        options,
+                                        Array.isArray(
+                                            item.options
+                                        )
+                                            ? item.options
+                                            : [],
 
                                     correct_index:
-                                        correctIndex,
+                                        Number(
+                                            item.correct_index ||
+                                            0
+                                        ),
 
                                     reference:
                                         String(
                                             item.reference ||
                                             ""
-                                        ).trim(),
+                                        ),
 
                                     explanation:
                                         String(
                                             item.explanation ||
                                             ""
-                                        ).trim(),
+                                        ),
 
                                     category:
                                         String(
                                             item.category ||
-                                            ""
-                                        ).trim(),
+                                            "Scripture"
+                                        ),
 
                                     difficulty:
                                         String(
                                             item.difficulty ||
-                                            ""
-                                        ).trim(),
+                                            "NORMAL"
+                                        ),
 
                                     source_name:
                                         String(
                                             item.source_name ||
                                             ""
-                                        ).trim(),
+                                        ),
 
                                     source_url:
                                         String(
                                             item.source_url ||
                                             ""
-                                        ).trim()
-                                };
-                            }
-                        );
+                                        ),
 
-                    /*
-                     * ------------------------------------------------------------
-                     * IMPORT IN BATCHES OF 500
-                     * ------------------------------------------------------------
-                     */
+                                    approved:
+                                        true,
+
+                                    created_by:
+                                        userId,
+
+                                    updated_by:
+                                        userId,
+
+                                    updated_at:
+                                        new Date().toISOString()
+
+                                };
+
+                            })
+                            .filter(function (item) {
+
+                                return (
+                                    item.question &&
+                                    item.options.length >=
+                                    2
+                                );
+
+                            });
+
+                    if (!rows.length) {
+
+                        throw new Error(
+                            "No valid questions were found."
+                        );
+                    }
 
                     let imported =
                         0;
@@ -4976,9 +4460,8 @@ function importTriviaJSON() {
                         "error"
                     );
                 }
-            }
-        );
-}
+            };
+    }
 
     /* ============================================================
        ADMIN BUTTON
