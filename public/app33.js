@@ -3290,36 +3290,78 @@ async function renderDevoAdmin(h){
    ADMIN DISCOVER BUTTON
    ========================================================= */
 
+/* ---------- admin Discover button ---------- */
 function injectAdminButton(){
+  if(document.getElementById('gc33-content-button'))return;
 
-  var p=document.getElementById(
-    'adminDiscoverPanel'
-  );
+  admin().then(function(isAdmin){
+    if(!isAdmin)return;
 
-  if(
-    !p||
-    document.getElementById(
-      'gc33-content-button'
-    )
-  )return;
+    var p=document.getElementById('adminDiscoverPanel');
 
-  var b=document.createElement(
-    'button'
-  );
+    /*
+      Preferred location:
+      Use the existing Admin Discover panel when available.
+    */
+    if(p){
+      var b=document.createElement('button');
+      b.id='gc33-content-button';
+      b.className='btn btn-primary btn-block btn-sm';
+      b.style.marginTop='8px';
+      b.innerHTML='<i class="fas fa-book-bible"></i> Bible Content Manager';
+      b.onclick=function(){openManager();};
+      p.appendChild(b);
+      return;
+    }
 
-  b.id='gc33-content-button';
+    /*
+      Fallback:
+      If the original adminDiscoverPanel is not present in the
+      current frontend, place the button into the admin area
+      without removing or replacing existing elements.
+    */
+    var candidates=[
+      document.getElementById('adminPanel'),
+      document.getElementById('admin-dashboard'),
+      document.getElementById('adminDashboard'),
+      document.querySelector('[data-admin-panel]'),
+      document.querySelector('.admin-panel'),
+      document.querySelector('.admin-dashboard')
+    ];
 
-  b.className=
-    'btn btn-primary btn-block btn-sm';
+    var target=null;
+    for(var i=0;i<candidates.length;i++){
+      if(candidates[i]){
+        target=candidates[i];
+        break;
+      }
+    }
 
-  b.style.marginTop='8px';
+    /*
+      Last-resort fallback:
+      Create a small dedicated container at the end of the body.
+      It does not replace existing UI.
+    */
+    if(!target){
+      target=document.createElement('div');
+      target.id='gc33-admin-content-entry';
+      target.style.cssText=
+        'position:fixed;right:18px;bottom:18px;z-index:99999;';
+      document.body.appendChild(target);
+    }
 
-  b.innerHTML=
-    '<i class="fas fa-book-bible"></i> Bible Content Manager';
+    var b2=document.createElement('button');
+    b2.id='gc33-content-button';
+    b2.className='btn btn-primary btn-block btn-sm';
+    b2.style.cssText=
+      'margin-top:8px;cursor:pointer;border:0;border-radius:10px;padding:10px 14px;font-weight:800;';
+    b2.innerHTML='<i class="fas fa-book-bible"></i> Bible Content Manager';
+    b2.onclick=function(){openManager();};
 
-  b.onclick=openManager;
-
-  p.appendChild(b);
+    target.appendChild(b2);
+  }).catch(function(e){
+    console.warn('[GraceConnect] Unable to determine admin status for Content Manager button:',e);
+  });
 }
 
 
