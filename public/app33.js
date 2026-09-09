@@ -522,157 +522,258 @@
      * This fixes the RLS error you showed in your screenshot.
      */
 
-window.deleteUser=async function(userId,email){
-  if(!(await admin())){
-    toast('Admin access required','error');
-    return false;
-  }
+window.deleteUser = async function (userId, email) {
 
-  if(!userId){
-    toast('User ID is missing. The account was not removed.','error');
-    return false;
-  }
+    /* ------------------------------------------------------------
+       1. Verify administrator
+       ------------------------------------------------------------ */
 
-  var c=db();
+    const allowed = await isAdmin();
 
-  if(!c||!c.rpc){
-    toast('Supabase RPC is unavailable. Check the Supabase client configuration.','error');
-    return false;
-  }
-
-  /* Prevent accidental self-deletion */
-  try{
-    var sessionUser=(await c.auth.getUser()).data.user;
-
-    if(sessionUser&&sessionUser.id===userId){
-      toast(
-        'You cannot delete the administrator account currently signed in.',
-        'error'
-      );
-      return false;
+    if (!allowed) {
+        notify(
+            "Administrator access is required.",
+            "error"
+        );
+        return false;
     }
-  }catch(e){
-    console.warn('[GraceConnect] Unable to verify current user:',e);
-  }
 
-  var accountLabel=email
-    ? '\n\nAccount: '+email
-    : '';
+    /* ------------------------------------------------------------
+       2. Validate target user
+       ------------------------------------------------------------ */
 
-  var confirmed=confirm(
-    'PERMANENTLY DELETE USER?'+
-    accountLabel+
-    '\n\n'+
-    'The account will be removed from GraceConnect and its email '+
-    'will be blocked from registering again.'+
-    '\n\n'+
-    'This action cannot be undone.'
-  );
+    if (!userId) {
+        notify(
+            "The selected user has no valid ID.",
+            "error"
+        );
+        return false;
+    }
 
-  if(!confirmed)return false;
+    const client = db();
 
-  try{
+    if (!client || typeof client.rpc !== "function") {
+        notify(
+            "Supabase is not available. Please refresh the application.",
+            "error"
+        );
+        return false;
+    }
 
-    toast('Deleting account…','info');
+    /* ------------------------------------------------------------
+       3. Prevent administrator from deleting themselves
+       ------------------------------------------------------------ */
 
-    var r=await c.rpc(
-      'admin_remove_user',
-      {
-        target_user_id:String(userId)
-      }
+    try {
+
+        const current = await currentUser();
+
+        if (
+            current &&
+            String(current.id) === String(userId)
+        ) {
+            notify(
+                "You cannot delete the administrator account currently signed in.",
+                "error"
+            );
+            return false;
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "GraceConnect self-delete check failed:",
+            error
+        );
+    }
+
+    /* ------------------------------------------------------------
+       4. Confirmation
+       ------------------------------------------------------------ */
+
+    const accountText = email
+        ? "\n\nAccount: " + email
+        : "";
+
+    const confirmed = confirm(
+        "PERMANENTLY DELETE USER?" +
+        accountText +
+        "\n\n" +
+        "This will remove the user's GraceConnect account " +
+        "and block the email address from registering again." +
+        "\n\n" +
+        "This action cannot be undone."
     );
 
-    if(r.error){
-      throw r.error;
+    if (!confirmed) {
+        return false;
     }
 
-    var result=r.data;
+    /* ------------------------------------------------------------
+       5. Execute secure Supabase RPC
+       ------------------------------------------------------------ */
 
-    if(result&&typeof result==='object'&&result.success===false){
-      throw new Error(
-        result.message||
-        'The database rejected the deletion.'
-      );
+    try {
+
+        notify(
+            "Deleting user account...",
+            "info"
+        );
+
+        let result = await client.rpc(
+            "admin_remove_user",
+            {
+                target_user_id: userId
+            }
+        );
+
+        /*
+         * Compatibility with installations that still use
+         * admin_delete_user instead of admin_remove_user.
+         */
+        if (
+            result.error &&
+            /function|does not exist|could not find/i.test(
+                String(result.error.message || "")
+            )
+        ) {
+
+            result = await client.rpc(
+                "admin_delete_user",
+                {
+                    target_user_id: userId
+                }
+            );
+        }
+
+        if (result.error) {
+            throw result.error;
+        }
+
+        /* --------------------------------------------------------
+           6. Validate RPC response
+           -------------------------------------------------------- */
+
+        const response = result.data;
+
+        if (
+            response &&
+            typeof response === "object" &&
+            response.success === false
+        ) {
+            throw new Error(
+                response.message ||
+                "The database rejected the user deletion."
+            );
+        }
+
+        /* --------------------------------------------------------
+           7. Success
+           -------------------------------------------------------- */
+
+        notify(
+            "User removed successfully and their email has been blocked.",
+            "success"
+        );
+
+        /* Refresh existing moderation interface */
+        if (
+            typeof window.gc32OpenModeration ===
+            "function"
+        ) {
+            await window.gc32OpenModeration();
+        }
+
+        /* Compatibility with existing application refresh */
+        if (
+            typeof window.refreshUsers ===
+            "function"
+        ) {
+            await window.refreshUsers();
+        }
+
+        return true;
+
+    } catch (error) {
+
+        console.error(
+            "GraceConnect user deletion failed:",
+            error
+        );
+
+        let message =
+            error &&
+            error.message
+                ? error.message
+                : "Unknown database error.";
+
+        const lower =
+            String(message).toLowerCase();
+
+        /* --------------------------------------------------------
+           Friendly error handling
+           -------------------------------------------------------- */
+
+        if (
+            lower.includes("admin_remove_user") &&
+            (
+                lower.includes("does not exist") ||
+                lower.includes("could not find") ||
+                lower.includes("function")
+            )
+        ) {
+
+            message =
+                "The user-deletion database function is missing. " +
+                "The Supabase RPC admin_remove_user must be created.";
+
+        } else if (
+            lower.includes("permission denied") ||
+            lower.includes("42501")
+        ) {
+
+            message =
+                "Supabase denied the deletion request. " +
+                "Check the RPC SECURITY DEFINER setting and EXECUTE permission.";
+
+        } else if (
+            lower.includes("foreign key") ||
+            lower.includes("violates") ||
+            lower.includes("constraint")
+        ) {
+
+            message =
+                "The user cannot be deleted because another database " +
+                "record is still linked to this account.";
+
+        } else if (
+            lower.includes("not authenticated") ||
+            lower.includes("jwt") ||
+            lower.includes("session")
+        ) {
+
+            message =
+                "Your administrator session has expired. " +
+                "Please sign in again.";
+
+        } else if (
+            lower.includes("admin only") ||
+            lower.includes("administrator") ||
+            lower.includes("admin privileges")
+        ) {
+
+            message =
+                "Your account is not being recognized as an administrator.";
+
+        }
+
+        notify(
+            "User deletion failed: " + message,
+            "error"
+        );
+
+        return false;
     }
-
-    toast(
-      'User deleted successfully and their email has been blocked.',
-      'success'
-    );
-
-    /*
-      Refresh moderation panel without reloading the entire
-      application.
-    */
-    if(window.gc32OpenModeration){
-      await window.gc32OpenModeration();
-    }
-
-    return true;
-
-  }catch(e){
-
-    console.error(
-      '[GraceConnect] admin_remove_user failed:',
-      e
-    );
-
-    var message=
-      e&&e.message
-      ?e.message
-      :'Unknown Supabase deletion error.';
-
-    /*
-      Convert common PostgreSQL/Supabase errors into useful
-      administrator messages.
-    */
-
-    if(
-      /function .*admin_remove_user.*does not exist/i.test(message)||
-      /could not find the function/i.test(message)
-    ){
-      message=
-        'The admin_remove_user RPC is missing. Run the replacement SQL provided above in Supabase SQL Editor.';
-    }
-
-    else if(
-      /permission denied/i.test(message)||
-      /42501/i.test(message)
-    ){
-      message=
-        'Supabase denied the deletion. Make sure the RPC is SECURITY DEFINER and EXECUTE is granted to authenticated users.';
-    }
-
-    else if(
-      /foreign key/i.test(message)||
-      /violates.*constraint/i.test(message)
-    ){
-      message=
-        'A related database record is preventing deletion. The replacement RPC removes the known GraceConnect dependent records first.';
-    }
-
-    else if(
-      /not authenticated/i.test(message)
-    ){
-      message=
-        'Your login session has expired. Sign out, sign in again, and retry.';
-    }
-
-    else if(
-      /administrator privileges/i.test(message)||
-      /admin privileges/i.test(message)
-    ){
-      message=
-        'Your account is not being recognized as an administrator in the profiles table.';
-    }
-
-    toast(
-      'User deletion failed: '+message,
-      'error'
-    );
-
-    return false;
-  }
 };
 
     /* ============================================================
