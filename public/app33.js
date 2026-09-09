@@ -4782,4 +4782,73 @@ window.gc33RenderTrivia =
     window.gc33SyncBiblePeople =
         syncBiblePeople;
 
+
+
+// ============ TRIVIA FIX — accept A–D or 1–4, store 0-based, heal bad rows ============
+(function () {
+  function sbx() { return window.sb; }
+
+  // "A"-"D", "a"-"d", "1"-"4", "0"-"3"  ->  0-based index (or -1 if invalid)
+  window.gcParseCorrect = function (val, optCount) {
+    optCount = optCount || 4;
+    var s = String(val == null ? '' : val).trim().toUpperCase();
+    if (/^[A-Z]$/.test(s)) { var li = s.charCodeAt(0) - 65; if (li >= 0 && li < optCount) return li; }
+    if (/^\d+$/.test(s)) {
+      var n = parseInt(s, 10);
+      if (n >= 1 && n <= optCount) return n - 1;   // 1-based -> 0-based
+      if (n >= 0 && n < optCount) return n;        // already 0-based
+    }
+    return -1;
+  };
+
+  // 1) NORMALIZE ON SAVE: rewrite the correct-answer field to 0-based BEFORE the save handler reads it
+  document.addEventListener('click', function (e) {
+    var btn = e.target && e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    var t = (btn.textContent || '').toLowerCase();
+    if (!(t.includes('add question') || t.includes('save question') || t.includes('save trivia'))) return;
+    var scope = btn.closest('.modal, .modal-overlay, [role="dialog"], form') || document;
+    var field = scope.querySelector('[id*="correct" i], [name*="correct" i], [placeholder*="correct" i], [id*="answer" i], [name*="answer" i]');
+    if (!field) return;
+    var parsed = window.gcParseCorrect(field.value, 4);
+    if (parsed >= 0) field.value = String(parsed);
+  }, true);
+
+  // 2) Guide users: placeholder + label now say A–D or 1–4
+  setInterval(function () {
+    document.querySelectorAll('[id*="correct" i], [name*="correct" i], [placeholder*="correct" i]').forEach(function (f) {
+      if (!f.dataset.gcHint) { if (f.tagName !== 'SELECT') f.placeholder = 'Correct answer: A–D or 1–4'; f.dataset.gcHint = '1'; }
+    });
+  }, 1500);
+
+  // 3) HEAL existing bad rows once per session (letters, strings, 1-based overflow)
+  var healed = false;
+  async function gcHealTrivia() {
+    if (healed || !sbx()) return; healed = true;
+    try {
+      var tables = ['trivia_questions', 'trivia', 'bible_trivia'];
+      var tbl = null;
+      for (var i = 0; i < tables.length; i++) { var r = await sbx().from(tables[i]).select('id').limit(1); if (!r.error) { tbl = tables[i]; break; } }
+      if (!tbl) return;
+      var rows = (await sbx().from(tbl).select('*')).data || [];
+      for (var j = 0; j < rows.length; j++) {
+        var q = rows[j];
+        var opts = q.options || q.choices || [];
+        var n = 4;
+        if (Array.isArray(opts)) n = opts.length || 4;
+        else if (typeof opts === 'string') { try { n = (JSON.parse(opts) || []).length || 4; } catch (e) {} }
+        var c = (q.correct_index !== undefined && q.correct_index !== null) ? q.correct_index : q.correct;
+        var fixed = null;
+        if (typeof c === 'string') { var t2 = c.trim().toUpperCase(); if (/^[A-Z]$/.test(t2)) fixed = t2.charCodeAt(0) - 65; else if (/^\d+$/.test(t2)) fixed = parseInt(t2, 10); }
+        else if (typeof c === 'number' && !isNaN(c)) fixed = c;
+        if (fixed !== null && fixed >= n) fixed = fixed - 1;      // 1-based overflow -> 0-based
+        if (fixed !== null && fixed >= 0 && fixed < n && fixed !== q.correct_index) {
+          await sbx().from(tbl).update({ correct_index: fixed }).eq('id', q.id);
+        }
+      }
+    } catch (e) {}
+  }
+  setTimeout(gcHealTrivia, 2500);
+})();
+
 })();
