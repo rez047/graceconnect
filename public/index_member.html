@@ -1717,6 +1717,41 @@ body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; back
   </div>
 </div>
 
+
+// ===== TRIVIA: accept A–D or 1–4 for correct answer (store 0-based index) =====
+window.gcParseCorrect = function (val, optionsCount) {
+  optionsCount = optionsCount || 4;
+  var s = String(val == null ? '' : val).trim().toUpperCase();
+  if (/^[A-Z]$/.test(s)) { var li = s.charCodeAt(0) - 65; if (li >= 0 && li < optionsCount) return li; } // A=0..D=3
+  if (/^\d+$/.test(s)) {
+    var n = parseInt(s, 10);
+    if (n >= 1 && n <= optionsCount) return n - 1;   // 1-based -> 0-based
+    if (n >= 0 && n < optionsCount) return n;        // already 0-based
+  }
+  return -1;
+};
+
+// Rewrite the correct-answer field to 0-based BEFORE the Add/Save handler reads it
+document.addEventListener('click', function (e) {
+  var btn = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!btn) return;
+  var t = (btn.textContent || '').toLowerCase();
+  if (!(t.includes('add question') || t.includes('save question') || t.includes('save trivia') || t.includes('save'))) return;
+  var scope = btn.closest('.modal, .modal-overlay, [role="dialog"], form') || document;
+  var field = scope.querySelector('[id*="orrect" i], [name*="orrect" i], [placeholder*="orrect" i], #triviaCorrect, #correctAnswer, #correctIndex');
+  if (!field) return;
+  var parsed = window.gcParseCorrect(field.value, 4);
+  if (parsed < 0) return;
+  if (field.tagName === 'SELECT') field.selectedIndex = parsed; else field.value = String(parsed);
+}, true);
+
+// Guide users with a helpful placeholder on the correct-answer field
+setInterval(function () {
+  document.querySelectorAll('[id*="orrect" i], [name*="orrect" i], [placeholder*="orrect" i], #triviaCorrect, #correctAnswer, #correctIndex').forEach(function (f) {
+    if (!f.dataset.gcHint) { if (f.tagName !== 'SELECT') f.placeholder = 'Correct answer: A–D or 1–4'; f.dataset.gcHint = '1'; }
+  });
+}, 1500);
+    
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="app.js"></script>
 <script src="app2.js"></script>
