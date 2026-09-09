@@ -709,6 +709,22 @@
    CYCLING / RANDOM TRIVIA ENGINE
    ============================================================ */
 
+   window.gcNorm = function (v, n) {
+  v = String(v == null ? '' : v).trim().toUpperCase();
+  if (/^[A-Z]$/.test(v)) return v.charCodeAt(0) - 65;   // A→0 … D→3
+  var x = parseInt(v, 10); if (isNaN(x)) return 0;
+  return x >= 1 ? x - 1 : x;                            // 1–4 → 0–3
+};
+document.addEventListener('click', function (e) {
+  var b = e.target && e.target.closest ? e.target.closest('button') : null;
+  if (!b) return;
+  var t = (b.textContent || '').toLowerCase();
+  if (t.indexOf('add question') < 0 && t.indexOf('save question') < 0 && t.indexOf('save trivia') < 0) return;
+  var scope = b.closest('.modal, .modal-overlay, [role="dialog"], form') || document;
+  var f = scope.querySelector('[id*="correct" i], [name*="correct" i], [placeholder*="correct" i]');
+  if (f && f.tagName !== 'SELECT') { var p = window.gcNorm(f.value, 4); if (p >= 0) f.value = String(p); }
+}, true);
+   
 const TRIVIA_CYCLE_KEY =
     "graceconnect_trivia_cycle_v2";
 
