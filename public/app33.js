@@ -568,40 +568,33 @@
             /*
              * Preferred secure RPC.
              */
-           try {
-              const result = await client.rpc(
-                 "admin_remove_user",
-                 {
+            let result = await client.rpc(
+                "admin_remove_user",
+                {
                     target_user_id: userId
-                 }
-              );
-              if (result.error) {
-                 throw new Error(
-                    result.error.message ||
-                    "Unable to remove the selected user."
-                 );
-              }
-              notify(
-                 "User removed successfully and their email has been blocked.",
-                 "success"
-              );
-              if (
-                 typeof window.gc32OpenModeration ===
-                 "function"
-              ) {
-                 await window.gc32OpenModeration();
-              }
-              if (
-                 typeof window.refreshUsers ===
-                 "function"
-              ) {
-                 await window.refreshUsers();
-              }
-           } catch (error) {
-              console.error(
-                 "GraceConnect user deletion failed:",
-                 error
-              );
+                }
+            );
+
+            /*
+             * Compatibility with the alternative RPC name.
+             */
+            if (
+                result.error &&
+                String(result.error.message || "")
+                    .toLowerCase()
+                    .includes("function")
+            ) {
+                result = await client.rpc(
+                    "admin_delete_user",
+                    {
+                        target_user_id: userId
+                    }
+                );
+            }
+
+            if (result.error) {
+                throw result.error;
+            }
 
             notify(
                 "User removed successfully and their email has been blocked.",
@@ -4293,42 +4286,18 @@ window.gc33RenderTrivia =
                             "#gc33-json-import"
                         ).value;
 
-                    const parsed = JSON.parse(raw);
+                    const questions =
+                        JSON.parse(raw);
 
-                    let questions;
-
-                   if (Array.isArray(parsed)) {
-                      // Supports:
-                      // [
-                      //   {...},
-                      //   {...}
-                      // ]
-                      questions = parsed;
-                   } else if (
-                      parsed &&
-                      Array.isArray(parsed.questions)
-                   ) {
-                      // Supports:
-                      // {
-                      //   "version": "1.0",
-                      //   "total_questions": 10500,
-                      //   "questions": [...]
-                      // }
-                      questions = parsed.questions;
-                   } else if (
-                      parsed &&
-                      Array.isArray(parsed.data)
-                   ) {
-                      // Supports:
-                      // {
-                      //   "data": [...]
-                      // }
-                      questions = parsed.data;
-                   } else {
-                      throw new Error(
-                         "Invalid trivia JSON. Expected an array or an object containing a questions/data array."
-                      );
-                   }
+                    if (
+                        !Array.isArray(
+                            questions
+                        )
+                    ) {
+                        throw new Error(
+                            "JSON must contain an array."
+                        );
+                    }
 
                     const client =
                         db();
