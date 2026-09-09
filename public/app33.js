@@ -4344,194 +4344,575 @@ window.gc33RenderTrivia =
     }
 
     /* ============================================================
-       IMPORT TRIVIA JSON
-       ============================================================ */
+   IMPORT TRIVIA JSON
+   ============================================================ */
 
-    function importTriviaJSON() {
+function importTriviaJSON() {
 
-        const modal =
-            createModal(
+    const modal =
+        createModal(
+            "gc33-trivia-import",
+            `
+            <div class="gc33-head">
+                <h2>Import Bible Trivia JSON</h2>
 
-                "gc33-trivia-import",
+                <button
+                    class="gc33-close"
+                    type="button"
+                    id="gc33-trivia-import-close"
+                >
+                    ×
+                </button>
+            </div>
 
-                '<div class="gc33-head">' +
+            <div class="gc33-body">
 
-                "<h2>Import Bible Trivia JSON</h2>" +
+                <div class="gc33-help">
+                    Paste a JSON array of Bible questions.
+                    Each object should contain
+                    question, options, correct_index,
+                    reference, explanation, category,
+                    difficulty, source_name and source_url
+                    where available.
 
-                '<button class="gc33-close" id="gc33-close-import">' +
-                "×" +
-                "</button>" +
+                    <br><br>
 
-                "</div>" +
+                    <strong>Correct answer format:</strong><br>
+                    A = 1 &nbsp; B = 2 &nbsp; C = 3 &nbsp;
+                    D = 4 &nbsp; E = 5 &nbsp; F = 6
 
-                '<div class="gc33-body">' +
+                    <br><br>
 
-                '<div class="gc33-help">' +
+                    You may provide
+                    <code>correct_index</code> as a number
+                    such as <code>3</code>, a letter such as
+                    <code>"C"</code>, or the exact answer text.
+                </div>
 
-                "Paste a JSON array of Bible questions. " +
-                "Each object should contain question, " +
-                "options, correct_index, reference, " +
-                "explanation, category, difficulty, " +
-                "source_name and source_url where available." +
+                <div class="gc33-field full">
 
-                "<br><br>" +
+                    <label for="gc33-trivia-json">
+                        JSON
+                    </label>
 
-                "For a 10,000+ question library, import " +
-                "the questions in batches rather than placing " +
-                "them inside app33.js." +
+                    <textarea
+                        id="gc33-trivia-json"
+                        placeholder='[
+  {
+    "question": "Who denied Jesus three times?",
+    "options": [
+      "John",
+      "James",
+      "Peter",
+      "Andrew"
+    ],
+    "correct_index": 3,
+    "reference": "Matthew 26:69-75",
+    "explanation": "Peter denied knowing Jesus three times.",
+    "category": "New Testament",
+    "difficulty": "Easy"
+  }
+]'
+                    ></textarea>
 
-                "</div>" +
+                </div>
 
-                '<textarea id="gc33-json-import" ' +
-                'style="width:100%;min-height:320px;' +
-                'box-sizing:border-box;border:1px solid #dbe2ea;' +
-                'border-radius:12px;padding:12px;font:inherit">' +
-                "</textarea>" +
+                <div class="gc33-actions">
 
-                '<div class="gc33-actions">' +
+                    <button
+                        class="gc33-btn gc33-primary"
+                        type="button"
+                        id="gc33-trivia-import-submit"
+                    >
+                        Import Questions
+                    </button>
 
-                '<button class="gc33-btn gc33-primary" id="gc33-run-import">' +
-                "Import Questions" +
-                "</button>" +
+                    <button
+                        class="gc33-btn gc33-muted"
+                        type="button"
+                        id="gc33-trivia-import-cancel"
+                    >
+                        Cancel
+                    </button>
 
-                "</div>" +
+                </div>
 
-                "</div>"
-            );
+            </div>
+            `
+        );
 
-        modal.querySelector(
-            "#gc33-close-import"
-        ).onclick =
-            function () {
-
+    document
+        .getElementById(
+            "gc33-trivia-import-close"
+        )
+        ?.addEventListener(
+            "click",
+            () =>
                 closeElement(
                     "gc33-trivia-import"
-                );
-            };
+                )
+        );
 
-        modal.querySelector(
-            "#gc33-run-import"
-        ).onclick =
+    document
+        .getElementById(
+            "gc33-trivia-import-cancel"
+        )
+        ?.addEventListener(
+            "click",
+            () =>
+                closeElement(
+                    "gc33-trivia-import"
+                )
+        );
+
+    document
+        .getElementById(
+            "gc33-trivia-import-submit"
+        )
+        ?.addEventListener(
+            "click",
             async function () {
+
+                const textarea =
+                    document.getElementById(
+                        "gc33-trivia-json"
+                    );
+
+                if (!textarea) {
+                    notify(
+                        "JSON input field was not found.",
+                        "error"
+                    );
+                    return;
+                }
+
+                const text =
+                    textarea.value.trim();
+
+                if (!text) {
+                    notify(
+                        "Please paste the trivia JSON first.",
+                        "error"
+                    );
+                    return;
+                }
+
+                let parsed;
 
                 try {
 
-                    const raw =
-                        modal.querySelector(
-                            "#gc33-json-import"
-                        ).value;
+                    parsed =
+                        JSON.parse(text);
 
-                    const questions =
-                        JSON.parse(raw);
+                } catch (error) {
 
-                    if (
-                        !Array.isArray(
-                            questions
-                        )
-                    ) {
-                        throw new Error(
-                            "JSON must contain an array."
-                        );
-                    }
+                    console.error(
+                        "Trivia JSON parse failed:",
+                        error
+                    );
 
-                    const client =
-                        db();
+                    notify(
+                        "Invalid JSON: " +
+                        (
+                            error.message ||
+                            "Unable to parse JSON."
+                        ),
+                        "error"
+                    );
 
-                    const userId =
-                        await currentUserId();
+                    return;
+                }
+
+                if (!Array.isArray(parsed)) {
+
+                    notify(
+                        "The JSON must be an array of questions.",
+                        "error"
+                    );
+
+                    return;
+                }
+
+                if (parsed.length === 0) {
+
+                    notify(
+                        "The JSON array contains no questions.",
+                        "error"
+                    );
+
+                    return;
+                }
+
+                try {
+
+                    /*
+                     * Normalize every imported question.
+                     *
+                     * Public/user-facing correct answer:
+                     *
+                     * A = 1
+                     * B = 2
+                     * C = 3
+                     * D = 4
+                     * E = 5
+                     * F = 6
+                     *
+                     * Database value remains zero-based:
+                     *
+                     * A = 0
+                     * B = 1
+                     * C = 2
+                     * D = 3
+                     * E = 4
+                     * F = 5
+                     */
 
                     const rows =
-                        questions
-                            .map(function (item) {
+                        parsed.map(
+                            (item, index) => {
+
+                                if (
+                                    !item ||
+                                    typeof item !== "object" ||
+                                    Array.isArray(item)
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " must be a JSON object."
+                                    );
+                                }
+
+                                const question =
+                                    String(
+                                        item.question ||
+                                        ""
+                                    ).trim();
+
+                                if (!question) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " is missing the question text."
+                                    );
+                                }
+
+                                if (
+                                    !Array.isArray(
+                                        item.options
+                                    )
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " must contain an options array."
+                                    );
+                                }
+
+                                const options =
+                                    item.options.map(
+                                        option =>
+                                            String(
+                                                option === null ||
+                                                option === undefined
+                                                    ? ""
+                                                    : option
+                                            ).trim()
+                                    );
+
+                                if (
+                                    options.length < 2
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " must contain at least 2 options."
+                                    );
+                                }
+
+                                if (
+                                    options.length > 26
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " has too many options."
+                                    );
+                                }
+
+                                if (
+                                    options.some(
+                                        option => !option
+                                    )
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " contains an empty option."
+                                    );
+                                }
+
+                                let correctIndex =
+                                    item.correct_index;
+
+                                /*
+                                 * ------------------------------------------------
+                                 * STRING VALUE
+                                 * ------------------------------------------------
+                                 */
+
+                                if (
+                                    typeof correctIndex ===
+                                    "string"
+                                ) {
+
+                                    const raw =
+                                        correctIndex.trim();
+
+                                    /*
+                                     * A-F
+                                     */
+
+                                    if (
+                                        /^[A-Za-z]$/.test(
+                                            raw
+                                        )
+                                    ) {
+
+                                        const letter =
+                                            raw.toUpperCase();
+
+                                        const numericIndex =
+                                            letter.charCodeAt(
+                                                0
+                                            ) - 65;
+
+                                        if (
+                                            numericIndex < 0 ||
+                                            numericIndex >=
+                                                options.length
+                                        ) {
+                                            throw new Error(
+                                                "Question " +
+                                                (index + 1) +
+                                                " has invalid correct_index \"" +
+                                                raw +
+                                                "\". The letter must correspond to an available option."
+                                            );
+                                        }
+
+                                        correctIndex =
+                                            numericIndex;
+
+                                    /*
+                                     * Numeric string
+                                     *
+                                     * "1" = A
+                                     * "2" = B
+                                     * "3" = C
+                                     */
+
+                                    } else if (
+                                        /^\d+$/.test(
+                                            raw
+                                        )
+                                    ) {
+
+                                        const numeric =
+                                            Number(raw);
+
+                                        if (
+                                            numeric < 1 ||
+                                            numeric >
+                                                options.length
+                                        ) {
+                                            throw new Error(
+                                                "Question " +
+                                                (index + 1) +
+                                                " has invalid correct_index " +
+                                                numeric +
+                                                ". Use 1-" +
+                                                options.length +
+                                                "."
+                                            );
+                                        }
+
+                                        correctIndex =
+                                            numeric - 1;
+
+                                    /*
+                                     * Exact answer text
+                                     */
+
+                                    } else {
+
+                                        const answerIndex =
+                                            options.findIndex(
+                                                option =>
+                                                    option
+                                                        .toLowerCase()
+                                                        .trim() ===
+                                                    raw
+                                                        .toLowerCase()
+                                                        .trim()
+                                            );
+
+                                        if (
+                                            answerIndex ===
+                                            -1
+                                        ) {
+                                            throw new Error(
+                                                "Question " +
+                                                (index + 1) +
+                                                " has invalid correct_index \"" +
+                                                raw +
+                                                "\". Use a number, A-F, or the exact answer text."
+                                            );
+                                        }
+
+                                        correctIndex =
+                                            answerIndex;
+                                    }
+
+                                /*
+                                 * ------------------------------------------------
+                                 * NUMBER VALUE
+                                 * ------------------------------------------------
+                                 *
+                                 * Numbers are intentionally 1-based
+                                 * for imported/user-facing JSON.
+                                 *
+                                 * 1 = A
+                                 * 2 = B
+                                 * 3 = C
+                                 */
+
+                                } else if (
+                                    typeof correctIndex ===
+                                    "number"
+                                ) {
+
+                                    if (
+                                        !Number.isInteger(
+                                            correctIndex
+                                        )
+                                    ) {
+                                        throw new Error(
+                                            "Question " +
+                                            (index + 1) +
+                                            " correct_index must be a whole number."
+                                        );
+                                    }
+
+                                    if (
+                                        correctIndex < 1 ||
+                                        correctIndex >
+                                            options.length
+                                    ) {
+                                        throw new Error(
+                                            "Question " +
+                                            (index + 1) +
+                                            " has invalid correct_index " +
+                                            correctIndex +
+                                            ". Use 1-" +
+                                            options.length +
+                                            "."
+                                        );
+                                    }
+
+                                    correctIndex =
+                                        correctIndex - 1;
+
+                                } else {
+
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " is missing a valid correct_index."
+                                    );
+                                }
+
+                                /*
+                                 * Final internal validation.
+                                 */
+
+                                if (
+                                    !Number.isInteger(
+                                        correctIndex
+                                    ) ||
+                                    correctIndex < 0 ||
+                                    correctIndex >=
+                                        options.length
+                                ) {
+                                    throw new Error(
+                                        "Question " +
+                                        (index + 1) +
+                                        " has an invalid correct answer."
+                                    );
+                                }
+
+                                /*
+                                 * Preserve all supplied fields while
+                                 * normalizing the fields required by
+                                 * the trivia table.
+                                 */
 
                                 return {
+                                    ...item,
 
                                     question:
-                                        String(
-                                            item.question ||
-                                            ""
-                                        ).trim(),
+                                        question,
 
                                     options:
-                                        Array.isArray(
-                                            item.options
-                                        )
-                                            ? item.options
-                                            : [],
+                                        options,
 
                                     correct_index:
-                                        Number(
-                                            item.correct_index ||
-                                            0
-                                        ),
+                                        correctIndex,
 
                                     reference:
                                         String(
                                             item.reference ||
                                             ""
-                                        ),
+                                        ).trim(),
 
                                     explanation:
                                         String(
                                             item.explanation ||
                                             ""
-                                        ),
+                                        ).trim(),
 
                                     category:
                                         String(
                                             item.category ||
-                                            "Scripture"
-                                        ),
+                                            ""
+                                        ).trim(),
 
                                     difficulty:
                                         String(
                                             item.difficulty ||
-                                            "NORMAL"
-                                        ),
+                                            ""
+                                        ).trim(),
 
                                     source_name:
                                         String(
                                             item.source_name ||
                                             ""
-                                        ),
+                                        ).trim(),
 
                                     source_url:
                                         String(
                                             item.source_url ||
                                             ""
-                                        ),
-
-                                    approved:
-                                        true,
-
-                                    created_by:
-                                        userId,
-
-                                    updated_by:
-                                        userId,
-
-                                    updated_at:
-                                        new Date().toISOString()
-
+                                        ).trim()
                                 };
-
-                            })
-                            .filter(function (item) {
-
-                                return (
-                                    item.question &&
-                                    item.options.length >=
-                                    2
-                                );
-
-                            });
-
-                    if (!rows.length) {
-
-                        throw new Error(
-                            "No valid questions were found."
+                            }
                         );
-                    }
+
+                    /*
+                     * ------------------------------------------------------------
+                     * IMPORT IN BATCHES OF 500
+                     * ------------------------------------------------------------
+                     */
 
                     let imported =
                         0;
@@ -4595,8 +4976,9 @@ window.gc33RenderTrivia =
                         "error"
                     );
                 }
-            };
-    }
+            }
+        );
+}
 
     /* ============================================================
        ADMIN BUTTON
