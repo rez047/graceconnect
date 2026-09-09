@@ -1,3433 +1,4635 @@
-/*
- GraceConnect App33
- Bible Content Engine
- - secure user removal + blocklist RPC
- - non-repeating per-user trivia from Supabase
- - admin CRUD for trivia, Bible characters and devotionals
- - Theographic/HelloAO character fallback (no Wikipedia)
- - Christ Himself devotional fallback (CC BY-NC-SA 4.0 + attribution)
- - preserves existing landing/app fonts and UI
-*/
+/* ============================================================
+   GRACECONNECT — APP33.JS
+   Bible Content + Moderation Engine
+   ============================================================ */
 
-(function(){
-'use strict';
+(function () {
+    "use strict";
 
-var TRIVIA_TABLE='bible_trivia_questions',
-    HISTORY_TABLE='trivia_question_history';
+    /* ============================================================
+       CONFIGURATION
+       ============================================================ */
 
-var CHAR_TABLE='bible_characters',
-    DEVO_TABLE='devotionals';
+    const TRIVIA_TABLE = "bible_trivia_questions";
+    const CHARACTER_TABLE = "bible_characters";
+    const DEVOTIONAL_TABLE = "devotionals";
 
-var THEO_PEOPLE='https://bible.helloao.org/api/d/theographic/people.json';
-var THEO_PERSON='https://bible.helloao.org/api/d/theographic/people/';
-var DEVO_API='https://www.christhimself.com/api/v1/devotionals/';
+    /*
+     * Scripture-based Bible-person dataset.
+     * This is NOT Wikipedia.
+     */
+    const THEOGRAPHIC_PEOPLE =
+        "https://bible.helloao.org/api/d/theographic/people.json";
 
-var esc=window.esc||function(v){
-  return String(v==null?'':v)
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/"/g,'&quot;')
-    .replace(/'/g,'&#039;');
+    /*
+     * Christian devotional fallback.
+     * Custom GraceConnect devotionals always take priority.
+     */
+    const DEVOTIONAL_API =
+        "https://www.christhimself.com/api/v1/devotionals/";
+
+    /* ============================================================
+       STATE
+       ============================================================ */
+
+    let triviaState = {
+        question: null,
+        answered: false,
+        seen: new Set()
+    };
+
+    let devotionalRendering = false;
+
+    /* ============================================================
+       SUPABASE CLIENT
+       ============================================================ */
+
+    function db() {
+        try {
+            if (
+                typeof window.sb === "function" &&
+                window.sb()
+            ) {
+                return window.sb();
+            }
+
+            if (
+                window.sb &&
+                typeof window.sb.from === "function"
+            ) {
+                return window.sb;
+            }
+
+            if (
+                window.supabaseClient &&
+                typeof window.supabaseClient.from === "function"
+            ) {
+                return window.supabaseClient;
+            }
+
+            if (
+                window.supabase &&
+                typeof window.supabase.from === "function"
+            ) {
+                return window.supabase;
+            }
+
+            return null;
+        } catch (e) {
+            console.error("GraceConnect Supabase error:", e);
+            return null;
+        }
+    }
+
+    async function currentUser() {
+        const client = db();
+
+        if (!client || !client.auth) {
+            return null;
+        }
+
+        try {
+            const result = await client.auth.getUser();
+
+            return result &&
+                result.data &&
+                result.data.user
+                ? result.data.user
+                : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    async function currentUserId() {
+        const user = await currentUser();
+        return user ? user.id : null;
+    }
+
+    async function isAdmin() {
+        const client = db();
+
+        if (!client || !client.auth) {
+            return false;
+        }
+
+        try {
+            const user = await currentUser();
+
+            if (!user) {
+                return false;
+            }
+
+            const result = await client
+                .from("profiles")
+                .select("role")
+                .eq("id", user.id)
+                .maybeSingle();
+
+            if (result.error) {
+                return false;
+            }
+
+            const role = String(
+                result.data && result.data.role
+                    ? result.data.role
+                    : ""
+            ).toLowerCase();
+
+            return [
+                "admin",
+                "super_admin",
+                "superadmin"
+            ].includes(role);
+
+        } catch (e) {
+            console.error("Admin check failed:", e);
+            return false;
+        }
+    }
+
+    /* ============================================================
+       UTILITIES
+       ============================================================ */
+
+    function escapeHTML(value) {
+        if (value === null || value === undefined) {
+            return "";
+        }
+
+        return String(value)
+            .replace(/&/g, "&amp;")
+            .replace(/</g, "&lt;")
+            .replace(/>/g, "&gt;")
+            .replace(/"/g, "&quot;")
+            .replace(/'/g, "&#039;");
+    }
+
+    function notify(message, type) {
+        try {
+            if (typeof window.showToast === "function") {
+                window.showToast(message, type || "info");
+                return;
+            }
+
+            if (typeof window.toast === "function") {
+                window.toast(message, type || "info");
+                return;
+            }
+        } catch (e) {}
+
+        alert(message);
+    }
+
+    function closeElement(id) {
+        const element = document.getElementById(id);
+
+        if (element) {
+            element.remove();
+        }
+    }
+
+    function createModal(id, html) {
+        closeElement(id);
+
+        const backdrop = document.createElement("div");
+
+        backdrop.id = id;
+        backdrop.className = "gc33-backdrop";
+
+        backdrop.innerHTML =
+            '<div class="gc33-modal">' +
+            html +
+            "</div>";
+
+        document.body.appendChild(backdrop);
+
+        return backdrop;
+    }
+
+    /* ============================================================
+       STYLES
+       ============================================================ */
+
+    function injectStyles() {
+        if (document.getElementById("gc33-style")) {
+            return;
+        }
+
+        const style = document.createElement("style");
+
+        style.id = "gc33-style";
+
+        style.textContent = `
+            .gc33-backdrop {
+                position: fixed;
+                inset: 0;
+                z-index: 999999;
+                background: rgba(15,23,42,.76);
+                backdrop-filter: blur(10px);
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                padding: 14px;
+            }
+
+            .gc33-modal {
+                width: min(1050px, 100%);
+                max-height: 94vh;
+                overflow-y: auto;
+                background: #ffffff;
+                border-radius: 24px;
+                box-shadow: 0 30px 100px rgba(0,0,0,.35);
+                font-family: inherit;
+            }
+
+            .gc33-head {
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 15px;
+                padding: 20px 22px;
+                border-bottom: 1px solid #e5e7eb;
+                position: sticky;
+                top: 0;
+                background: #ffffff;
+                z-index: 2;
+            }
+
+            .gc33-head h2 {
+                margin: 0;
+                font-size: 22px;
+            }
+
+            .gc33-body {
+                padding: 20px;
+            }
+
+            .gc33-close {
+                width: 38px;
+                height: 38px;
+                border: 0;
+                border-radius: 10px;
+                background: #eef2f7;
+                cursor: pointer;
+                font-size: 22px;
+            }
+
+            .gc33-tabs {
+                display: flex;
+                gap: 8px;
+                overflow-x: auto;
+                margin-bottom: 18px;
+            }
+
+            .gc33-tab {
+                border: 0;
+                border-radius: 11px;
+                background: #eef2ff;
+                color: #3730a3;
+                padding: 10px 15px;
+                font-weight: 800;
+                cursor: pointer;
+                white-space: nowrap;
+            }
+
+            .gc33-tab.active {
+                background: #4f46e5;
+                color: #ffffff;
+            }
+
+            .gc33-grid {
+                display: grid;
+                grid-template-columns:
+                    repeat(2, minmax(0, 1fr));
+                gap: 14px;
+            }
+
+            .gc33-field {
+                display: flex;
+                flex-direction: column;
+                gap: 6px;
+            }
+
+            .gc33-field.full {
+                grid-column: 1 / -1;
+            }
+
+            .gc33-field label {
+                font-size: 12px;
+                font-weight: 800;
+                color: #475569;
+            }
+
+            .gc33-field input,
+            .gc33-field textarea,
+            .gc33-field select {
+                width: 100%;
+                box-sizing: border-box;
+                border: 1px solid #dbe2ea;
+                border-radius: 11px;
+                padding: 11px 12px;
+                font: inherit;
+                color: #172033;
+                background: #ffffff;
+            }
+
+            .gc33-field textarea {
+                min-height: 120px;
+                resize: vertical;
+            }
+
+            .gc33-actions {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 9px;
+                margin-top: 16px;
+            }
+
+            .gc33-btn {
+                border: 0;
+                border-radius: 11px;
+                padding: 11px 15px;
+                font-weight: 800;
+                cursor: pointer;
+            }
+
+            .gc33-primary {
+                background: #4f46e5;
+                color: #ffffff;
+            }
+
+            .gc33-muted {
+                background: #eef2f7;
+                color: #334155;
+            }
+
+            .gc33-danger {
+                background: #dc2626;
+                color: #ffffff;
+            }
+
+            .gc33-help {
+                padding: 13px 15px;
+                border-radius: 13px;
+                background: #f8fafc;
+                color: #475569;
+                font-size: 12px;
+                line-height: 1.65;
+                margin-bottom: 15px;
+            }
+
+            .gc33-list {
+                display: grid;
+                gap: 10px;
+            }
+
+            .gc33-row {
+                border: 1px solid #e5e7eb;
+                border-radius: 14px;
+                padding: 13px;
+                display: flex;
+                align-items: center;
+                justify-content: space-between;
+                gap: 12px;
+            }
+
+            .gc33-row small {
+                display: block;
+                color: #64748b;
+                margin-top: 4px;
+            }
+
+            .gc33-quiz {
+                padding: 22px;
+                border-radius: 20px;
+                background:
+                    linear-gradient(
+                        135deg,
+                        #4f46e5,
+                        #7c3aed
+                    );
+                color: #ffffff;
+                margin-top: 12px;
+            }
+
+            .gc33-quiz .gc33-question {
+                font-size: 20px;
+                font-weight: 850;
+                line-height: 1.5;
+                margin: 14px 0;
+            }
+
+            .gc33-options {
+                display: grid;
+                gap: 9px;
+            }
+
+            .gc33-option {
+                border: 1px solid rgba(255,255,255,.35);
+                background: rgba(255,255,255,.12);
+                color: #ffffff;
+                border-radius: 12px;
+                padding: 13px;
+                text-align: left;
+                cursor: pointer;
+                font: inherit;
+            }
+
+            .gc33-option:hover {
+                background: rgba(255,255,255,.2);
+            }
+
+            .gc33-option.correct {
+                background: #059669;
+            }
+
+            .gc33-option.wrong {
+                background: #dc2626;
+            }
+
+            .gc33-next {
+                margin-top: 14px;
+                background: #ffffff;
+                color: #3730a3;
+            }
+
+            .gc33-character-card {
+                border: 1px solid #e5e7eb;
+                border-radius: 16px;
+                padding: 16px;
+                margin-bottom: 12px;
+            }
+
+            .gc33-character-card h3 {
+                margin: 0 0 8px;
+            }
+
+            .gc33-character-card p {
+                line-height: 1.75;
+            }
+
+            .gc33-source {
+                color: #64748b;
+                font-size: 11px;
+                line-height: 1.5;
+            }
+
+            @media (max-width: 700px) {
+                .gc33-grid {
+                    grid-template-columns: 1fr;
+                }
+
+                .gc33-field.full {
+                    grid-column: auto;
+                }
+
+                .gc33-modal {
+                    border-radius: 18px;
+                }
+
+                .gc33-body {
+                    padding: 15px;
+                }
+
+                .gc33-row {
+                    align-items: flex-start;
+                    flex-direction: column;
+                }
+            }
+        `;
+
+        document.head.appendChild(style);
+    }
+
+    /* ============================================================
+       USER REMOVAL + BLOCKLIST
+       ============================================================ */
+
+    /*
+     * IMPORTANT:
+     *
+     * This calls the secure Supabase RPC:
+     *
+     * admin_remove_user(target_user_id uuid)
+     *
+     * The RPC should:
+     * 1. Verify current user is an admin.
+     * 2. Read the target user's email.
+     * 3. Insert the email into blocked_emails.
+     * 4. Delete auth.users.
+     *
+     * This fixes the RLS error you showed in your screenshot.
+     */
+
+window.deleteUser = async function (userId, email) {
+    const allowed = await isAdmin();
+
+    if (!allowed) {
+        notify(
+            "Administrator access is required.",
+            "error"
+        );
+        return;
+    }
+
+    const confirmed = confirm(
+        "Are you sure you want to permanently delete this user?\n\n" +
+        "Email: " +
+        (email || "Unknown") +
+        "\n\nThis action cannot be undone."
+    );
+
+    if (!confirmed) {
+        return;
+    }
+
+    try {
+        const result = await client.rpc(
+            "admin_remove_user",
+            {
+                target_user_id: userId
+            }
+        );
+
+        if (result.error) {
+            throw new Error(
+                result.error.message ||
+                "Unable to remove the selected user."
+            );
+        }
+
+        notify(
+            "User removed successfully and their email has been blocked.",
+            "success"
+        );
+
+        await loadUsers();
+
+    } catch (error) {
+        console.error(
+            "GraceConnect user deletion failed:",
+            error
+        );
+
+        notify(
+            "User deletion failed: " +
+            (
+                error &&
+                error.message
+                    ? error.message
+                    : "Unknown database error"
+            ),
+            "error"
+        );
+    }
 };
 
-function db(){
-  try{
-    if(typeof window.sb==='function')return window.sb();
-    if(window.sb&&window.sb.from)return window.sb;
-    if(window.supabaseClient&&window.supabaseClient.from)return window.supabaseClient;
-    return null;
-  }catch(e){
-    return null;
-  }
+            /*
+             * Re-open the moderation interface if App32 exposes it.
+             */
+            if (
+                typeof window.gc32OpenModeration ===
+                "function"
+            ) {
+                window.gc32OpenModeration();
+            }
+
+            /*
+             * Also refresh if the moderation panel has a
+             * generic refresh method.
+             */
+            if (
+                typeof window.refreshUsers ===
+                "function"
+            ) {
+                window.refreshUsers();
+            }
+
+        } catch (error) {
+
+            console.error(
+                "GraceConnect user deletion failed:",
+                error
+            );
+
+            notify(
+                "User deletion failed: " +
+                (
+                    error &&
+                    error.message
+                        ? error.message
+                        : "Unknown database error"
+                ),
+                "error"
+            );
+        }
+    };
+
+    /* ============================================================
+       BLOCKED EMAIL CHECK
+       ============================================================ */
+
+    async function isEmailBlocked(email) {
+
+        const client = db();
+
+        if (!client || !email) {
+            return false;
+        }
+
+        const normalized =
+            String(email)
+                .trim()
+                .toLowerCase();
+
+        try {
+
+            /*
+             * Preferred secure RPC.
+             */
+            const result = await client.rpc(
+                "is_email_blocked",
+                {
+                    p_email: normalized
+                }
+            );
+
+            if (!result.error) {
+                return result.data === true;
+            }
+
+            console.warn(
+                "is_email_blocked RPC failed:",
+                result.error
+            );
+
+            /*
+             * Do NOT directly query blocked_emails here.
+             *
+             * RLS intentionally prevents ordinary users from
+             * reading/writing the table.
+             */
+
+            return false;
+
+        } catch (error) {
+
+            console.warn(
+                "Blocklist check failed:",
+                error
+            );
+
+            return false;
+        }
+    }
+
+    /*
+     * Public helper for registration code.
+     */
+    window.gc33IsEmailBlocked = isEmailBlocked;
+
+    /* ============================================================
+   CYCLING / RANDOM TRIVIA ENGINE
+   ============================================================ */
+
+const TRIVIA_CYCLE_KEY =
+    "graceconnect_trivia_cycle_v2";
+
+/*
+ * Keep the completed-question cycle separately for each
+ * authenticated user.
+ *
+ * localStorage survives page refreshes, unlike the old
+ * in-memory Set.
+ */
+function triviaCycleStorageKey(userId) {
+    return (
+        TRIVIA_CYCLE_KEY +
+        ":" +
+        String(userId || "guest")
+    );
 }
 
-function toast(m,t){
-  if(window.showToast)return window.showToast(m,t||'info');
-  if(window.toast)return window.toast(m,t||'info');
-  alert(m);
+/*
+ * Read completed questions for the current cycle.
+ */
+function getTriviaCycle(userId) {
+
+    try {
+
+        const raw =
+            localStorage.getItem(
+                triviaCycleStorageKey(userId)
+            );
+
+        if (!raw) {
+            return [];
+        }
+
+        const parsed =
+            JSON.parse(raw);
+
+        if (!Array.isArray(parsed)) {
+            return [];
+        }
+
+        return Array.from(
+            new Set(
+                parsed.map(function (id) {
+                    return String(id);
+                })
+            )
+        );
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to read trivia cycle:",
+            error
+        );
+
+        return [];
+    }
 }
 
-async function admin(){
-  if(window.gc32IsAdmin)return !!(await window.gc32IsAdmin());
+/*
+ * Save completed questions.
+ */
+function saveTriviaCycle(
+    userId,
+    ids
+) {
 
-  var c=db();
+    try {
 
-  if(!c||!c.auth)return false;
+        localStorage.setItem(
+            triviaCycleStorageKey(userId),
+            JSON.stringify(
+                Array.from(
+                    new Set(
+                        (ids || []).map(
+                            function (id) {
+                                return String(id);
+                            }
+                        )
+                    )
+                )
+            )
+        );
 
-  try{
-    var u=(await c.auth.getUser()).data.user;
-    if(!u)return false;
+    } catch (error) {
 
-    var p=(await c
-      .from('profiles')
-      .select('role')
-      .eq('id',u.id)
-      .maybeSingle()).data;
+        console.warn(
+            "Unable to save trivia cycle:",
+            error
+        );
+    }
+}
+
+/*
+ * Fisher-Yates shuffle.
+ */
+function shuffleTriviaQuestions(
+    questions
+) {
+
+    const copy =
+        Array.isArray(questions)
+            ? questions.slice()
+            : [];
+
+    for (
+        let index = copy.length - 1;
+        index > 0;
+        index--
+    ) {
+
+        const randomIndex =
+            Math.floor(
+                Math.random() *
+                (index + 1)
+            );
+
+        const temp =
+            copy[index];
+
+        copy[index] =
+            copy[randomIndex];
+
+        copy[randomIndex] =
+            temp;
+    }
+
+    return copy;
+}
+
+
+/* ============================================================
+   GET RANDOM TRIVIA QUESTION
+   ============================================================ */
+
+async function getRandomTriviaQuestion() {
+
+    const client = db();
+
+    if (!client) {
+
+        notify(
+            "Supabase is unavailable.",
+            "error"
+        );
+
+        return null;
+    }
+
+    const user =
+        await currentUser();
+
+    if (!user) {
+
+        notify(
+            "Please sign in to use Bible Trivia.",
+            "error"
+        );
+
+        return null;
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * FIRST: TRY THE DATABASE RPC
+     * ----------------------------------------------------------
+     *
+     * If your Supabase function exists and can provide an
+     * unanswered question, use it.
+     */
+
+    try {
+
+        const result =
+            await client.rpc(
+                "get_random_trivia_question",
+                {
+                    p_user_id:
+                        user.id
+                }
+            );
+
+        if (
+            !result.error &&
+            result.data
+        ) {
+
+            const question =
+                Array.isArray(
+                    result.data
+                )
+                    ? result.data[0]
+                    : result.data;
+
+            if (question) {
+
+                triviaState.question =
+                    question;
+
+                triviaState.answered =
+                    false;
+
+                return question;
+            }
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Trivia RPC failed; using local cycling:",
+            error
+        );
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * FALLBACK: LOAD APPROVED QUESTIONS
+     * ----------------------------------------------------------
+     */
+
+    try {
+
+        const result =
+            await client
+                .from(TRIVIA_TABLE)
+                .select("*")
+                .eq(
+                    "approved",
+                    true
+                )
+                .limit(500);
+
+        if (result.error) {
+            throw result.error;
+        }
+
+         =
+            (result.data || [])
+                .filter(function (item) {
+
+                    return (
+                        item &&
+                        item.id
+                    );
+
+                });
+
+        /*
+         * There are genuinely no questions in the database.
+         */
+        if (!questions.length) {
+
+            notify(
+                "No Bible trivia questions are currently available.",
+                "info"
+            );
+
+            return null;
+        }
+
+
+        /*
+         * ------------------------------------------------------
+         * READ CURRENT LOCAL CYCLE
+         * ------------------------------------------------------
+         */
+
+        let completed =
+            getTriviaCycle(
+                user.id
+            );
+
+
+        /*
+         * Remove IDs belonging to questions that no longer
+         * exist in the database.
+         */
+
+        const availableIds =
+            new Set(
+                questions.map(
+                    function (item) {
+                        return String(
+                            item.id
+                        );
+                    }
+                )
+            );
+
+        completed =
+            completed.filter(
+                function (id) {
+
+                    return availableIds.has(
+                        String(id)
+                    );
+
+                }
+            );
+
+
+        /*
+         * ------------------------------------------------------
+         * FIND QUESTIONS NOT YET ANSWERED IN THIS CYCLE
+         * ------------------------------------------------------
+         */
+
+        let available =
+            questions.filter(
+                function (item) {
+
+                    return !completed.includes(
+                        String(item.id)
+                    );
+
+                }
+            );
+
+
+        /*
+         * ------------------------------------------------------
+         * CYCLE COMPLETE
+         * ------------------------------------------------------
+         *
+         * IMPORTANT:
+         *
+         * DO NOT DISPLAY:
+         *
+         * "You have completed all currently available
+         * trivia questions."
+         *
+         * Instead, automatically reset the cycle and start
+         * another randomized round.
+         */
+
+        if (!available.length) {
+
+            completed = [];
+
+            saveTriviaCycle(
+                user.id,
+                []
+            );
+
+            available =
+                questions.slice();
+        }
+
+
+        /*
+         * ------------------------------------------------------
+         * RANDOMIZE
+         * ------------------------------------------------------
+         */
+
+        available =
+            shuffleTriviaQuestions(
+                available
+            );
+
+
+        /*
+         * Select the first random question.
+         */
+
+        const question =
+            available[0];
+
+
+        triviaState.question =
+            question;
+
+        triviaState.answered =
+            false;
+
+
+        return question;
+
+
+    } catch (error) {
+
+        console.error(
+            "Trivia loading failed:",
+            error
+        );
+
+        notify(
+            "Unable to load Bible Trivia.",
+            "error"
+        );
+
+        return null;
+    }
+}
+
+
+/* ============================================================
+   MARK TRIVIA QUESTION AS SEEN
+   ============================================================ */
+
+async function markTriviaSeen(
+    questionId
+) {
+
+    if (!questionId) {
+        return;
+    }
+
+
+    /*
+     * Keep the current in-memory state for compatibility.
+     */
+
+    triviaState.seen.add(
+        questionId
+    );
+
+
+    const client =
+        db();
+
+    if (!client) {
+        return;
+    }
+
+
+    const user =
+        await currentUser();
+
+    if (!user) {
+        return;
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * PERSIST LOCALLY
+     * ----------------------------------------------------------
+     *
+     * This survives page refreshes.
+     */
+
+    try {
+
+        const completed =
+            getTriviaCycle(
+                user.id
+            );
+
+        const normalizedId =
+            String(questionId);
+
+        if (
+            !completed.includes(
+                normalizedId
+            )
+        ) {
+
+            completed.push(
+                normalizedId
+            );
+
+            saveTriviaCycle(
+                user.id,
+                completed
+            );
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to persist local trivia cycle:",
+            error
+        );
+    }
+
+
+    /*
+     * ----------------------------------------------------------
+     * ALSO PERSIST TO SUPABASE
+     * ----------------------------------------------------------
+     */
+
+    try {
+
+        const result =
+            await client.rpc(
+                "mark_trivia_question_seen",
+                {
+                    p_user_id:
+                        user.id,
+
+                    p_question_id:
+                        questionId
+                }
+            );
+
+        if (result.error) {
+
+            console.warn(
+                "Supabase trivia tracking failed:",
+                result.error
+            );
+        }
+
+    } catch (error) {
+
+        console.warn(
+            "Unable to mark trivia question seen:",
+            error
+        );
+    }
+}
+
+
+/* ============================================================
+   TRIVIA OPTIONS
+   ============================================================ */
+
+function triviaOptions(
+    question
+) {
+
+    if (
+        Array.isArray(
+            question.options
+        ) &&
+        question.options.length
+    ) {
+
+        return question.options;
+    }
+
+
+    if (
+        question.options &&
+        typeof question.options ===
+            "object"
+    ) {
+
+        return Object.values(
+            question.options
+        );
+    }
+
 
     return [
-      'admin',
-      'super_admin',
-      'superadmin'
-    ].indexOf(
-      String((p&&p.role)||'').toLowerCase()
-    )>-1;
-
-  }catch(e){
-    return false;
-  }
-}
-
-async function uid(){
-  var c=db();
-
-  try{
-    var r=await c.auth.getUser();
-    return r&&r.data&&r.data.user?r.data.user.id:null;
-  }catch(e){
-    return null;
-  }
-}
-
-function modal(id,html){
-  var old=document.getElementById(id);
-  if(old)old.remove();
-
-  var b=document.createElement('div');
-  b.id=id;
-  b.className='gc33-backdrop';
-
-  b.innerHTML='<div class="gc33-modal">'+html+'</div>';
-
-  document.body.appendChild(b);
-
-  return b;
-}
-
-function close(id){
-  var x=document.getElementById(id);
-  if(x)x.remove();
-}
-
-function style(){
-
-  if(document.getElementById('gc33-style'))return;
-
-  var s=document.createElement('style');
-  s.id='gc33-style';
-
-  s.textContent=`
-  .gc33-backdrop{
-    position:fixed;
-    inset:0;
-    z-index:1000000;
-    background:rgba(15,23,42,.72);
-    backdrop-filter:blur(9px);
-    display:flex;
-    align-items:center;
-    justify-content:center;
-    padding:14px
-  }
-
-  .gc33-modal{
-    background:#fff;
-    width:min(1050px,100%);
-    max-height:94vh;
-    overflow:auto;
-    border-radius:24px;
-    box-shadow:0 30px 90px rgba(0,0,0,.3);
-    font-family:inherit
-  }
-
-  .gc33-head{
-    display:flex;
-    justify-content:space-between;
-    gap:12px;
-    padding:20px 22px;
-    border-bottom:1px solid #e5e7eb
-  }
-
-  .gc33-head h2{
-    margin:0;
-    font-size:22px
-  }
-
-  .gc33-body{
-    padding:20px
-  }
-
-  .gc33-tabs{
-    display:flex;
-    gap:8px;
-    overflow:auto;
-    margin-bottom:18px
-  }
-
-  .gc33-tab{
-    border:0;
-    background:#eef2ff;
-    color:#3730a3;
-    padding:10px 14px;
-    border-radius:10px;
-    font-weight:800;
-    cursor:pointer;
-    white-space:nowrap
-  }
-
-  .gc33-tab.active{
-    background:#4f46e5;
-    color:#fff
-  }
-
-  .gc33-grid{
-    display:grid;
-    grid-template-columns:repeat(2,minmax(0,1fr));
-    gap:12px
-  }
-
-  .gc33-field{
-    display:flex;
-    flex-direction:column;
-    gap:6px
-  }
-
-  .gc33-field.full{
-    grid-column:1/-1
-  }
-
-  .gc33-field label{
-    font-size:12px;
-    font-weight:800;
-    color:#475569
-  }
-
-  .gc33-field input,
-  .gc33-field textarea,
-  .gc33-field select{
-    width:100%;
-    border:1px solid #dbe2ea;
-    border-radius:11px;
-    padding:11px 12px;
-    font:inherit;
-    background:#fff;
-    color:#172033;
-    box-sizing:border-box
-  }
-
-  .gc33-field textarea{
-    min-height:110px;
-    resize:vertical
-  }
-
-  .gc33-actions{
-    display:flex;
-    gap:9px;
-    flex-wrap:wrap;
-    margin-top:16px
-  }
-
-  .gc33-btn{
-    border:0;
-    border-radius:11px;
-    padding:11px 15px;
-    font-weight:800;
-    cursor:pointer
-  }
-
-  .gc33-btn:disabled{
-    opacity:.6;
-    cursor:not-allowed
-  }
-
-  .gc33-primary{
-    background:#4f46e5;
-    color:#fff
-  }
-
-  .gc33-muted{
-    background:#eef2f7;
-    color:#334155
-  }
-
-  .gc33-danger{
-    background:#dc2626;
-    color:#fff
-  }
-
-  .gc33-list{
-    display:grid;
-    gap:10px
-  }
-
-  .gc33-row{
-    border:1px solid #e5e7eb;
-    border-radius:14px;
-    padding:13px;
-    display:flex;
-    justify-content:space-between;
-    gap:12px;
-    align-items:center
-  }
-
-  .gc33-row small{
-    display:block;
-    color:#64748b;
-    margin-top:4px
-  }
-
-  .gc33-badge{
-    display:inline-block;
-    padding:4px 8px;
-    border-radius:999px;
-    background:#eef2ff;
-    color:#4f46e5;
-    font-size:10px;
-    font-weight:800
-  }
-
-  .gc33-source{
-    font-size:11px;
-    color:#64748b;
-    margin-top:12px;
-    line-height:1.5
-  }
-
-  .gc33-quiz{
-    padding:22px;
-    border-radius:20px;
-    background:linear-gradient(135deg,#4f46e5,#7c3aed);
-    color:#fff;
-    margin-top:12px
-  }
-
-  .gc33-quiz .gc33-q{
-    font-size:20px;
-    font-weight:800;
-    line-height:1.45;
-    margin:14px 0
-  }
-
-  .gc33-opts{
-    display:grid;
-    gap:9px
-  }
-
-  .gc33-opt{
-    border:1px solid rgba(255,255,255,.35);
-    background:rgba(255,255,255,.12);
-    color:#fff;
-    border-radius:12px;
-    padding:13px;
-    text-align:left;
-    cursor:pointer;
-    font:inherit
-  }
-
-  .gc33-opt:hover{
-    background:rgba(255,255,255,.2)
-  }
-
-  .gc33-opt.correct{
-    background:#059669
-  }
-
-  .gc33-opt.wrong{
-    background:#dc2626
-  }
-
-  .gc33-next{
-    margin-top:14px;
-    background:#fff;
-    color:#3730a3
-  }
-
-  .gc33-public-character{
-    margin-top:12px
-  }
-
-  .gc33-cite{
-    font-size:11px;
-    color:#64748b
-  }
-
-  .gc33-close{
-    border:0;
-    background:#eef2f7;
-    border-radius:10px;
-    width:38px;
-    height:38px;
-    cursor:pointer
-  }
-
-  .gc33-help{
-    padding:12px 14px;
-    border-radius:12px;
-    background:#f8fafc;
-    color:#475569;
-    font-size:12px;
-    line-height:1.6;
-    margin-bottom:15px
-  }
-
-  .gc33-error{
-    padding:12px;
-    border-radius:10px;
-    background:#fef2f2;
-    color:#991b1b;
-    border:1px solid #fecaca;
-    font-size:12px;
-    line-height:1.5;
-    margin-top:10px
-  }
-
-  .gc33-success{
-    padding:12px;
-    border-radius:10px;
-    background:#ecfdf5;
-    color:#065f46;
-    border:1px solid #a7f3d0;
-    font-size:12px;
-    line-height:1.5;
-    margin-top:10px
-  }
-
-  @media(max-width:700px){
-    .gc33-grid{
-      grid-template-columns:1fr
-    }
-
-    .gc33-field.full{
-      grid-column:auto
-    }
-
-    .gc33-modal{
-      border-radius:18px
-    }
-
-    .gc33-body{
-      padding:15px
-    }
-  }
-  `;
-
-  document.head.appendChild(s)
+        question.option_a,
+        question.option_b,
+        question.option_c,
+        question.option_d
+    ].filter(Boolean);
 }
 
 
-/* =========================================================
-   SECURE USER REMOVAL
-   ========================================================= */
+/* ============================================================
+   CORRECT ANSWER INDEX
+   ============================================================ */
 
-function isValidUUID(value){
-  return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
-    String(value||'').trim()
-  );
-}
+function correctTriviaIndex(
+    question,
+    options
+) {
 
-function formatSupabaseError(e){
+    if (
+        question.correct_index !==
+            undefined &&
+        question.correct_index !==
+            null
+    ) {
 
-  if(!e)return 'Unknown database error.';
-
-  var parts=[];
-
-  if(e.message)parts.push(e.message);
-  if(e.code)parts.push('Code: '+e.code);
-  if(e.details)parts.push('Details: '+e.details);
-  if(e.hint)parts.push('Hint: '+e.hint);
-
-  if(parts.length)return parts.join(' | ');
-
-  try{
-    return JSON.stringify(e);
-  }catch(x){
-    return String(e);
-  }
-}
-
-window.deleteUser=async function(userId,email){
-
-  if(!(await admin())){
-    toast('Admin access required','error');
-    return;
-  }
-
-  userId=String(userId||'').trim();
-
-  if(!userId){
-    toast('User ID missing. The account cannot be removed without a valid user ID.','error');
-    return;
-  }
-
-  if(!isValidUUID(userId)){
-    toast('Invalid user ID. Expected a valid UUID.','error');
-    return;
-  }
-
-  var c=db();
-
-  if(!c){
-    toast('Supabase client unavailable. Please refresh the application and try again.','error');
-    return;
-  }
-
-  /* Prevent an administrator from accidentally deleting themselves. */
-  try{
-    if(c.auth&&c.auth.getUser){
-
-      var currentResult=await c.auth.getUser();
-      var currentUser=currentResult&&currentResult.data
-        ?currentResult.data.user
-        :null;
-
-      if(currentUser&&String(currentUser.id)===userId){
-        toast('You cannot delete the currently signed-in administrator account from this screen.','error');
-        return;
-      }
-    }
-  }catch(selfCheckError){
-    console.warn('Unable to perform self-deletion safety check:',selfCheckError);
-  }
-
-  var displayEmail=String(email||'').trim();
-
-  var confirmationMessage=
-    'Remove this account and block its email from registering again?';
-
-  if(displayEmail){
-    confirmationMessage+=
-      '\n\nAccount: '+displayEmail;
-  }
-
-  if(!confirm(confirmationMessage))return;
-
-  var deletionButton=null;
-
-  try{
-
-    /*
-      Locate the clicked delete button when possible.
-      This prevents accidental double-click deletion.
-    */
-    var buttons=document.querySelectorAll(
-      '[data-user-id="'+CSS.escape(userId)+'"]'
-    );
-
-    if(buttons&&buttons.length){
-      deletionButton=buttons[0];
-      deletionButton.disabled=true;
-      deletionButton.dataset.gc33Deleting='true';
-    }
-
-  }catch(buttonError){
-    console.warn('Unable to lock deletion button:',buttonError);
-  }
-
-  try{
-
-    /*
-      IMPORTANT:
-      Actual deletion remains server-side through the SECURITY DEFINER
-      Supabase RPC. The browser never receives service-role credentials.
-    */
-    var r=await c.rpc(
-      'admin_remove_user',
-      {
-        target_user_id:userId
-      }
-    );
-
-    if(r&&r.error){
-      throw r.error;
-    }
-
-    /*
-      Some Supabase RPC configurations can return null data even when
-      the operation succeeds. Treat the absence of an RPC error as success.
-    */
-    toast(
-      'User removed and email added to the blocklist.',
-      'success'
-    );
-
-    /*
-      Refresh the existing moderation UI without breaking the current
-      navigation architecture.
-    */
-    if(window.gc32OpenModeration){
-
-      try{
-        await window.gc32OpenModeration();
-      }catch(refreshError){
-        console.warn(
-          'User was deleted, but moderation panel refresh failed:',
-          refreshError
+        return Number(
+            question.correct_index
         );
-      }
-
     }
 
-  }catch(e){
 
-    console.error(
-      'GraceConnect user deletion failed:',
-      e
-    );
+    if (
+        question.correct !==
+            undefined &&
+        typeof question.correct ===
+            "number"
+    ) {
 
-    var message=formatSupabaseError(e);
-
-    /*
-      Give actionable diagnostics instead of the previous generic
-      "Database function unavailable" message.
-    */
-    var lower=String(message).toLowerCase();
-
-    if(
-      lower.indexOf('function')>-1 &&
-      (
-        lower.indexOf('does not exist')>-1 ||
-        lower.indexOf('not found')>-1
-      )
-    ){
-
-      toast(
-        'User deletion failed: Supabase RPC "admin_remove_user" was not found. Create/deploy the SQL function first. '+message,
-        'error'
-      );
-
-    }else if(
-      lower.indexOf('permission')>-1 ||
-      lower.indexOf('not authorized')>-1 ||
-      lower.indexOf('rls')>-1 ||
-      lower.indexOf('forbidden')>-1
-    ){
-
-      toast(
-        'User deletion failed because Supabase denied the operation. Check the RPC SECURITY DEFINER/permissions and admin authorization. '+message,
-        'error'
-      );
-
-    }else if(
-      lower.indexOf('foreign key')>-1 ||
-      lower.indexOf('violates')>-1 ||
-      lower.indexOf('constraint')>-1
-    ){
-
-      toast(
-        'User deletion failed because related database records are preventing deletion. Check the foreign-key relationships for this user. '+message,
-        'error'
-      );
-
-    }else{
-
-      toast(
-        'User deletion failed: '+message,
-        'error'
-      );
+        return Number(
+            question.correct
+        );
     }
 
-  }finally{
 
-    if(deletionButton){
-      deletionButton.disabled=false;
-      delete deletionButton.dataset.gc33Deleting;
+    if (
+        question.correct &&
+        typeof question.correct ===
+            "string"
+    ) {
+
+        return options.indexOf(
+            question.correct
+        );
     }
 
-  }
-};
 
-
-/* =========================================================
-   TRIVIA
-   ========================================================= */
-
-var triviaState={
-  q:null,
-  answered:false,
-  seen:new Set()
-};
-
-
-/* ---------- trivia validation ---------- */
-
-function normalizeDifficulty(value){
-
-  var d=String(value==null?'NORMAL':value)
-    .trim()
-    .toUpperCase();
-
-  if(d==='EASY')return 'EASY';
-  if(d==='HARD')return 'HARD';
-
-  return 'NORMAL';
-}
-
-function cleanTriviaOptions(value){
-
-  var options=[];
-
-  if(Array.isArray(value)){
-    options=value;
-  }else if(value&&typeof value==='object'){
-    options=Object.values(value);
-  }
-
-  return options
-    .map(function(x){
-      return String(x==null?'':x).trim();
-    })
-    .filter(Boolean);
-}
-
-function getCorrectIndex(raw,options){
-
-  /*
-    Preferred format:
-      correct_index: 0
-
-    Compatibility:
-      correct: 0
-      correct: "Answer text"
-      correct_answer: "Answer text"
-    */
-
-  var candidate;
-
-  if(
-    raw.correct_index!==undefined &&
-    raw.correct_index!==null &&
-    String(raw.correct_index).trim()!==''
-  ){
-    candidate=raw.correct_index;
-  }else if(
-    raw.correct!==undefined &&
-    raw.correct!==null &&
-    String(raw.correct).trim()!==''
-  ){
-    candidate=raw.correct;
-  }else if(
-    raw.correct_answer!==undefined &&
-    raw.correct_answer!==null &&
-    String(raw.correct_answer).trim()!==''
-  ){
-    candidate=raw.correct_answer;
-  }else{
-    return {
-      index:null,
-      error:'Missing correct_index/correct/correct_answer.'
-    };
-  }
-
-  /*
-    Numeric correct answer.
-  */
-  if(
-    typeof candidate==='number' ||
-    (
-      typeof candidate==='string' &&
-      /^-?\d+$/.test(candidate.trim())
-    )
-  ){
-
-    var n=Number(candidate);
-
-    if(
-      !Number.isInteger(n) ||
-      n<0 ||
-      n>=options.length
-    ){
-      return {
-        index:null,
-        error:
-          'correct_index must be an integer between 0 and '+
-          (options.length-1)+'.'
-      };
-    }
-
-    return {
-      index:n,
-      error:null
-    };
-  }
-
-  /*
-    Textual correct answer.
-  */
-  var answer=String(candidate).trim().toLowerCase();
-
-  var found=-1;
-
-  for(var i=0;i<options.length;i++){
-
-    if(
-      String(options[i]).trim().toLowerCase()===answer
-    ){
-      found=i;
-      break;
-    }
-
-  }
-
-  if(found===-1){
-
-    return {
-      index:null,
-      error:
-        'The correct answer "'+
-        String(candidate)+
-        '" does not exactly match any option.'
-    };
-  }
-
-  return {
-    index:found,
-    error:null
-  };
-}
-
-function normalizeSourceURL(value){
-
-  var url=String(value==null?'').trim();
-
-  if(!url)return '';
-
-  try{
-
-    var parsed=new URL(url);
-
-    if(
-      parsed.protocol!=='http:' &&
-      parsed.protocol!=='https:'
-    ){
-      return null;
-    }
-
-    return parsed.toString();
-
-  }catch(e){
-    return null;
-  }
-}
-
-function validateTriviaObject(raw,index){
-
-  if(!raw||typeof raw!=='object'||Array.isArray(raw)){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+' must be a JSON object.'
-    };
-  }
-
-  var question=String(raw.question||'').trim();
-
-  if(!question){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+' is missing "question".'
-    };
-  }
-
-  if(question.length<5){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+' is too short.'
-    };
-  }
-
-  var options=cleanTriviaOptions(raw.options);
-
-  /*
-    Support the legacy option_a/b/c/d format without removing it.
-  */
-  if(options.length===0){
-
-    options=[
-      raw.option_a,
-      raw.option_b,
-      raw.option_c,
-      raw.option_d
-    ]
-    .map(function(x){
-      return String(x==null?'':x).trim();
-    })
-    .filter(Boolean);
-  }
-
-  if(options.length<2){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+
-        ' must contain at least 2 options.'
-    };
-  }
-
-  if(options.length>6){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+
-        ' contains '+options.length+
-        ' options. Maximum allowed is 6.'
-    };
-  }
-
-  /*
-    Duplicate option protection.
-  */
-  var optionKeys=options.map(function(x){
-    return x.toLowerCase();
-  });
-
-  if(new Set(optionKeys).size!==optionKeys.length){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+
-        ' contains duplicate answer options.'
-    };
-  }
-
-  var correct=getCorrectIndex(raw,options);
-
-  if(correct.error){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+': '+correct.error
-    };
-  }
-
-  var difficulty=normalizeDifficulty(raw.difficulty);
-
-  /*
-    Explicitly reject invalid difficulty values rather than silently
-    accepting arbitrary database values.
-  */
-  if(
-    raw.difficulty!==undefined &&
-    raw.difficulty!==null &&
-    String(raw.difficulty).trim()!==''
-  ){
-
-    var suppliedDifficulty=String(raw.difficulty)
-      .trim()
-      .toUpperCase();
-
-    if(
-      ['EASY','NORMAL','HARD'].indexOf(suppliedDifficulty)===-1
-    ){
-
-      return {
-        valid:false,
-        error:
-          'Question '+(index+1)+
-          ' has invalid difficulty "'+
-          String(raw.difficulty)+
-          '". Use EASY, NORMAL or HARD.'
-      };
-    }
-  }
-
-  var sourceURL=normalizeSourceURL(raw.source_url);
-
-  if(sourceURL===null){
-
-    return {
-      valid:false,
-      error:
-        'Question '+(index+1)+
-        ' has an invalid source_url. Use HTTP or HTTPS.'
-    };
-  }
-
-  var category=String(
-    raw.category==null?'Scripture':raw.category
-  ).trim()||'Scripture';
-
-  var reference=String(
-    raw.reference==null?'':raw.reference
-  ).trim();
-
-  var explanation=String(
-    raw.explanation==null?'':raw.explanation
-  ).trim();
-
-  var sourceName=String(
-    raw.source_name==null?'':raw.source_name
-  ).trim();
-
-  return {
-    valid:true,
-    row:{
-      question:question,
-      options:options,
-      correct_index:correct.index,
-      reference:reference,
-      explanation:explanation,
-      category:category,
-      difficulty:difficulty,
-      source_name:sourceName,
-      source_url:sourceURL||'',
-      approved:true
-    }
-  };
+    return 0;
 }
 
 
-/* ---------- random trivia ---------- */
+/* ============================================================
+   RENDER TRIVIA
+   ============================================================ */
 
-async function randomTrivia(){
+async function renderTrivia() {
 
-  var c=db();
+    const host =
+        document.getElementById(
+            "home-trivia"
+        );
 
-  if(!c){
-    toast('Supabase unavailable','error');
-    return null;
-  }
-
-  var u=null;
-
-  try{
-    u=(await c.auth.getUser()).data.user;
-  }catch(e){}
-
-  if(!u){
-    toast(
-      'Please sign in to use non-repeating trivia.',
-      'error'
-    );
-    return null;
-  }
-
-  var r=await c.rpc(
-    'get_random_trivia_question',
-    {
-      p_user_id:u.id
-    }
-  );
-
-  if(r.error){
-
-    console.warn(
-      'get_random_trivia_question RPC failed. Using client fallback:',
-      r.error
-    );
-
-    var q=await c
-      .from(TRIVIA_TABLE)
-      .select('*')
-      .eq('approved',true)
-      .limit(100);
-
-    if(q.error)throw q.error;
-
-    var pool=(q.data||[])
-      .filter(function(x){
-        return !triviaState.seen.has(x.id);
-      });
-
-    if(!pool.length){
-
-      toast(
-        'You have completed all currently available trivia questions. Add more questions from Admin Content.',
-        'info'
-      );
-
-      return null;
+    if (!host) {
+        return;
     }
 
-    r={
-      data:pool[
-        Math.floor(
-          Math.random()*pool.length
-        )
-      ]
-    };
-  }
 
-  if(!r.data){
-
-    toast(
-      'No unseen trivia questions are available yet.',
-      'info'
-    );
-
-    return null;
-  }
-
-  triviaState.q=r.data;
-  triviaState.answered=false;
-
-  return r.data;
-}
+    let root =
+        document.getElementById(
+            "gc33-trivia-root"
+        );
 
 
-/* ---------- mark question seen ---------- */
+    if (!root) {
 
-async function markSeen(id){
+        root =
+            document.createElement(
+                "div"
+            );
 
-  var c=db();
+        root.id =
+            "gc33-trivia-root";
 
-  if(!c||!id)return;
-
-  try{
-
-    var u=(await c.auth.getUser()).data.user;
-
-    if(!u)return;
-
-    var r=await c.rpc(
-      'mark_trivia_question_seen',
-      {
-        p_user_id:u.id,
-        p_question_id:id
-      }
-    );
-
-    if(r&&r.error){
-      console.warn(
-        'Unable to permanently record trivia history:',
-        r.error
-      );
-    }else{
-      triviaState.seen.add(id);
+        host.appendChild(
+            root
+        );
     }
 
-  }catch(e){
-    console.warn(
-      'Unable to mark trivia question as seen:',
-      e
-    );
-  }
-}
+
+    root.innerHTML =
+        '<div class="section-title-app">' +
+        "🧠 Bible Trivia" +
+        "</div>" +
+
+        '<div class="gc33-help">' +
+        "Every question is selected randomly from " +
+        "the approved Bible-question library. " +
+        "Questions you answer are remembered for " +
+        "the current cycle, including after refresh." +
+        "</div>" +
+
+        '<div class="gc33-quiz">' +
+        "Loading a fresh Scripture question…" +
+        "</div>";
 
 
-/* ---------- options normalization ---------- */
-
-function normalizeOptions(q){
-
-  if(Array.isArray(q.options)){
-    return q.options;
-  }
-
-  if(q.options&&typeof q.options==='object'){
-    return Object.values(q.options);
-  }
-
-  return [
-    q.option_a,
-    q.option_b,
-    q.option_c,
-    q.option_d
-  ].filter(Boolean);
-}
+    const question =
+        await getRandomTriviaQuestion();
 
 
-/* ---------- trivia renderer ---------- */
+    if (!question) {
 
-async function renderTrivia(){
+        const quiz =
+            root.querySelector(
+                ".gc33-quiz"
+            );
 
-  var host=document.getElementById('home-trivia');
+        if (quiz) {
 
-  if(!host)return;
-
-  var back=host.querySelector('.back-btn');
-
-  host.innerHTML='';
-
-  if(back)host.appendChild(back);
-
-  var box=document.createElement('div');
-
-  box.id='gc33-trivia-root';
-
-  host.appendChild(box);
-
-  box.innerHTML=
-    '<div class="section-title-app">🧠 Bible Trivia</div>'+
-    '<div class="gc33-help">'+
-    'Every question is selected randomly from the approved library '+
-    'and permanently recorded for your account so the same question '+
-    'is not served twice.'+
-    '</div>'+
-    '<div class="gc33-quiz">'+
-    'Loading a fresh Scripture question…'+
-    '</div>';
-
-  var q=await randomTrivia();
-
-  if(!q){
-
-    var empty=box.querySelector('.gc33-quiz');
-
-    if(empty){
-      empty.innerHTML='No unseen question is available.';
-    }
-
-    return;
-  }
-
-  drawQuestion(box,q);
-}
-
-
-/* ---------- draw trivia question ---------- */
-
-function drawQuestion(box,q){
-
-  var opts=normalizeOptions(q);
-
-  var correct=Number(
-    q.correct_index!=null
-      ?q.correct_index
-      :q.correct
-  );
-
-  if(
-    correct>=opts.length &&
-    typeof q.correct==='string'
-  ){
-    correct=opts.indexOf(q.correct);
-  }
-
-  /*
-    Defensive validation for questions already stored in Supabase.
-  */
-  if(
-    !Number.isInteger(correct) ||
-    correct<0 ||
-    correct>=opts.length
-  ){
-
-    box.querySelector('.gc33-quiz').innerHTML=
-      '<div class="gc33-error">'+
-      'This trivia question contains an invalid correct-answer configuration. '+
-      'Please ask an administrator to edit the question.'+
-      '</div>';
-
-    return;
-  }
-
-  box.querySelector('.gc33-quiz').innerHTML=
-
-    '<div style="font-size:11px;font-weight:800;opacity:.8">'+
-    esc(q.category||'SCRIPTURE')+
-    ' · '+
-    esc(q.difficulty||'NORMAL')+
-    '</div>'+
-
-    '<div class="gc33-q">'+
-    esc(q.question)+
-    '</div>'+
-
-    '<div class="gc33-opts">'+
-
-    opts.map(function(o,i){
-
-      return '<button class="gc33-opt" data-i="'+i+'">'+
-        esc(o)+
-        '</button>';
-
-    }).join("")+
-
-    '</div>'+
-
-    '<div id="gc33-feedback"></div>'+
-
-    (
-      q.reference
-      ?
-      '<div style="margin-top:12px;font-size:11px;opacity:.8">'+
-      'Reference: '+
-      esc(q.reference)+
-      '</div>'
-      :''
-    );
-
-  Array.from(
-    box.querySelectorAll('.gc33-opt')
-  ).forEach(function(b){
-
-    b.onclick=async function(){
-
-      if(triviaState.answered)return;
-
-      triviaState.answered=true;
-
-      var i=Number(b.dataset.i);
-
-      Array.from(
-        box.querySelectorAll('.gc33-opt')
-      ).forEach(function(x,j){
-
-        x.disabled=true;
-
-        if(j===correct){
-          x.classList.add('correct');
+            quiz.innerHTML =
+                "No Bible trivia question is currently available.";
         }
 
-      });
+        return;
+    }
 
-      if(i!==correct){
-        b.classList.add('wrong');
-      }
 
-      var f=box.querySelector('#gc33-feedback');
-
-      f.innerHTML=
-        '<div style="margin-top:13px;line-height:1.6">'+
-        (
-          i===correct
-          ?'✓ Correct!'
-          :'✗ Not quite.'
-        )+
-        (
-          q.explanation
-          ?'<br>'+esc(q.explanation)
-          :''
-        )+
-        '</div>'+
-        '<button class="gc33-btn gc33-next" id="gc33-next">'+
-        'Next Question'+
-        '</button>';
-
-      await markSeen(q.id);
-
-      var next=document.getElementById('gc33-next');
-
-      if(next){
-        next.onclick=renderTrivia;
-      }
-
-    };
-
-  });
+    drawTriviaQuestion(
+        root,
+        question
+    );
 }
 
 
-/* =========================================================
-   CHARACTERS: THEOGRAPHIC + EXISTING DICTIONARY
-   NO WIKIPEDIA
-   ========================================================= */
+/* ============================================================
+   DRAW TRIVIA QUESTION
+   ============================================================ */
 
-function existingBio(name){
+function drawTriviaQuestion(
+    root,
+    question
+) {
 
-  var b=window.CHAR_BIOS&&window.CHAR_BIOS[name];
-
-  if(b)return b;
-
-  var k=Object.keys(
-    window.CHAR_BIOS||{}
-  ).find(function(x){
-
-    return x
-      .toLowerCase()
-      .replace(/[^a-z]/g,'')===
-      name
-      .toLowerCase()
-      .replace(/[^a-z]/g,'');
-
-  });
-
-  return k?window.CHAR_BIOS[k]:null;
-}
-
-async function characterFromAPI(q){
-
-  var list=await fetch(
-    THEO_PEOPLE
-  ).then(function(r){
-
-    if(!r.ok)throw Error('people list');
-
-    return r.json();
-
-  });
-
-  var arr=list.people||[];
-
-  var term=q.toLowerCase();
-
-  var hit=
-    arr.find(function(p){
-      return String(p.name||'').toLowerCase()===term;
-    })||
-    arr.find(function(p){
-      return String(p.name||'')
-        .toLowerCase()
-        .indexOf(term)>-1;
-    });
-
-  if(!hit)throw Error('Character not found');
-
-  return fetch(
-    'https://bible.helloao.org'+
-    hit.thisPersonApiLink
-  )
-  .then(function(r){
-    return r.json();
-  })
-  .then(function(x){
-    return x.person||x;
-  });
-}
-
-function refText(refs){
-
-  return (refs||[])
-    .slice(0,20)
-    .map(function(r){
-
-      return r.book+
-        ' '+
-        r.chapter+
-        ':'+
-        r.verse+
-        (
-          r.endVerse
-          ?'-'+r.endVerse
-          :''
+    const options =
+        triviaOptions(
+            question
         );
 
-    })
-    .join(', ');
-}
 
-async function loadCharacter33(){
+    const correctIndex =
+        correctTriviaIndex(
+            question,
+            options
+        );
 
-  var input=
-    (document.getElementById('charSearch')||{}).value||'';
 
-  input=input.trim();
+    const quiz =
+        root.querySelector(
+            ".gc33-quiz"
+        );
 
-  if(!input)return;
 
-  var out=document.getElementById('charOut');
-
-  if(!out)return;
-
-  out.innerHTML=
-    '<div style="color:#94A3B8">'+
-    'Searching Scripture-based character data…'+
-    '</div>';
-
-  try{
-
-    var c=db(),
-        custom=null;
-
-    if(c){
-
-      var rr=await c
-        .from(CHAR_TABLE)
-        .select('*')
-        .ilike('name','%'+input+'%')
-        .eq('active',true)
-        .limit(1);
-
-      if(
-        !rr.error&&
-        rr.data&&
-        rr.data[0]
-      ){
-        custom=rr.data[0];
-      }
+    if (!quiz) {
+        return;
     }
 
-    var p=null;
-
-    try{
-      p=await characterFromAPI(input);
-    }catch(e){}
-
-    var old=existingBio(input);
-
-    if(!p&&!custom&&!old){
-
-      out.innerHTML=
-        '<div>'+
-        'Character not found in the current biblical-person datasets.'+
-        '</div>';
-
-      return;
-    }
-
-    var name=
-      (custom&&custom.name)||
-      (p&&p.name)||
-      input;
-
-    var story=
-      (custom&&custom.life_story)||
-      (old&&old.story)||
-      (
-        p&&
-        Array.isArray(p.description)
-        ?p.description.join(' ')
-        :(p&&p.description)||''
-      );
-
-    var faith=
-      (custom&&custom.faith)||
-      (old&&old.faith)||
-      'Study the person’s recorded response to God in the cited passages; distinguish explicit Scripture from later tradition.';
-
-    var virtues=
-      (custom&&custom.virtues)||
-      (old&&old.virtues)||
-      'Faithfulness, obedience, courage and perseverance where supported by Scripture.';
-
-    var trials=
-      (custom&&custom.trials)||
-      (old&&old.went)||
-      '';
-
-    var lessons=
-      (custom&&custom.lessons)||
-      (old&&old.today)||
-      'Read the cited passages in context and apply only what Scripture actually teaches.';
-
-    var refs=
-      (custom&&custom.scripture_refs)||
-      refText(p&&p.references);
-
-    out.innerHTML=
-
-      '<div class="gc33-public-character">'+
-
-      '<div style="font-size:22px;font-weight:850;margin-bottom:8px">'+
-      esc(name)+
-      '</div>'+
-
-      '<div class="card" style="padding:14px;margin-bottom:10px">'+
-      '<b>Life Story</b>'+
-      '<p style="line-height:1.7;margin-top:7px">'+
-      esc(story||'No expanded biography has been authored yet.')+
-      '</p>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px;margin-bottom:10px">'+
-      '<b>Faith & Trust in God</b>'+
-      '<p style="line-height:1.7;margin-top:7px">'+
-      esc(faith)+
-      '</p>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px;margin-bottom:10px">'+
-      '<b>Faith & Virtues — Deeper Study</b>'+
-      '<p style="line-height:1.7;margin-top:7px">'+
-      esc(virtues)+
-      '</p>'+
-      '</div>'+
-
-      (
-        trials
-        ?
-        '<div class="card" style="padding:14px;margin-bottom:10px">'+
-        '<b>Trials & Turning Points</b>'+
-        '<p style="line-height:1.7;margin-top:7px">'+
-        esc(trials)+
-        '</p>'+
-        '</div>'
-        :''
-      )+
-
-      '<div class="card" style="padding:14px;margin-bottom:10px">'+
-      '<b>What We Can Learn</b>'+
-      '<p style="line-height:1.7;margin-top:7px">'+
-      esc(lessons)+
-      '</p>'+
-      '</div>'+
-
-      '<div class="card" style="padding:14px">'+
-      '<b>Scripture References</b>'+
-      '<p style="line-height:1.7;margin-top:7px">'+
-      esc(refs||'See the cited Scripture dataset.')+
-      '</p>'+
-      '</div>'+
-
-      '<div class="gc33-cite" style="margin-top:10px">'+
-      'Primary character metadata: Theographic Bible Metadata via Free Use Bible API. '+
-      'Custom church entries override the dataset.'+
-      '</div>'+
-
-      '</div>';
-
-  }catch(e){
-
-    console.error(e);
-
-    out.innerHTML=
-      '<div>'+
-      'Unable to load character data right now.'+
-      '</div>';
-  }
-}
-
-window.loadCharacter=loadCharacter33;
-
-
-/* =========================================================
-   DEVOTIONAL
-   ========================================================= */
-
-function todayKey(){
-
-  var d=new Date();
-
-  return String(
-    d.getMonth()+1
-  ).padStart(2,'0')+
-  '-'+
-  String(
-    d.getDate()
-  ).padStart(2,'0');
-}
-
-async function getDevotional(){
-
-  var c=db(),
-      custom=null;
-
-  if(c){
-
-    try{
-
-      var r=await c
-        .from(DEVO_TABLE)
-        .select('*')
-        .eq('active',true)
-        .eq(
-          'date',
-          new Date().toISOString().slice(0,10)
-        )
-        .order(
-          'updated_at',
-          {ascending:false}
-        )
-        .limit(1);
 
-      if(
-        !r.error&&
-        r.data&&
-        r.data[0]
-      ){
-        custom=r.data[0];
-      }
-
-    }catch(e){}
-  }
-
-  if(custom){
-
-    return {
-      d:custom,
-      source:'GraceConnect custom'
-    };
-  }
+    quiz.innerHTML =
 
-  var j=await fetch(
-    DEVO_API+
-    todayKey()+
-    '.json'
-  )
-  .then(function(r){
+        '<div style="font-size:11px;font-weight:800;opacity:.8">' +
 
-    if(!r.ok)throw Error('devotional api');
+        escapeHTML(
+            question.category ||
+            "SCRIPTURE"
+        ) +
 
-    return r.json();
-
-  });
-
-  var am=
-    (j.periods||[])
-      .find(function(x){
-        return x.period==='am';
-      })||
-    j.periods&&j.periods[0];
-
-  var x=
-    am&&
-    am.languages&&
-    am.languages.en;
-
-  return {
-    d:{
-      title:
-        x&&x.theme||
-        'Today’s Devotional',
-
-      body:
-        x&&x.summary||
-        '',
-
-      verse:
-        (x&&x.verses||[])
-          .map(function(v){
-            return v.reference||v.text||'';
-          })
-          .join(' · '),
-
-      questions:
-        (x&&x.questions)||[]
-    },
-
-    source:
-      'Christ Himself — A Daily Devotional'
-  };
-}
-
-async function renderDevotional33(){
-
-  if(devoRendering)return;
-
-  var card=document.getElementById(
-    'devotionalCard'
-  );
-
-  if(!card)return;
-
-  devoRendering=true;
-
-  try{
+        " · " +
 
-    var r=await getDevotional(),
-        d=r.d;
+        escapeHTML(
+            question.difficulty ||
+            "NORMAL"
+        ) +
 
-    var t=document.getElementById('devTitle'),
-        b=document.getElementById('devBody'),
-        v=document.getElementById('devVerse');
+        "</div>" +
 
-    if(t)t.textContent=
-      d.title||
-      'Daily Devotional';
+        '<div class="gc33-question">' +
 
-    if(b)b.textContent=
-      d.body||
-      '';
+        escapeHTML(
+            question.question
+        ) +
 
-    if(v)v.textContent=
-      d.verse
-      ?'📖 '+d.verse
-      :'';
+        "</div>" +
 
-    var extra=
-      document.getElementById(
-        'gc33-devo-extra'
-      );
+        '<div class="gc33-options">' +
 
-    if(!extra){
+        options
+            .map(
+                function (
+                    option,
+                    index
+                ) {
 
-      extra=document.createElement('div');
+                    return (
 
-      extra.id='gc33-devo-extra';
+                        '<button class="gc33-option" ' +
 
-      card.appendChild(extra);
-    }
+                        'data-index="' +
+                        index +
+                        '">' +
 
-    extra.innerHTML=
+                        escapeHTML(
+                            option
+                        ) +
 
-      (
-        d.prayer
-        ?
-        '<div style="margin-top:12px">'+
-        '<b>Prayer</b>'+
-        '<div style="margin-top:5px;line-height:1.6">'+
-        esc(d.prayer)+
-        '</div>'+
-        '</div>'
-        :''
-      )+
+                        "</button>"
+                    );
+                }
+            )
+            .join("") +
 
-      (
-        d.questions&&
-        d.questions.length
-        ?
-        '<div style="margin-top:12px">'+
-        '<b>Reflect</b>'+
-        '<ol style="margin:7px 0 0 18px;line-height:1.7">'+
-        d.questions
-          .map(function(q){
-            return '<li>'+esc(q)+'</li>';
-          })
-          .join("")+
-        '</ol>'+
-        '</div>'
-        :''
-      )+
+        "</div>" +
 
-      '<div class="gc33-cite" style="margin-top:12px">'+
-      'Source: '+
-      esc(r.source)+
-      '. Third-party devotional text is displayed under its published API terms; '+
-      'custom GraceConnect content takes precedence.'+
-      '</div>';
+        '<div id="gc33-trivia-feedback"></div>' +
 
-  }catch(e){
+        (
+            question.reference
+                ? (
 
-    console.warn(e);
+                    '<div style="margin-top:12px;font-size:11px;opacity:.8">' +
 
-  }finally{
+                    "📖 Reference: " +
 
-    devoRendering=false;
-  }
-}
+                    escapeHTML(
+                        question.reference
+                    ) +
 
+                    "</div>"
+                )
+                : ""
+        );
 
-/* =========================================================
-   ADMIN CONTENT MANAGER
-   ========================================================= */
-
-var managerState={
-  tab:'trivia'
-};
-
-var devoRendering=false;
-var lastTriviaVisible=false;
-
-
-/* ---------- manager ---------- */
-
-function openManager(){
-
-  return admin().then(function(ok){
-
-    if(!ok){
-
-      toast(
-        'Admin access required',
-        'error'
-      );
-
-      return;
-    }
-
-    style();
-
-    var b=modal(
-      'gc33-manager',
-
-      '<div class="gc33-head">'+
-
-      '<h2>✝ Bible Content Manager</h2>'+
-
-      '<button class="gc33-close" onclick="gc33CloseManager()">×</button>'+
-
-      '</div>'+
-
-      '<div class="gc33-body">'+
-
-      '<div class="gc33-tabs">'+
-
-      '<button class="gc33-tab active" data-tab="trivia">'+
-      'Trivia'+
-      '</button>'+
-
-      '<button class="gc33-tab" data-tab="characters">'+
-      'Bible Characters'+
-      '</button>'+
-
-      '<button class="gc33-tab" data-tab="devotionals">'+
-      'Devotionals'+
-      '</button>'+
-
-      '</div>'+
-
-      '<div id="gc33-manager-content"></div>'+
-
-      '</div>'
-    );
 
     Array.from(
-      b.querySelectorAll('.gc33-tab')
-    ).forEach(function(x){
+        quiz.querySelectorAll(
+            ".gc33-option"
+        )
+    ).forEach(
+        function (button) {
 
-      x.onclick=function(){
+            button.addEventListener(
+                "click",
+                async function () {
 
-        Array.from(
-          b.querySelectorAll('.gc33-tab')
-        ).forEach(function(y){
-          y.classList.remove('active');
-        });
-
-        x.classList.add('active');
+                    if (
+                        triviaState.answered
+                    ) {
+                        return;
+                    }
 
-        managerState.tab=x.dataset.tab;
-
-        renderManager();
-      };
-
-    });
-
-    renderManager();
-
-  });
-}
-
-window.gc33CloseManager=function(){
-  close('gc33-manager');
-};
-
-async function renderManager(){
-
-  var h=document.getElementById(
-    'gc33-manager-content'
-  );
-
-  if(!h)return;
-
-  if(managerState.tab==='trivia'){
-    return renderTriviaAdmin(h);
-  }
-
-  if(managerState.tab==='characters'){
-    return renderCharAdmin(h);
-  }
-
-  return renderDevoAdmin(h);
-}
-
-
-/* =========================================================
-   EDITOR FIELDS
-   ========================================================= */
-
-function editorFields(type,item){
-
-  item=item||{};
-
-  if(type==='trivia'){
-
-    return '<div class="gc33-grid">'+
-
-      '<div class="gc33-field full">'+
-      '<label>Question</label>'+
-      '<textarea id="e-question">'+
-      esc(item.question||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Options — one per line</label>'+
-      '<textarea id="e-options">'+
-      esc(
-        (
-          Array.isArray(item.options)
-          ?item.options
-          :[]
-        ).join('\n')
-      )+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Correct option index (0-5)</label>'+
-      '<input id="e-correct" type="number" min="0" max="5" value="'+
-      esc(
-        item.correct_index==null
-        ?0
-        :item.correct_index
-      )+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Category</label>'+
-      '<input id="e-category" value="'+
-      esc(item.category||'Scripture')+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Difficulty</label>'+
-      '<select id="e-difficulty">'+
-
-      '<option '+
-      (
-        item.difficulty==='EASY'
-        ?'selected'
-        :''
-      )+
-      '>EASY</option>'+
-
-      '<option '+
-      (
-        item.difficulty==='NORMAL'||
-        !item.difficulty
-        ?'selected'
-        :''
-      )+
-      '>NORMAL</option>'+
-
-      '<option '+
-      (
-        item.difficulty==='HARD'
-        ?'selected'
-        :''
-      )+
-      '>HARD</option>'+
-
-      '</select>'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Bible reference</label>'+
-      '<input id="e-reference" value="'+
-      esc(item.reference||'')+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Explanation</label>'+
-      '<textarea id="e-explanation">'+
-      esc(item.explanation||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Source name</label>'+
-      '<input id="e-source" value="'+
-      esc(item.source_name||'')+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Source URL</label>'+
-      '<input id="e-sourceurl" value="'+
-      esc(item.source_url||'')+
-      '">'+
-      '</div>'+
-
-      '</div>';
-  }
-
-  if(type==='characters'){
-
-    return '<div class="gc33-grid">'+
-
-      '<div class="gc33-field">'+
-      '<label>Name</label>'+
-      '<input id="e-name" value="'+
-      esc(item.name||'')+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Aliases (comma separated)</label>'+
-      '<input id="e-aliases" value="'+
-      esc(
-        (item.aliases||[]).join(', ')
-      )+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Life story</label>'+
-      '<textarea id="e-life">'+
-      esc(item.life_story||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Faith & trust in God — detailed</label>'+
-      '<textarea id="e-faith">'+
-      esc(item.faith||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Faith & virtues — detailed</label>'+
-      '<textarea id="e-virtues">'+
-      esc(item.virtues||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Trials / turning points</label>'+
-      '<textarea id="e-trials">'+
-      esc(item.trials||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Lessons / application</label>'+
-      '<textarea id="e-lessons">'+
-      esc(item.lessons||'')+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field full">'+
-      '<label>Scripture references</label>'+
-      '<textarea id="e-refs">'+
-      esc(
-        (item.scripture_refs||[]).join(', ')
-      )+
-      '</textarea>'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Source name</label>'+
-      '<input id="e-source" value="'+
-      esc(item.source_name||'')+
-      '">'+
-      '</div>'+
-
-      '<div class="gc33-field">'+
-      '<label>Source URL</label>'+
-      '<input id="e-sourceurl" value="'+
-      esc(item.source_url||'')+
-      '">'+
-      '</div>'+
-
-      '</div>';
-  }
-
-  return '<div class="gc33-grid">'+
-
-    '<div class="gc33-field">'+
-    '<label>Date</label>'+
-    '<input id="e-date" type="date" value="'+
-    esc(
-      item.date||
-      new Date().toISOString().slice(0,10)
-    )+
-    '">'+
-    '</div>'+
-
-    '<div class="gc33-field">'+
-    '<label>Title</label>'+
-    '<input id="e-title" value="'+
-    esc(item.title||'')+
-    '">'+
-    '</div>'+
-
-    '<div class="gc33-field full">'+
-    '<label>Theme / Scripture</label>'+
-    '<input id="e-theme" value="'+
-    esc(item.theme||'')+
-    '">'+
-    '</div>'+
-
-    '<div class="gc33-field full">'+
-    '<label>Reflection / body</label>'+
-    '<textarea id="e-body">'+
-    esc(
-      item.body||
-      item.reflection||
-      ''
-    )+
-    '</textarea>'+
-    '</div>'+
-
-    '<div class="gc33-field full">'+
-    '<label>Prayer</label>'+
-    '<textarea id="e-prayer">'+
-    esc(item.prayer||'')+
-    '</textarea>'+
-    '</div>'+
-
-    '<div class="gc33-field full">'+
-    '<label>Reflection questions — one per line</label>'+
-    '<textarea id="e-questions">'+
-    esc(
-      (item.questions||[]).join('\n')
-    )+
-    '</textarea>'+
-    '</div>'+
-
-    '<div class="gc33-field">'+
-    '<label>Source name</label>'+
-    '<input id="e-source" value="'+
-    esc(item.source_name||'GraceConnect')+
-    '">'+
-    '</div>'+
-
-    '<div class="gc33-field">'+
-    '<label>Source URL</label>'+
-    '<input id="e-sourceurl" value="'+
-    esc(item.source_url||'')+
-    '">'+
-    '</div>'+
-
-    '</div>';
-}
-
-
-/* =========================================================
-   READ EDITOR
-   ========================================================= */
-
-function readEditor(type){
-
-  if(type==='trivia'){
-
-    var raw={
-      question:
-        document.getElementById(
-          'e-question'
-        ).value,
-
-      options:
-        document.getElementById(
-          'e-options'
-        ).value
-        .split(/\n+/)
-        .map(function(x){
-          return x.trim();
-        })
-        .filter(Boolean),
-
-      correct_index:
-        document.getElementById(
-          'e-correct'
-        ).value,
-
-      category:
-        document.getElementById(
-          'e-category'
-        ).value,
-
-      difficulty:
-        document.getElementById(
-          'e-difficulty'
-        ).value,
-
-      reference:
-        document.getElementById(
-          'e-reference'
-        ).value,
-
-      explanation:
-        document.getElementById(
-          'e-explanation'
-        ).value,
-
-      source_name:
-        document.getElementById(
-          'e-source'
-        ).value,
-
-      source_url:
-        document.getElementById(
-          'e-sourceurl'
-        ).value
-    };
-
-    var result=validateTriviaObject(raw,0);
-
-    if(!result.valid){
-      throw Error(result.error);
-    }
-
-    return result.row;
-  }
-
-  if(type==='characters'){
-
-    return {
-      name:
-        document.getElementById(
-          'e-name'
-        ).value.trim(),
-
-      aliases:
-        document.getElementById(
-          'e-aliases'
-        ).value
-        .split(',')
-        .map(function(x){
-          return x.trim();
-        })
-        .filter(Boolean),
-
-      life_story:
-        document.getElementById(
-          'e-life'
-        ).value.trim(),
-
-      faith:
-        document.getElementById(
-          'e-faith'
-        ).value.trim(),
-
-      virtues:
-        document.getElementById(
-          'e-virtues'
-        ).value.trim(),
-
-      trials:
-        document.getElementById(
-          'e-trials'
-        ).value.trim(),
-
-      lessons:
-        document.getElementById(
-          'e-lessons'
-        ).value.trim(),
-
-      scripture_refs:
-        document.getElementById(
-          'e-refs'
-        ).value
-        .split(',')
-        .map(function(x){
-          return x.trim();
-        })
-        .filter(Boolean),
-
-      source_name:
-        document.getElementById(
-          'e-source'
-        ).value.trim(),
-
-      source_url:
-        document.getElementById(
-          'e-sourceurl'
-        ).value.trim(),
-
-      active:true
-    };
-  }
-
-  return {
-
-    date:
-      document.getElementById(
-        'e-date'
-      ).value,
-
-    title:
-      document.getElementById(
-        'e-title'
-      ).value.trim(),
-
-    theme:
-      document.getElementById(
-        'e-theme'
-      ).value.trim(),
-
-    body:
-      document.getElementById(
-        'e-body'
-      ).value.trim(),
-
-    prayer:
-      document.getElementById(
-        'e-prayer'
-      ).value.trim(),
-
-    questions:
-      document.getElementById(
-        'e-questions'
-      ).value
-      .split(/\n+/)
-      .map(function(x){
-        return x.trim();
-      })
-      .filter(Boolean),
-
-    source_name:
-      document.getElementById(
-        'e-source'
-      ).value.trim(),
-
-    source_url:
-      document.getElementById(
-        'e-sourceurl'
-      ).value.trim(),
-
-    active:true,
-    is_custom:true
-  };
-}
-
-
-/* =========================================================
-   SAVE ROW
-   ========================================================= */
-
-async function saveRow(table,id,type){
-
-  var c=db();
-
-  if(!c){
-    throw Error('Supabase unavailable');
-  }
-
-  var p=readEditor(type);
-
-  var u=await uid();
-
-  p.updated_by=u;
-  p.updated_at=new Date().toISOString();
-
-  if(id)p.id=id;
-
-  var r=await c
-    .from(table)
-    .upsert(p);
-
-  if(r.error){
-    throw r.error;
-  }
-
-  toast(
-    'Saved successfully',
-    'success'
-  );
-
-  renderManager();
-}
-
-
-/* =========================================================
-   EDITOR MODAL
-   ========================================================= */
-
-function editorModal(type,item){
-
-  var id=item&&item.id;
-
-  var b=modal(
-    'gc33-editor',
-
-    '<div class="gc33-head">'+
-
-    '<h2>'+
-    ({
-      trivia:'Trivia Question',
-      characters:'Bible Character',
-      devotionals:'Devotional'
-    }[type])+
-    '</h2>'+
-
-    '<button class="gc33-close" onclick="gc33CloseEditor()">×</button>'+
-
-    '</div>'+
-
-    '<div class="gc33-body">'+
-
-    editorFields(type,item)+
-
-    '<div class="gc33-actions">'+
-
-    '<button class="gc33-btn gc33-primary" id="gc33-save">'+
-    'Save'+
-    '</button>'+
-
-    '<button class="gc33-btn gc33-muted" onclick="gc33CloseEditor()">'+
-    'Cancel'+
-    '</button>'+
-
-    '</div>'+
-
-    '</div>'
-  );
-
-  b.querySelector(
-    '#gc33-save'
-  ).onclick=function(){
-
-    var button=this;
-
-    button.disabled=true;
-    button.textContent='Saving…';
-
-    saveRow(
-      type==='trivia'
-        ?TRIVIA_TABLE
-        :type==='characters'
-          ?CHAR_TABLE
-          :DEVO_TABLE,
-      id,
-      type
-    )
-    .catch(function(e){
-
-      console.error(
-        'Save failed:',
-        e
-      );
-
-      toast(
-        'Save failed: '+
-        formatSupabaseError(e),
-        'error'
-      );
-
-      button.disabled=false;
-      button.textContent='Save';
-    });
-  };
-}
-
-window.gc33CloseEditor=function(){
-  close('gc33-editor');
-};
-
-
-/* =========================================================
-   TRIVIA ADMIN
-   ========================================================= */
-
-async function renderTriviaAdmin(h){
-
-  var c=db();
-
-  if(!c){
-
-    h.innerHTML=
-      '<div class="gc33-error">'+
-      'Supabase client unavailable.'+
-      '</div>';
-
-    return;
-  }
-
-  var r=await c
-    .from(TRIVIA_TABLE)
-    .select('*')
-    .order(
-      'updated_at',
-      {ascending:false}
-    )
-    .limit(100);
-
-  var rows=(r.data||[])
-    .map(function(x){
-
-      return '<div class="gc33-row">'+
-
-        '<div>'+
-
-        '<b>'+
-        esc(x.question)+
-        '</b>'+
-
-        '<small>'+
-        esc(
-          x.reference||
-          'No reference'
-        )+
-        ' · '+
-        esc(
-          x.source_name||
-          'Unspecified source'
-        )+
-        ' · '+
-        esc(
-          x.difficulty||
-          'NORMAL'
-        )+
-        '</small>'+
-
-        '</div>'+
-
-        '<button class="gc33-btn gc33-muted" data-id="'+
-        esc(x.id)+
-        '">'+
-        'Edit'+
-        '</button>'+
-
-        '</div>';
-
-    })
-    .join("");
-
-  h.innerHTML=
-
-    '<div class="gc33-actions">'+
-
-    '<button class="gc33-btn gc33-primary" id="new">'+
-    '+ Add Question'+
-    '</button>'+
-
-    '<button class="gc33-btn gc33-muted" id="import">'+
-    'Import JSON'+
-    '</button>'+
-
-    '</div>'+
-
-    '<div class="gc33-help">'+
-    'Use only questions you have permission to use. '+
-    'Every question must have at least 2 unique options and a valid correct answer. '+
-    'A source and Bible reference are stored with every question. '+
-    'The app will never intentionally repeat a served question for the same signed-in user.'+
-    '</div>'+
-
-    '<div class="gc33-list">'+
-    (
-      rows||
-      '<div>No questions yet.</div>'
-    )+
-    '</div>'+
-
-    (
-      r.error
-      ?
-      '<div class="gc33-error">'+
-      esc(
-        formatSupabaseError(r.error)
-      )+
-      '</div>'
-      :''
+
+                    triviaState.answered =
+                        true;
+
+
+                    const selected =
+                        Number(
+                            button.dataset.index
+                        );
+
+
+                    const buttons =
+                        Array.from(
+                            quiz.querySelectorAll(
+                                ".gc33-option"
+                            )
+                        );
+
+
+                    buttons.forEach(
+                        function (
+                            item,
+                            index
+                        ) {
+
+                            item.disabled =
+                                true;
+
+
+                            if (
+                                index ===
+                                correctIndex
+                            ) {
+
+                                item.classList.add(
+                                    "correct"
+                                );
+                            }
+
+                        }
+                    );
+
+
+                    if (
+                        selected !==
+                        correctIndex
+                    ) {
+
+                        button.classList.add(
+                            "wrong"
+                        );
+                    }
+
+
+                    const feedback =
+                        quiz.querySelector(
+                            "#gc33-trivia-feedback"
+                        );
+
+
+                    if (feedback) {
+
+                        feedback.innerHTML =
+
+                            '<div style="margin-top:14px;line-height:1.65">' +
+
+                            (
+                                selected ===
+                                correctIndex
+
+                                    ? "✓ Correct!"
+
+                                    : "✗ Not quite."
+                            ) +
+
+                            (
+                                question.explanation
+                                    ? (
+
+                                        "<br><br>" +
+
+                                        escapeHTML(
+                                            question.explanation
+                                        )
+                                    )
+                                    : ""
+                            ) +
+
+                            "</div>" +
+
+                            '<button class="gc33-btn gc33-next" ' +
+
+                            'id="gc33-next-trivia">' +
+
+                            "Next Question" +
+
+                            "</button>";
+                    }
+
+
+                    /*
+                     * Record the question before allowing
+                     * the next question.
+                     */
+
+                    await markTriviaSeen(
+                        question.id
+                    );
+
+
+                    const next =
+                        document.getElementById(
+                            "gc33-next-trivia"
+                        );
+
+
+                    if (next) {
+
+                        next.onclick =
+                            function () {
+
+                                renderTrivia();
+                            };
+                    }
+                }
+            );
+        }
     );
+}
 
-  h.querySelector(
-    '#new'
-  ).onclick=function(){
-    editorModal('trivia');
-  };
 
-  h.querySelector(
-    '#import'
-  ).onclick=importTrivia;
+window.gc33RenderTrivia =
+    renderTrivia;
 
-  Array.from(
-    h.querySelectorAll('[data-id]')
-  ).forEach(function(b){
+    /* ============================================================
+       BIBLE CHARACTERS
+       ============================================================ */
 
-    b.onclick=async function(){
+    /*
+     * Existing dictionary support.
+     *
+     * This means your current character model does not have
+     * to be deleted immediately.
+     */
 
-      try{
+    function existingCharacterDictionary(
+        name
+    ) {
 
-        var result=await c
-          .from(TRIVIA_TABLE)
-          .select('*')
-          .eq(
-            'id',
-            b.dataset.id
-          )
-          .single();
+        const dictionary =
+            window.CHAR_BIOS ||
+            {};
 
-        if(result.error){
-          throw result.error;
+        if (dictionary[name]) {
+            return dictionary[name];
         }
 
-        editorModal(
-          'trivia',
-          result.data
+        const normalized =
+            String(name)
+                .toLowerCase()
+                .replace(/[^a-z0-9]/g, "");
+
+        const key =
+            Object.keys(dictionary)
+                .find(function (item) {
+
+                    return String(item)
+                        .toLowerCase()
+                        .replace(
+                            /[^a-z0-9]/g,
+                            ""
+                        ) === normalized;
+
+                });
+
+        return key
+            ? dictionary[key]
+            : null;
+    }
+
+    async function searchTheographicCharacter(
+        name
+    ) {
+
+        const response =
+            await fetch(
+                THEOGRAPHIC_PEOPLE
+            );
+
+        if (!response.ok) {
+            throw new Error(
+                "Unable to load biblical people dataset."
+            );
+        }
+
+        const data =
+            await response.json();
+
+        const people =
+            data.people ||
+            [];
+
+        const term =
+            String(name)
+                .trim()
+                .toLowerCase();
+
+        let person =
+            people.find(function (item) {
+
+                return String(
+                    item.name || ""
+                ).toLowerCase() === term;
+
+            });
+
+        if (!person) {
+
+            person =
+                people.find(function (item) {
+
+                    return String(
+                        item.name || ""
+                    )
+                    .toLowerCase()
+                    .includes(term);
+
+                });
+
+        }
+
+        if (!person) {
+            throw new Error(
+                "Bible character not found."
+            );
+        }
+
+        /*
+         * If the dataset supplies a link to the person's
+         * detailed record, retrieve it.
+         */
+
+        if (person.thisPersonApiLink) {
+
+            const detailURL =
+                person.thisPersonApiLink
+                    .startsWith("http")
+                    ? person.thisPersonApiLink
+                    : (
+                        "https://bible.helloao.org" +
+                        person.thisPersonApiLink
+                    );
+
+            const detailResponse =
+                await fetch(
+                    detailURL
+                );
+
+            if (detailResponse.ok) {
+
+                const detail =
+                    await detailResponse.json();
+
+                return (
+                    detail.person ||
+                    detail
+                );
+            }
+        }
+
+        return person;
+    }
+
+    function formatCharacterReferences(
+        references
+    ) {
+
+        if (!Array.isArray(references)) {
+            return "";
+        }
+
+        return references
+            .slice(0, 30)
+            .map(function (reference) {
+
+                if (
+                    typeof reference ===
+                    "string"
+                ) {
+                    return reference;
+                }
+
+                return (
+                    (
+                        reference.book ||
+                        ""
+                    ) +
+
+                    " " +
+
+                    (
+                        reference.chapter ||
+                        ""
+                    ) +
+
+                    ":" +
+
+                    (
+                        reference.verse ||
+                        ""
+                    )
+                );
+
+            })
+            .filter(Boolean)
+            .join(", ");
+    }
+
+    async function loadCharacter() {
+
+        const input =
+            document.getElementById(
+                "charSearch"
+            );
+
+        const output =
+            document.getElementById(
+                "charOut"
+            );
+
+        if (!input || !output) {
+            return;
+        }
+
+        const search =
+            input.value.trim();
+
+        if (!search) {
+            return;
+        }
+
+        output.innerHTML =
+            '<div style="color:#94A3B8">' +
+            "Searching Scripture-based character data…" +
+            "</div>";
+
+        try {
+
+            const client = db();
+
+            let custom =
+                null;
+
+            /*
+             * First search your own Supabase character library.
+             * Admin-created/editable content has priority.
+             */
+
+            if (client) {
+
+                const result =
+                    await client
+                        .from(
+                            CHARACTER_TABLE
+                        )
+                        .select("*")
+                        .ilike(
+                            "name",
+                            "%" +
+                            search +
+                            "%"
+                        )
+                        .eq(
+                            "active",
+                            true
+                        )
+                        .limit(1);
+
+                if (
+                    !result.error &&
+                    result.data &&
+                    result.data.length
+                ) {
+                    custom =
+                        result.data[0];
+                }
+            }
+
+            /*
+             * Then search broad Scripture-based dataset.
+             */
+
+            let theographic =
+                null;
+
+            try {
+
+                theographic =
+                    await searchTheographicCharacter(
+                        search
+                    );
+
+            } catch (error) {
+
+                console.warn(
+                    "Theographic search failed:",
+                    error
+                );
+            }
+
+            /*
+             * Existing local dictionary as final fallback.
+             */
+
+            const dictionary =
+                existingCharacterDictionary(
+                    search
+                );
+
+            if (
+                !custom &&
+                !theographic &&
+                !dictionary
+            ) {
+
+                output.innerHTML =
+                    "<div>" +
+                    "This character was not found " +
+                    "in the current biblical-person datasets." +
+                    "</div>";
+
+                return;
+            }
+
+            const name =
+                (
+                    custom &&
+                    custom.name
+                ) ||
+
+                (
+                    theographic &&
+                    theographic.name
+                ) ||
+
+                search;
+
+            const lifeStory =
+                (
+                    custom &&
+                    custom.life_story
+                ) ||
+
+                (
+                    dictionary &&
+                    (
+                        dictionary.life_story ||
+                        dictionary.story
+                    )
+                ) ||
+
+                (
+                    theographic &&
+                    (
+                        Array.isArray(
+                            theographic.description
+                        )
+                            ? theographic.description.join(
+                                " "
+                            )
+                            : theographic.description
+                    )
+                ) ||
+
+                "";
+
+            const faith =
+                (
+                    custom &&
+                    custom.faith
+                ) ||
+
+                (
+                    dictionary &&
+                    dictionary.faith
+                ) ||
+
+                "Study this person's recorded relationship with God directly from the cited Scriptures. Distinguish clearly between what Scripture explicitly states and conclusions drawn from the biblical narrative.";
+
+            const virtues =
+                (
+                    custom &&
+                    custom.virtues
+                ) ||
+
+                (
+                    dictionary &&
+                    dictionary.virtues
+                ) ||
+
+                "The character's faith, obedience, courage, repentance, perseverance, wisdom or other qualities should be evaluated from the biblical passages in which those qualities are demonstrated.";
+
+            const trials =
+                (
+                    custom &&
+                    custom.trials
+                ) ||
+
+                (
+                    dictionary &&
+                    (
+                        dictionary.trials ||
+                        dictionary.went
+                    )
+                ) ||
+
+                "";
+
+            const lessons =
+                (
+                    custom &&
+                    custom.lessons
+                ) ||
+
+                (
+                    dictionary &&
+                    (
+                        dictionary.lessons ||
+                        dictionary.today
+                    )
+                ) ||
+
+                "Read the cited passages in context and apply the lesson according to what Scripture actually teaches.";
+
+            const references =
+                (
+                    custom &&
+                    Array.isArray(
+                        custom.scripture_refs
+                    )
+                        ? custom.scripture_refs.join(
+                            ", "
+                        )
+                        : (
+                            custom &&
+                            custom.scripture_refs
+                        )
+                ) ||
+
+                formatCharacterReferences(
+                    theographic &&
+                    theographic.references
+                ) ||
+
+                "";
+
+            output.innerHTML =
+
+                '<div class="gc33-character-card">' +
+
+                "<h3>" +
+                escapeHTML(name) +
+                "</h3>" +
+
+                '<div>' +
+                "<strong>Life Story</strong>" +
+                "<p>" +
+                escapeHTML(
+                    lifeStory ||
+                    "No expanded life story has been authored yet."
+                ) +
+                "</p>" +
+                "</div>" +
+
+                "</div>" +
+
+                '<div class="gc33-character-card">' +
+
+                "<strong>Faith & Trust in God</strong>" +
+
+                "<p>" +
+                escapeHTML(
+                    faith
+                ) +
+                "</p>" +
+
+                "</div>" +
+
+                '<div class="gc33-character-card">' +
+
+                "<strong>Faith & Virtues — Deeper Study</strong>" +
+
+                "<p>" +
+                escapeHTML(
+                    virtues
+                ) +
+                "</p>" +
+
+                "</div>" +
+
+                (
+                    trials
+                        ? (
+                            '<div class="gc33-character-card">' +
+
+                            "<strong>Trials & Turning Points</strong>" +
+
+                            "<p>" +
+                            escapeHTML(
+                                trials
+                            ) +
+                            "</p>" +
+
+                            "</div>"
+                        )
+                        : ""
+                ) +
+
+                '<div class="gc33-character-card">' +
+
+                "<strong>What We Can Learn</strong>" +
+
+                "<p>" +
+                escapeHTML(
+                    lessons
+                ) +
+                "</p>" +
+
+                "</div>" +
+
+                '<div class="gc33-character-card">' +
+
+                "<strong>Scripture References</strong>" +
+
+                "<p>" +
+                escapeHTML(
+                    references ||
+                    "Use the Scripture passages associated with this character."
+                ) +
+                "</p>" +
+
+                "</div>" +
+
+                '<div class="gc33-source">' +
+
+                "Character source: Theographic Bible Metadata / " +
+                "Free Use Bible API. " +
+                "GraceConnect custom content takes precedence. " +
+                "Wikipedia is not used as the character source." +
+
+                "</div>";
+
+        } catch (error) {
+
+            console.error(
+                "Character loading error:",
+                error
+            );
+
+            output.innerHTML =
+                "<div>" +
+                "Unable to load this Bible character right now." +
+                "</div>";
+        }
+    }
+
+    window.loadCharacter =
+        loadCharacter;
+
+    window.gc33LoadCharacter =
+        loadCharacter;
+
+    /* ============================================================
+       DEVOTIONAL SYSTEM
+       ============================================================ */
+
+    function todayISO() {
+
+        const date =
+            new Date();
+
+        return date
+            .toISOString()
+            .slice(0, 10);
+    }
+
+    function monthDay() {
+
+        const date =
+            new Date();
+
+        return (
+            String(
+                date.getMonth() + 1
+            ).padStart(2, "0") +
+
+            "-" +
+
+            String(
+                date.getDate()
+            ).padStart(2, "0")
         );
-
-      }catch(e){
-
-        toast(
-          'Unable to load question: '+
-          formatSupabaseError(e),
-          'error'
-        );
-      }
-    };
-  });
-}
-
-
-/* =========================================================
-   VALIDATED TRIVIA JSON IMPORTER
-   ========================================================= */
-
-async function importTrivia(){
-
-  var b=modal(
-    'gc33-import',
-
-    '<div class="gc33-head">'+
-
-    '<h2>Import Bible Trivia JSON</h2>'+
-
-    '<button class="gc33-close" onclick="gc33CloseImport()">×</button>'+
-
-    '</div>'+
-
-    '<div class="gc33-body">'+
-
-    '<div class="gc33-help">'+
-
-    '<b>Required format</b><br>'+
-    'Paste a JSON array of question objects.<br><br>'+
-
-    '<b>Required:</b> question, options, correct_index<br>'+
-    '<b>Optional:</b> reference, explanation, category, difficulty, source_name, source_url<br>'+
-    '<b>Options:</b> 2–6 unique answers<br>'+
-    '<b>Difficulty:</b> EASY, NORMAL or HARD<br>'+
-    '<b>correct_index:</b> zero-based (0 = first option)<br><br>'+
-
-    'The importer validates every question before inserting anything. '+
-    'Invalid questions are rejected instead of silently being skipped.'+
-
-    '</div>'+
-
-    '<textarea id="gc33-json" style="width:100%;min-height:300px;border:1px solid #dbe2ea;border-radius:12px;padding:12px;font:inherit;box-sizing:border-box"></textarea>'+
-
-    '<div id="gc33-import-status"></div>'+
-
-    '<div class="gc33-actions">'+
-
-    '<button class="gc33-btn gc33-primary" id="go">'+
-    'Import'+
-    '</button>'+
-
-    '<button class="gc33-btn gc33-muted" id="validate">'+
-    'Validate Only'+
-    '</button>'+
-
-    '</div>'+
-
-    '</div>'
-  );
-
-  var textarea=b.querySelector(
-    '#gc33-json'
-  );
-
-  var status=b.querySelector(
-    '#gc33-import-status'
-  );
-
-  function setStatus(message,type){
-
-    status.innerHTML=
-      '<div class="'+
-      (
-        type==='error'
-        ?'gc33-error'
-        :'gc33-success'
-      )+
-      '">'+
-      message+
-      '</div>';
-  }
-
-  function parseAndValidate(){
-
-    var text=String(
-      textarea.value||''
-    ).trim();
-
-    if(!text){
-
-      throw Error(
-        'Paste the trivia JSON before continuing.'
-      );
     }
 
-    var arr;
+    async function getCustomDevotional() {
 
-    try{
+        const client = db();
 
-      arr=JSON.parse(text);
+        if (!client) {
+            return null;
+        }
 
-    }catch(e){
+        try {
 
-      throw Error(
-        'Invalid JSON: '+
-        e.message
-      );
+            const result =
+                await client
+                    .from(
+                        DEVOTIONAL_TABLE
+                    )
+                    .select("*")
+                    .eq(
+                        "active",
+                        true
+                    )
+                    .eq(
+                        "date",
+                        todayISO()
+                    )
+                    .order(
+                        "updated_at",
+                        {
+                            ascending: false
+                        }
+                    )
+                    .limit(1);
+
+            if (
+                result.error ||
+                !result.data ||
+                !result.data.length
+            ) {
+                return null;
+            }
+
+            return result.data[0];
+
+        } catch (error) {
+
+            console.warn(
+                "Custom devotional lookup failed:",
+                error
+            );
+
+            return null;
+        }
     }
 
-    if(!Array.isArray(arr)){
+    async function getFallbackDevotional() {
 
-      throw Error(
-        'JSON must be an array of question objects.'
-      );
-    }
+        const url =
+            DEVOTIONAL_API +
+            monthDay() +
+            ".json";
 
-    if(!arr.length){
+        const response =
+            await fetch(url);
 
-      throw Error(
-        'The JSON array is empty.'
-      );
-    }
+        if (!response.ok) {
+            throw new Error(
+                "Devotional service unavailable."
+            );
+        }
 
-    if(arr.length>10000){
+        const data =
+            await response.json();
 
-      throw Error(
-        'Maximum import size is 10,000 questions per import.'
-      );
-    }
+        const periods =
+            data.periods ||
+            [];
 
-    var rows=[];
-    var errors=[];
+        const morning =
+            periods.find(function (item) {
 
-    var duplicateQuestions=new Map();
+                return item.period === "am";
 
-    arr.forEach(function(item,index){
+            }) ||
 
-      var result=validateTriviaObject(
-        item,
-        index
-      );
+            periods[0];
 
-      if(!result.valid){
+        const english =
+            morning &&
+            morning.languages &&
+            morning.languages.en;
 
-        errors.push(
-          result.error
-        );
+        if (!english) {
 
-        return;
-      }
-
-      var key=result.row.question
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g,' ');
-
-      if(duplicateQuestions.has(key)){
-
-        errors.push(
-          'Question '+(index+1)+
-          ' duplicates question '+
-          (duplicateQuestions.get(key)+1)+
-          ' in this import.'
-        );
-
-        return;
-      }
-
-      duplicateQuestions.set(
-        key,
-        index
-      );
-
-      rows.push(
-        result.row
-      );
-    });
-
-    if(errors.length){
-
-      var display=errors
-        .slice(0,20)
-        .map(function(x){
-          return '• '+esc(x);
-        })
-        .join('<br>');
-
-      if(errors.length>20){
-        display+=
-          '<br>… and '+
-          (errors.length-20)+
-          ' more validation errors.';
-      }
-
-      throw Error(
-        'Validation failed:<br><br>'+
-        display
-      );
-    }
-
-    return rows;
-  }
-
-
-  /*
-    Validate-only button.
-  */
-  b.querySelector(
-    '#validate'
-  ).onclick=function(){
-
-    try{
-
-      var rows=parseAndValidate();
-
-      setStatus(
-        '✓ Validation successful. '+
-        rows.length+
-        ' question(s) are ready to import.',
-        'success'
-      );
-
-    }catch(e){
-
-      setStatus(
-        e.message,
-        'error'
-      );
-    }
-  };
-
-
-  /*
-    Actual import.
-  */
-  b.querySelector(
-    '#go'
-  ).onclick=async function(){
-
-    var button=this;
-
-    try{
-
-      button.disabled=true;
-      button.textContent='Validating…';
-
-      var rows=parseAndValidate();
-
-      var c=db();
-
-      if(!c){
-
-        throw Error(
-          'Supabase client unavailable.'
-        );
-      }
-
-      var u=await uid();
-
-      if(!u){
-
-        throw Error(
-          'You must be signed in as an administrator to import trivia.'
-        );
-      }
-
-      /*
-        Add audit fields without changing the user's JSON format.
-      */
-      rows=rows.map(function(row){
+            throw new Error(
+                "No English devotional found."
+            );
+        }
 
         return {
-          question:row.question,
-          options:row.options,
-          correct_index:row.correct_index,
-          reference:row.reference,
-          explanation:row.explanation,
-          category:row.category,
-          difficulty:row.difficulty,
-          source_name:row.source_name,
-          source_url:row.source_url,
-          approved:true,
-          created_by:u,
-          updated_by:u
+
+            title:
+                english.theme ||
+                "Today's Devotional",
+
+            body:
+                english.summary ||
+                english.text ||
+                "",
+
+            verse:
+                (
+                    english.verses ||
+                    []
+                )
+                .map(function (verse) {
+
+                    return (
+                        verse.reference ||
+                        verse.text ||
+                        ""
+                    );
+
+                })
+                .filter(Boolean)
+                .join(" · "),
+
+            questions:
+                english.questions ||
+                [],
+
+            prayer:
+                english.prayer ||
+                ""
+
         };
+    }
 
-      });
+    async function getDevotional() {
 
-      var total=rows.length;
+        /*
+         * ADMIN CUSTOM CONTENT FIRST
+         */
 
-      var imported=0;
+        const custom =
+            await getCustomDevotional();
 
-      for(
-        var i=0;
-        i<rows.length;
-        i+=500
-      ){
+        if (custom) {
 
-        var batch=rows.slice(
-          i,
-          i+500
-        );
+            return {
 
-        button.textContent=
-          'Importing '+
-          imported+
-          '/'+
-          total+
-          '…';
+                data: custom,
 
-        var rr=await c
-          .from(TRIVIA_TABLE)
-          .insert(batch);
+                source:
+                    custom.source_name ||
+                    "GraceConnect custom devotional"
 
-        if(rr.error){
-
-          throw rr.error;
+            };
         }
 
-        imported+=batch.length;
+        /*
+         * CHRISTIAN FALLBACK
+         */
 
-        setStatus(
-          'Imported '+
-          imported+
-          ' of '+
-          total+
-          ' questions…',
-          'success'
-        );
-      }
+        try {
 
-      toast(
-        total+
-        ' questions imported successfully.',
-        'success'
-      );
+            const fallback =
+                await getFallbackDevotional();
 
-      close(
-        'gc33-import'
-      );
+            return {
 
-      renderManager();
+                data: fallback,
 
-    }catch(e){
+                source:
+                    "Christ Himself — A Daily Devotional"
 
-      console.error(
-        'Trivia import failed:',
-        e
-      );
+            };
 
-      setStatus(
-        'Import failed:<br><br>'+
-        formatSupabaseError(e),
-        'error'
-      );
+        } catch (error) {
 
-      button.disabled=false;
-      button.textContent='Import';
+            console.warn(
+                "Devotional fallback failed:",
+                error
+            );
+
+            /*
+             * Final local fallback.
+             */
+
+            return {
+
+                data: {
+
+                    title:
+                        "Walking in Faith",
+
+                    body:
+                        "Faith calls us to trust God even when we cannot see the entire path ahead. Read the Word, pray faithfully and walk according to what God has revealed.",
+
+                    verse:
+                        "2 Corinthians 5:7",
+
+                    prayer:
+                        "Lord, strengthen my faith and help me trust You in every circumstance.",
+
+                    questions: [
+                        "Where is God asking me to trust Him today?",
+                        "What Scripture can I hold onto in this season?"
+                    ]
+
+                },
+
+                source:
+                    "GraceConnect fallback"
+
+            };
+        }
     }
-  };
-}
 
-window.gc33CloseImport=function(){
-  close('gc33-import');
-};
+    async function renderDevotional() {
 
+        if (devotionalRendering) {
+            return;
+        }
 
-/* =========================================================
-   CHARACTER ADMIN
-   ========================================================= */
+        const card =
+            document.getElementById(
+                "devotionalCard"
+            );
 
-async function renderCharAdmin(h){
+        if (!card) {
+            return;
+        }
 
-  var c=db();
+        devotionalRendering =
+            true;
 
-  var r=await c
-    .from(CHAR_TABLE)
-    .select('*')
-    .order('name')
-    .limit(200);
+        try {
 
-  var rows=(r.data||[])
-    .map(function(x){
+            const result =
+                await getDevotional();
 
-      return '<div class="gc33-row">'+
+            const devotional =
+                result.data;
 
-        '<div>'+
+            const title =
+                document.getElementById(
+                    "devTitle"
+                );
 
-        '<b>'+
-        esc(x.name)+
-        '</b>'+
+            const body =
+                document.getElementById(
+                    "devBody"
+                );
 
-        '<small>'+
-        esc(
-          x.source_name||
-          'Custom'
-        )+
-        '</small>'+
+            const verse =
+                document.getElementById(
+                    "devVerse"
+                );
 
-        '</div>'+
+            if (title) {
+                title.textContent =
+                    devotional.title ||
+                    "Daily Devotional";
+            }
 
-        '<button class="gc33-btn gc33-muted" data-id="'+
-        esc(x.id)+
-        '">'+
-        'Edit'+
-        '</button>'+
+            if (body) {
+                body.textContent =
+                    devotional.body ||
+                    devotional.reflection ||
+                    "";
+            }
 
-        '</div>';
+            if (verse) {
+                verse.textContent =
+                    devotional.verse
+                        ? "📖 " +
+                          devotional.verse
+                        : "";
+            }
 
-    })
-    .join("");
+            let extra =
+                document.getElementById(
+                    "gc33-devotional-extra"
+                );
 
-  h.innerHTML=
+            if (!extra) {
 
-    '<div class="gc33-actions">'+
+                extra =
+                    document.createElement(
+                        "div"
+                    );
 
-    '<button class="gc33-btn gc33-primary" id="new">'+
-    '+ Add Character'+
-    '</button>'+
+                extra.id =
+                    "gc33-devotional-extra";
 
-    '<button class="gc33-btn gc33-muted" id="sync">'+
-    'Import Theographic People'+
-    '</button>'+
+                card.appendChild(extra);
+            }
 
-    '</div>'+
+            extra.innerHTML =
 
-    '<div class="gc33-help">'+
-    'The Theographic Bible Metadata dataset currently exposes 3,067 people through Free Use Bible API. '+
-    'Custom GraceConnect fields let you deepen faith, virtues and life stories without replacing the underlying Scripture references.'+
-    '</div>'+
+                (
+                    devotional.prayer
+                        ? (
+                            '<div style="margin-top:14px">' +
+                            "<strong>Prayer</strong>" +
 
-    '<div class="gc33-list">'+
-    (
-      rows||
-      '<div>No imported/custom characters yet. Public search still uses Theographic live data.</div>'
-    )+
-    '</div>';
+                            '<div style="margin-top:6px;line-height:1.7">' +
+                            escapeHTML(
+                                devotional.prayer
+                            ) +
+                            "</div>" +
 
-  h.querySelector(
-    '#new'
-  ).onclick=function(){
-    editorModal('characters');
-  };
+                            "</div>"
+                        )
+                        : ""
+                ) +
 
-  h.querySelector(
-    '#sync'
-  ).onclick=syncTheographic;
+                (
+                    Array.isArray(
+                        devotional.questions
+                    ) &&
+                    devotional.questions.length
+                        ? (
+                            '<div style="margin-top:14px">' +
 
-  Array.from(
-    h.querySelectorAll('[data-id]')
-  ).forEach(function(b){
+                            "<strong>Reflect</strong>" +
 
-    b.onclick=async function(){
+                            '<ol style="margin:7px 0 0 20px;line-height:1.7">' +
 
-      var x=(
-        await c
-          .from(CHAR_TABLE)
-          .select('*')
-          .eq(
-            'id',
-            b.dataset.id
-          )
-          .single()
-      ).data;
+                            devotional.questions
+                                .map(function (question) {
 
-      editorModal(
-        'characters',
-        x
-      );
+                                    return (
+                                        "<li>" +
+                                        escapeHTML(
+                                            question
+                                        ) +
+                                        "</li>"
+                                    );
+
+                                })
+                                .join("") +
+
+                            "</ol>" +
+
+                            "</div>"
+                        )
+                        : ""
+                ) +
+
+                '<div class="gc33-source" style="margin-top:14px">' +
+
+                "Source: " +
+                escapeHTML(
+                    result.source
+                ) +
+
+                "</div>";
+
+        } catch (error) {
+
+            console.warn(
+                "Devotional rendering failed:",
+                error
+            );
+
+        } finally {
+
+            devotionalRendering =
+                false;
+        }
+    }
+
+    window.gc33RenderDevotional =
+        renderDevotional;
+
+    /* ============================================================
+       ADMIN CONTENT MANAGER
+       ============================================================ */
+
+    const managerState = {
+        tab: "trivia"
     };
-  });
-}
 
+    function openContentManager() {
 
-/* =========================================================
-   THEOGRAPHIC SYNC
-   ========================================================= */
+        isAdmin().then(function (allowed) {
 
-async function syncTheographic(){
+            if (!allowed) {
 
-  try{
+                notify(
+                    "Administrator access is required.",
+                    "error"
+                );
 
-    var list=await fetch(
-      THEO_PEOPLE
-    ).then(function(r){
-      return r.json();
-    });
+                return;
+            }
 
-    var people=list.people||[],
-        c=db(),
-        u=await uid();
+            injectStyles();
 
-    var rows=people.map(function(p){
+            const modal =
+                createModal(
+                    "gc33-content-manager",
 
-      return {
-        source_id:p.id,
-        name:p.name,
-        aliases:[],
-        life_story:'',
-        faith:'',
-        virtues:'',
-        trials:'',
-        lessons:'',
-        scripture_refs:[],
-        source_name:
-          'Theographic Bible Metadata via Free Use Bible API',
-        source_url:
-          'https://github.com/robertrouse/theographic-bible-metadata',
-        active:true,
-        created_by:u,
-        updated_by:u
-      };
-    });
+                    '<div class="gc33-head">' +
 
-    for(
-      var i=0;
-      i<rows.length;
-      i+=300
-    ){
+                    "<h2>✝ Bible Content Manager</h2>" +
 
-      var r=await c
-        .from(CHAR_TABLE)
-        .upsert(
-          rows.slice(i,i+300),
-          {
-            onConflict:'source_id'
-          }
-        );
+                    '<button class="gc33-close" ' +
+                    'id="gc33-close-manager">' +
+                    "×" +
+                    "</button>" +
 
-      if(r.error){
-        throw r.error;
-      }
+                    "</div>" +
+
+                    '<div class="gc33-body">' +
+
+                    '<div class="gc33-tabs">' +
+
+                    '<button class="gc33-tab active" data-tab="trivia">' +
+                    "🧠 Trivia" +
+                    "</button>" +
+
+                    '<button class="gc33-tab" data-tab="characters">' +
+                    "👤 Bible Characters" +
+                    "</button>" +
+
+                    '<button class="gc33-tab" data-tab="devotionals">' +
+                    "🙏 Devotionals" +
+                    "</button>" +
+
+                    "</div>" +
+
+                    '<div id="gc33-manager-content"></div>' +
+
+                    "</div>"
+                );
+
+            modal.querySelector(
+                "#gc33-close-manager"
+            ).onclick =
+                function () {
+
+                    closeElement(
+                        "gc33-content-manager"
+                    );
+                };
+
+            Array.from(
+                modal.querySelectorAll(
+                    ".gc33-tab"
+                )
+            ).forEach(function (tab) {
+
+                tab.onclick =
+                    function () {
+
+                        Array.from(
+                            modal.querySelectorAll(
+                                ".gc33-tab"
+                            )
+                        ).forEach(
+                            function (item) {
+                                item.classList.remove(
+                                    "active"
+                                );
+                            }
+                        );
+
+                        tab.classList.add(
+                            "active"
+                        );
+
+                        managerState.tab =
+                            tab.dataset.tab;
+
+                        renderManager();
+                    };
+            });
+
+            renderManager();
+        });
     }
 
-    toast(
-      people.length+
-      ' Theographic people synchronized',
-      'success'
+    async function renderManager() {
+
+        const host =
+            document.getElementById(
+                "gc33-manager-content"
+            );
+
+        if (!host) {
+            return;
+        }
+
+        if (
+            managerState.tab ===
+            "trivia"
+        ) {
+
+            await renderTriviaAdmin(
+                host
+            );
+
+            return;
+        }
+
+        if (
+            managerState.tab ===
+            "characters"
+        ) {
+
+            await renderCharactersAdmin(
+                host
+            );
+
+            return;
+        }
+
+        await renderDevotionalsAdmin(
+            host
+        );
+    }
+
+    /* ============================================================
+       ADMIN — TRIVIA
+       ============================================================ */
+
+    async function renderTriviaAdmin(host) {
+
+        const client = db();
+
+        if (!client) {
+            host.innerHTML =
+                "<p>Supabase unavailable.</p>";
+            return;
+        }
+
+        const result =
+            await client
+                .from(
+                    TRIVIA_TABLE
+                )
+                .select("*")
+                .order(
+                    "updated_at",
+                    {
+                        ascending: false
+                    }
+                )
+                .limit(100);
+
+        const rows =
+            (result.data || [])
+                .map(function (item) {
+
+                    return (
+
+                        '<div class="gc33-row">' +
+
+                        '<div>' +
+
+                        "<b>" +
+                        escapeHTML(
+                            item.question
+                        ) +
+                        "</b>" +
+
+                        "<small>" +
+
+                        escapeHTML(
+                            item.reference ||
+                            "No Scripture reference"
+                        ) +
+
+                        " · " +
+
+                        escapeHTML(
+                            item.source_name ||
+                            "Source not specified"
+                        ) +
+
+                        "</small>" +
+
+                        "</div>" +
+
+                        '<button class="gc33-btn gc33-muted" ' +
+                        'data-trivia-id="' +
+                        escapeHTML(
+                            item.id
+                        ) +
+                        '">' +
+
+                        "Edit" +
+
+                        "</button>" +
+
+                        "</div>"
+                    );
+
+                })
+                .join("");
+
+        host.innerHTML =
+
+            '<div class="gc33-actions">' +
+
+            '<button class="gc33-btn gc33-primary" id="gc33-new-trivia">' +
+            "+ Add Question" +
+            "</button>" +
+
+            '<button class="gc33-btn gc33-muted" id="gc33-import-trivia">' +
+            "Import JSON" +
+            "</button>" +
+
+            "</div>" +
+
+            '<div class="gc33-help">' +
+
+            "<strong>Trivia library</strong><br>" +
+
+            "Questions should come from reputable biblical " +
+            "sources and include their Scripture reference " +
+            "where appropriate. The database stores each " +
+            "question independently so the library can grow " +
+            "to 10,000+ questions without putting thousands " +
+            "of questions into JavaScript." +
+
+            "</div>" +
+
+            '<div class="gc33-list">' +
+
+            (
+                rows ||
+                "<div>No trivia questions have been added yet.</div>"
+            ) +
+
+            "</div>";
+
+        host.querySelector(
+            "#gc33-new-trivia"
+        ).onclick =
+            function () {
+
+                openEditor(
+                    "trivia",
+                    null
+                );
+            };
+
+        host.querySelector(
+            "#gc33-import-trivia"
+        ).onclick =
+            importTriviaJSON;
+
+        Array.from(
+            host.querySelectorAll(
+                "[data-trivia-id]"
+            )
+        ).forEach(function (button) {
+
+            button.onclick =
+                async function () {
+
+                    const id =
+                        button.dataset.triviaId;
+
+                    const item =
+                        await client
+                            .from(
+                                TRIVIA_TABLE
+                            )
+                            .select("*")
+                            .eq(
+                                "id",
+                                id
+                            )
+                            .single();
+
+                    if (
+                        item.error
+                    ) {
+
+                        notify(
+                            item.error.message,
+                            "error"
+                        );
+
+                        return;
+                    }
+
+                    openEditor(
+                        "trivia",
+                        item.data
+                    );
+                };
+        });
+    }
+
+    /* ============================================================
+       ADMIN — CHARACTERS
+       ============================================================ */
+
+    async function renderCharactersAdmin(host) {
+
+        const client = db();
+
+        if (!client) {
+            host.innerHTML =
+                "<p>Supabase unavailable.</p>";
+            return;
+        }
+
+        const result =
+            await client
+                .from(
+                    CHARACTER_TABLE
+                )
+                .select("*")
+                .order(
+                    "name",
+                    {
+                        ascending: true
+                    }
+                )
+                .limit(300);
+
+        const rows =
+            (result.data || [])
+                .map(function (item) {
+
+                    return (
+
+                        '<div class="gc33-row">' +
+
+                        '<div>' +
+
+                        "<b>" +
+                        escapeHTML(
+                            item.name
+                        ) +
+                        "</b>" +
+
+                        "<small>" +
+
+                        escapeHTML(
+                            item.source_name ||
+                            "GraceConnect"
+                        ) +
+
+                        "</small>" +
+
+                        "</div>" +
+
+                        '<button class="gc33-btn gc33-muted" ' +
+                        'data-character-id="' +
+                        escapeHTML(
+                            item.id
+                        ) +
+                        '">' +
+
+                        "Edit" +
+
+                        "</button>" +
+
+                        "</div>"
+                    );
+
+                })
+                .join("");
+
+        host.innerHTML =
+
+            '<div class="gc33-actions">' +
+
+            '<button class="gc33-btn gc33-primary" id="gc33-new-character">' +
+            "+ Add Character" +
+            "</button>" +
+
+            '<button class="gc33-btn gc33-muted" id="gc33-sync-character">' +
+            "Sync Bible People Dataset" +
+            "</button>" +
+
+            "</div>" +
+
+            '<div class="gc33-help">' +
+
+            "<strong>Bible character library</strong><br>" +
+
+            "The broad biblical-person dataset is used instead " +
+            "of Wikipedia. GraceConnect then lets administrators " +
+            "add deeper Scripture-grounded material including " +
+            "life story, faith, trust in God, virtues, trials " +
+            "and practical lessons." +
+
+            "</div>" +
+
+            '<div class="gc33-list">' +
+
+            (
+                rows ||
+                "<div>No custom/imported characters yet.</div>"
+            ) +
+
+            "</div>";
+
+        host.querySelector(
+            "#gc33-new-character"
+        ).onclick =
+            function () {
+
+                openEditor(
+                    "characters",
+                    null
+                );
+            };
+
+        host.querySelector(
+            "#gc33-sync-character"
+        ).onclick =
+            syncBiblePeople;
+
+        Array.from(
+            host.querySelectorAll(
+                "[data-character-id]"
+            )
+        ).forEach(function (button) {
+
+            button.onclick =
+                async function () {
+
+                    const id =
+                        button.dataset.characterId;
+
+                    const item =
+                        await client
+                            .from(
+                                CHARACTER_TABLE
+                            )
+                            .select("*")
+                            .eq(
+                                "id",
+                                id
+                            )
+                            .single();
+
+                    if (
+                        item.error
+                    ) {
+
+                        notify(
+                            item.error.message,
+                            "error"
+                        );
+
+                        return;
+                    }
+
+                    openEditor(
+                        "characters",
+                        item.data
+                    );
+                };
+        });
+    }
+
+    /* ============================================================
+       SYNC THEOGRAPHIC / BIBLE PEOPLE
+       ============================================================ */
+
+    async function syncBiblePeople() {
+
+        const allowed =
+            await isAdmin();
+
+        if (!allowed) {
+            notify(
+                "Administrator access is required.",
+                "error"
+            );
+            return;
+        }
+
+        try {
+
+            notify(
+                "Loading biblical people dataset…",
+                "info"
+            );
+
+            const response =
+                await fetch(
+                    THEOGRAPHIC_PEOPLE
+                );
+
+            if (!response.ok) {
+                throw new Error(
+                    "Unable to download biblical people dataset."
+                );
+            }
+
+            const data =
+                await response.json();
+
+            const people =
+                data.people ||
+                [];
+
+            const client =
+                db();
+
+            const userId =
+                await currentUserId();
+
+            const rows =
+                people.map(function (person) {
+
+                    return {
+
+                        source_id:
+                            person.id,
+
+                        name:
+                            person.name,
+
+                        aliases:
+                            [],
+
+                        life_story:
+                            "",
+
+                        faith:
+                            "",
+
+                        virtues:
+                            "",
+
+                        trials:
+                            "",
+
+                        lessons:
+                            "",
+
+                        scripture_refs:
+                            [],
+
+                        source_name:
+                            "Theographic Bible Metadata via Free Use Bible API",
+
+                        source_url:
+                            "https://github.com/robertrouse/theographic-bible-metadata",
+
+                        active:
+                            true,
+
+                        created_by:
+                            userId,
+
+                        updated_by:
+                            userId,
+
+                        updated_at:
+                            new Date().toISOString()
+
+                    };
+
+                });
+
+            /*
+             * Upload in batches to avoid oversized requests.
+             */
+
+            for (
+                let index = 0;
+                index < rows.length;
+                index += 300
+            ) {
+
+                const batch =
+                    rows.slice(
+                        index,
+                        index + 300
+                    );
+
+                const result =
+                    await client
+                        .from(
+                            CHARACTER_TABLE
+                        )
+                        .upsert(
+                            batch,
+                            {
+                                onConflict:
+                                    "source_id"
+                            }
+                        );
+
+                if (
+                    result.error
+                ) {
+                    throw result.error;
+                }
+            }
+
+            notify(
+                people.length +
+                " biblical-person records synchronized.",
+                "success"
+            );
+
+            renderManager();
+
+        } catch (error) {
+
+            console.error(
+                "Bible people synchronization failed:",
+                error
+            );
+
+            notify(
+                "Character synchronization failed: " +
+                (
+                    error.message ||
+                    "Unknown error"
+                ),
+                "error"
+            );
+        }
+    }
+
+    /* ============================================================
+       ADMIN — DEVOTIONALS
+       ============================================================ */
+
+    async function renderDevotionalsAdmin(
+        host
+    ) {
+
+        const client =
+            db();
+
+        if (!client) {
+            host.innerHTML =
+                "<p>Supabase unavailable.</p>";
+            return;
+        }
+
+        const result =
+            await client
+                .from(
+                    DEVOTIONAL_TABLE
+                )
+                .select("*")
+                .order(
+                    "date",
+                    {
+                        ascending: false
+                    }
+                )
+                .limit(100);
+
+        const rows =
+            (result.data || [])
+                .map(function (item) {
+
+                    return (
+
+                        '<div class="gc33-row">' +
+
+                        '<div>' +
+
+                        "<b>" +
+
+                        escapeHTML(
+                            item.title ||
+                            "Untitled devotional"
+                        ) +
+
+                        "</b>" +
+
+                        "<small>" +
+
+                        escapeHTML(
+                            item.date ||
+                            ""
+                        ) +
+
+                        " · " +
+
+                        escapeHTML(
+                            item.source_name ||
+                            "GraceConnect"
+                        ) +
+
+                        "</small>" +
+
+                        "</div>" +
+
+                        '<button class="gc33-btn gc33-muted" ' +
+                        'data-devotional-id="' +
+                        escapeHTML(
+                            item.id
+                        ) +
+                        '">' +
+
+                        "Edit" +
+
+                        "</button>" +
+
+                        "</div>"
+                    );
+
+                })
+                .join("");
+
+        host.innerHTML =
+
+            '<div class="gc33-actions">' +
+
+            '<button class="gc33-btn gc33-primary" id="gc33-new-devotional">' +
+            "+ Add / Override Devotional" +
+            "</button>" +
+
+            "</div>" +
+
+            '<div class="gc33-help">' +
+
+            "<strong>Devotional priority</strong><br>" +
+
+            "An active custom GraceConnect devotional for " +
+            "today overrides the external fallback. If no " +
+            "custom devotional exists, the Christian devotional " +
+            "fallback is used. Administrators can edit existing " +
+            "custom devotionals at any time." +
+
+            "</div>" +
+
+            '<div class="gc33-list">' +
+
+            (
+                rows ||
+                "<div>No custom devotionals yet.</div>"
+            ) +
+
+            "</div>";
+
+        host.querySelector(
+            "#gc33-new-devotional"
+        ).onclick =
+            function () {
+
+                openEditor(
+                    "devotionals",
+                    null
+                );
+            };
+
+        Array.from(
+            host.querySelectorAll(
+                "[data-devotional-id]"
+            )
+        ).forEach(function (button) {
+
+            button.onclick =
+                async function () {
+
+                    const id =
+                        button.dataset.devotionalId;
+
+                    const item =
+                        await client
+                            .from(
+                                DEVOTIONAL_TABLE
+                            )
+                            .select("*")
+                            .eq(
+                                "id",
+                                id
+                            )
+                            .single();
+
+                    if (
+                        item.error
+                    ) {
+
+                        notify(
+                            item.error.message,
+                            "error"
+                        );
+
+                        return;
+                    }
+
+                    openEditor(
+                        "devotionals",
+                        item.data
+                    );
+                };
+        });
+    }
+
+    /* ============================================================
+       EDITOR FIELDS
+       ============================================================ */
+
+    function editorFields(
+        type,
+        item
+    ) {
+
+        item =
+            item ||
+            {};
+
+        if (
+            type ===
+            "trivia"
+        ) {
+
+            return (
+
+                '<div class="gc33-grid">' +
+
+                '<div class="gc33-field full">' +
+                "<label>Question</label>" +
+                '<textarea id="gc33-question">' +
+                escapeHTML(
+                    item.question ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Answer options — one per line</label>" +
+                '<textarea id="gc33-options">' +
+                escapeHTML(
+                    Array.isArray(
+                        item.options
+                    )
+                        ? item.options.join(
+                            "\n"
+                        )
+                        : ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Correct option index</label>" +
+                '<input id="gc33-correct" type="number" min="0" max="9" value="' +
+                escapeHTML(
+                    item.correct_index ===
+                    undefined
+                        ? 0
+                        : item.correct_index
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Category</label>" +
+                '<input id="gc33-category" value="' +
+                escapeHTML(
+                    item.category ||
+                    "Scripture"
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Difficulty</label>" +
+                "<select id=\"gc33-difficulty\">" +
+
+                "<option " +
+                (
+                    item.difficulty ===
+                    "EASY"
+                        ? "selected"
+                        : ""
+                ) +
+                ">EASY</option>" +
+
+                "<option " +
+                (
+                    !item.difficulty ||
+                    item.difficulty ===
+                    "NORMAL"
+                        ? "selected"
+                        : ""
+                ) +
+                ">NORMAL</option>" +
+
+                "<option " +
+                (
+                    item.difficulty ===
+                    "HARD"
+                        ? "selected"
+                        : ""
+                ) +
+                ">HARD</option>" +
+
+                "</select>" +
+
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Bible reference</label>" +
+                '<input id="gc33-reference" value="' +
+                escapeHTML(
+                    item.reference ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Explanation</label>" +
+                '<textarea id="gc33-explanation">' +
+                escapeHTML(
+                    item.explanation ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Source name</label>" +
+                '<input id="gc33-source" value="' +
+                escapeHTML(
+                    item.source_name ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Source URL</label>" +
+                '<input id="gc33-source-url" value="' +
+                escapeHTML(
+                    item.source_url ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                "</div>"
+            );
+        }
+
+        if (
+            type ===
+            "characters"
+        ) {
+
+            return (
+
+                '<div class="gc33-grid">' +
+
+                '<div class="gc33-field">' +
+                "<label>Name</label>" +
+                '<input id="gc33-name" value="' +
+                escapeHTML(
+                    item.name ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Aliases</label>" +
+                '<input id="gc33-aliases" value="' +
+                escapeHTML(
+                    Array.isArray(
+                        item.aliases
+                    )
+                        ? item.aliases.join(
+                            ", "
+                        )
+                        : ""
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Life Story</label>" +
+                '<textarea id="gc33-life-story">' +
+                escapeHTML(
+                    item.life_story ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Faith & Trust in God — detailed</label>" +
+                '<textarea id="gc33-faith">' +
+                escapeHTML(
+                    item.faith ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Faith & Virtues — detailed</label>" +
+                '<textarea id="gc33-virtues">' +
+                escapeHTML(
+                    item.virtues ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Trials & Turning Points</label>" +
+                '<textarea id="gc33-trials">' +
+                escapeHTML(
+                    item.trials ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Lessons / Application</label>" +
+                '<textarea id="gc33-lessons">' +
+                escapeHTML(
+                    item.lessons ||
+                    ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field full">' +
+                "<label>Scripture References</label>" +
+                '<textarea id="gc33-scripture-refs">' +
+                escapeHTML(
+                    Array.isArray(
+                        item.scripture_refs
+                    )
+                        ? item.scripture_refs.join(
+                            ", "
+                        )
+                        : ""
+                ) +
+                "</textarea>" +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Source name</label>" +
+                '<input id="gc33-source" value="' +
+                escapeHTML(
+                    item.source_name ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                '<div class="gc33-field">' +
+                "<label>Source URL</label>" +
+                '<input id="gc33-source-url" value="' +
+                escapeHTML(
+                    item.source_url ||
+                    ""
+                ) +
+                '">' +
+                "</div>" +
+
+                "</div>"
+            );
+        }
+
+        return (
+
+            '<div class="gc33-grid">' +
+
+            '<div class="gc33-field">' +
+            "<label>Date</label>" +
+            '<input id="gc33-date" type="date" value="' +
+            escapeHTML(
+                item.date ||
+                todayISO()
+            ) +
+            '">' +
+            "</div>" +
+
+            '<div class="gc33-field">' +
+            "<label>Title</label>" +
+            '<input id="gc33-title" value="' +
+            escapeHTML(
+                item.title ||
+                ""
+            ) +
+            '">' +
+            "</div>" +
+
+            '<div class="gc33-field full">' +
+            "<label>Theme / Scripture</label>" +
+            '<input id="gc33-theme" value="' +
+            escapeHTML(
+                item.theme ||
+                ""
+            ) +
+            '">' +
+            "</div>" +
+
+            '<div class="gc33-field full">' +
+            "<label>Reflection / Body</label>" +
+            '<textarea id="gc33-body">' +
+            escapeHTML(
+                item.body ||
+                item.reflection ||
+                ""
+            ) +
+            "</textarea>" +
+            "</div>" +
+
+            '<div class="gc33-field full">' +
+            "<label>Prayer</label>" +
+            '<textarea id="gc33-prayer">' +
+            escapeHTML(
+                item.prayer ||
+                ""
+            ) +
+            "</textarea>" +
+            "</div>" +
+
+            '<div class="gc33-field full">' +
+            "<label>Reflection Questions — one per line</label>" +
+            '<textarea id="gc33-questions">' +
+            escapeHTML(
+                Array.isArray(
+                    item.questions
+                )
+                    ? item.questions.join(
+                        "\n"
+                    )
+                    : ""
+            ) +
+            "</textarea>" +
+            "</div>" +
+
+            '<div class="gc33-field">' +
+            "<label>Source name</label>" +
+            '<input id="gc33-source" value="' +
+            escapeHTML(
+                item.source_name ||
+                "GraceConnect"
+            ) +
+            '">' +
+            "</div>" +
+
+            '<div class="gc33-field">' +
+            "<label>Source URL</label>" +
+            '<input id="gc33-source-url" value="' +
+            escapeHTML(
+                item.source_url ||
+                ""
+            ) +
+            '">' +
+            "</div>" +
+
+            "</div>"
+        );
+    }
+
+    /* ============================================================
+       READ EDITOR
+       ============================================================ */
+
+    function readEditor(
+        type
+    ) {
+
+        if (
+            type ===
+            "trivia"
+        ) {
+
+            return {
+
+                question:
+                    document.getElementById(
+                        "gc33-question"
+                    ).value.trim(),
+
+                options:
+                    document.getElementById(
+                        "gc33-options"
+                    ).value
+                        .split(/\n+/)
+                        .map(function (item) {
+                            return item.trim();
+                        })
+                        .filter(Boolean),
+
+                correct_index:
+                    Number(
+                        document.getElementById(
+                            "gc33-correct"
+                        ).value
+                    ),
+
+                category:
+                    document.getElementById(
+                        "gc33-category"
+                    ).value.trim(),
+
+                difficulty:
+                    document.getElementById(
+                        "gc33-difficulty"
+                    ).value,
+
+                reference:
+                    document.getElementById(
+                        "gc33-reference"
+                    ).value.trim(),
+
+                explanation:
+                    document.getElementById(
+                        "gc33-explanation"
+                    ).value.trim(),
+
+                source_name:
+                    document.getElementById(
+                        "gc33-source"
+                    ).value.trim(),
+
+                source_url:
+                    document.getElementById(
+                        "gc33-source-url"
+                    ).value.trim(),
+
+                approved:
+                    true
+            };
+        }
+
+        if (
+            type ===
+            "characters"
+        ) {
+
+            return {
+
+                name:
+                    document.getElementById(
+                        "gc33-name"
+                    ).value.trim(),
+
+                aliases:
+                    document.getElementById(
+                        "gc33-aliases"
+                    ).value
+                        .split(",")
+                        .map(function (item) {
+                            return item.trim();
+                        })
+                        .filter(Boolean),
+
+                life_story:
+                    document.getElementById(
+                        "gc33-life-story"
+                    ).value.trim(),
+
+                faith:
+                    document.getElementById(
+                        "gc33-faith"
+                    ).value.trim(),
+
+                virtues:
+                    document.getElementById(
+                        "gc33-virtues"
+                    ).value.trim(),
+
+                trials:
+                    document.getElementById(
+                        "gc33-trials"
+                    ).value.trim(),
+
+                lessons:
+                    document.getElementById(
+                        "gc33-lessons"
+                    ).value.trim(),
+
+                scripture_refs:
+                    document.getElementById(
+                        "gc33-scripture-refs"
+                    ).value
+                        .split(",")
+                        .map(function (item) {
+                            return item.trim();
+                        })
+                        .filter(Boolean),
+
+                source_name:
+                    document.getElementById(
+                        "gc33-source"
+                    ).value.trim(),
+
+                source_url:
+                    document.getElementById(
+                        "gc33-source-url"
+                    ).value.trim(),
+
+                active:
+                    true
+            };
+        }
+
+        return {
+
+            date:
+                document.getElementById(
+                    "gc33-date"
+                ).value,
+
+            title:
+                document.getElementById(
+                    "gc33-title"
+                ).value.trim(),
+
+            theme:
+                document.getElementById(
+                    "gc33-theme"
+                ).value.trim(),
+
+            body:
+                document.getElementById(
+                    "gc33-body"
+                ).value.trim(),
+
+            prayer:
+                document.getElementById(
+                    "gc33-prayer"
+                ).value.trim(),
+
+            questions:
+                document.getElementById(
+                    "gc33-questions"
+                ).value
+                    .split(/\n+/)
+                    .map(function (item) {
+                        return item.trim();
+                    })
+                    .filter(Boolean),
+
+            source_name:
+                document.getElementById(
+                    "gc33-source"
+                ).value.trim(),
+
+            source_url:
+                document.getElementById(
+                    "gc33-source-url"
+                ).value.trim(),
+
+            active:
+                true,
+
+            is_custom:
+                true
+        };
+    }
+
+    /* ============================================================
+       SAVE EDITOR
+       ============================================================ */
+
+    async function saveEditor(
+        type,
+        existingId
+    ) {
+
+        const client =
+            db();
+
+        if (!client) {
+            throw new Error(
+                "Supabase unavailable."
+            );
+        }
+
+        const userId =
+            await currentUserId();
+
+        const data =
+            readEditor(type);
+
+        data.updated_by =
+            userId;
+
+        data.updated_at =
+            new Date().toISOString();
+
+        if (
+            existingId
+        ) {
+            data.id =
+                existingId;
+        }
+
+        let table;
+
+        if (
+            type ===
+            "trivia"
+        ) {
+            table =
+                TRIVIA_TABLE;
+        } else if (
+            type ===
+            "characters"
+        ) {
+            table =
+                CHARACTER_TABLE;
+        } else {
+            table =
+                DEVOTIONAL_TABLE;
+        }
+
+        const result =
+            await client
+                .from(table)
+                .upsert(data);
+
+        if (
+            result.error
+        ) {
+            throw result.error;
+        }
+
+        notify(
+            "Content saved successfully.",
+            "success"
+        );
+
+        closeElement(
+            "gc33-content-editor"
+        );
+
+        renderManager();
+    }
+
+    /* ============================================================
+       OPEN EDITOR
+       ============================================================ */
+
+    function openEditor(
+        type,
+        item
+    ) {
+
+        const titles = {
+
+            trivia:
+                "Bible Trivia Question",
+
+            characters:
+                "Bible Character",
+
+            devotionals:
+                "Daily Devotional"
+
+        };
+
+        const modal =
+            createModal(
+
+                "gc33-content-editor",
+
+                '<div class="gc33-head">' +
+
+                "<h2>" +
+                escapeHTML(
+                    titles[type]
+                ) +
+                "</h2>" +
+
+                '<button class="gc33-close" id="gc33-close-editor">' +
+                "×" +
+                "</button>" +
+
+                "</div>" +
+
+                '<div class="gc33-body">' +
+
+                editorFields(
+                    type,
+                    item
+                ) +
+
+                '<div class="gc33-actions">' +
+
+                '<button class="gc33-btn gc33-primary" id="gc33-save-editor">' +
+                "Save" +
+                "</button>" +
+
+                '<button class="gc33-btn gc33-muted" id="gc33-cancel-editor">' +
+                "Cancel" +
+                "</button>" +
+
+                "</div>" +
+
+                "</div>"
+            );
+
+        modal.querySelector(
+            "#gc33-close-editor"
+        ).onclick =
+            function () {
+
+                closeElement(
+                    "gc33-content-editor"
+                );
+            };
+
+        modal.querySelector(
+            "#gc33-cancel-editor"
+        ).onclick =
+            function () {
+
+                closeElement(
+                    "gc33-content-editor"
+                );
+            };
+
+        modal.querySelector(
+            "#gc33-save-editor"
+        ).onclick =
+            async function () {
+
+                const button =
+                    modal.querySelector(
+                        "#gc33-save-editor"
+                    );
+
+                button.disabled =
+                    true;
+
+                button.textContent =
+                    "Saving…";
+
+                try {
+
+                    await saveEditor(
+                        type,
+                        item &&
+                        item.id
+                            ? item.id
+                            : null
+                    );
+
+                } catch (error) {
+
+                    console.error(
+                        "Content save failed:",
+                        error
+                    );
+
+                    notify(
+                        "Save failed: " +
+                        (
+                            error.message ||
+                            "Unknown error"
+                        ),
+                        "error"
+                    );
+
+                    button.disabled =
+                        false;
+
+                    button.textContent =
+                        "Save";
+                }
+            };
+    }
+
+    /* ============================================================
+       IMPORT TRIVIA JSON
+       ============================================================ */
+
+    function importTriviaJSON() {
+
+        const modal =
+            createModal(
+
+                "gc33-trivia-import",
+
+                '<div class="gc33-head">' +
+
+                "<h2>Import Bible Trivia JSON</h2>" +
+
+                '<button class="gc33-close" id="gc33-close-import">' +
+                "×" +
+                "</button>" +
+
+                "</div>" +
+
+                '<div class="gc33-body">' +
+
+                '<div class="gc33-help">' +
+
+                "Paste a JSON array of Bible questions. " +
+                "Each object should contain question, " +
+                "options, correct_index, reference, " +
+                "explanation, category, difficulty, " +
+                "source_name and source_url where available." +
+
+                "<br><br>" +
+
+                "For a 10,000+ question library, import " +
+                "the questions in batches rather than placing " +
+                "them inside app33.js." +
+
+                "</div>" +
+
+                '<textarea id="gc33-json-import" ' +
+                'style="width:100%;min-height:320px;' +
+                'box-sizing:border-box;border:1px solid #dbe2ea;' +
+                'border-radius:12px;padding:12px;font:inherit">' +
+                "</textarea>" +
+
+                '<div class="gc33-actions">' +
+
+                '<button class="gc33-btn gc33-primary" id="gc33-run-import">' +
+                "Import Questions" +
+                "</button>" +
+
+                "</div>" +
+
+                "</div>"
+            );
+
+        modal.querySelector(
+            "#gc33-close-import"
+        ).onclick =
+            function () {
+
+                closeElement(
+                    "gc33-trivia-import"
+                );
+            };
+
+        modal.querySelector(
+            "#gc33-run-import"
+        ).onclick =
+            async function () {
+
+                try {
+
+                    const raw =
+                        modal.querySelector(
+                            "#gc33-json-import"
+                        ).value;
+
+                    const questions =
+                        JSON.parse(raw);
+
+                    if (
+                        !Array.isArray(
+                            questions
+                        )
+                    ) {
+                        throw new Error(
+                            "JSON must contain an array."
+                        );
+                    }
+
+                    const client =
+                        db();
+
+                    const userId =
+                        await currentUserId();
+
+                    const rows =
+                        questions
+                            .map(function (item) {
+
+                                return {
+
+                                    question:
+                                        String(
+                                            item.question ||
+                                            ""
+                                        ).trim(),
+
+                                    options:
+                                        Array.isArray(
+                                            item.options
+                                        )
+                                            ? item.options
+                                            : [],
+
+                                    correct_index:
+                                        Number(
+                                            item.correct_index ||
+                                            0
+                                        ),
+
+                                    reference:
+                                        String(
+                                            item.reference ||
+                                            ""
+                                        ),
+
+                                    explanation:
+                                        String(
+                                            item.explanation ||
+                                            ""
+                                        ),
+
+                                    category:
+                                        String(
+                                            item.category ||
+                                            "Scripture"
+                                        ),
+
+                                    difficulty:
+                                        String(
+                                            item.difficulty ||
+                                            "NORMAL"
+                                        ),
+
+                                    source_name:
+                                        String(
+                                            item.source_name ||
+                                            ""
+                                        ),
+
+                                    source_url:
+                                        String(
+                                            item.source_url ||
+                                            ""
+                                        ),
+
+                                    approved:
+                                        true,
+
+                                    created_by:
+                                        userId,
+
+                                    updated_by:
+                                        userId,
+
+                                    updated_at:
+                                        new Date().toISOString()
+
+                                };
+
+                            })
+                            .filter(function (item) {
+
+                                return (
+                                    item.question &&
+                                    item.options.length >=
+                                    2
+                                );
+
+                            });
+
+                    if (!rows.length) {
+
+                        throw new Error(
+                            "No valid questions were found."
+                        );
+                    }
+
+                    let imported =
+                        0;
+
+                    for (
+                        let index = 0;
+                        index < rows.length;
+                        index += 500
+                    ) {
+
+                        const batch =
+                            rows.slice(
+                                index,
+                                index + 500
+                            );
+
+                        const result =
+                            await client
+                                .from(
+                                    TRIVIA_TABLE
+                                )
+                                .insert(
+                                    batch
+                                );
+
+                        if (
+                            result.error
+                        ) {
+                            throw result.error;
+                        }
+
+                        imported +=
+                            batch.length;
+                    }
+
+                    notify(
+                        imported +
+                        " Bible trivia questions imported.",
+                        "success"
+                    );
+
+                    closeElement(
+                        "gc33-trivia-import"
+                    );
+
+                    renderManager();
+
+                } catch (error) {
+
+                    console.error(
+                        "Trivia import failed:",
+                        error
+                    );
+
+                    notify(
+                        "Import failed: " +
+                        (
+                            error.message ||
+                            "Invalid JSON"
+                        ),
+                        "error"
+                    );
+                }
+            };
+    }
+
+    /* ============================================================
+       ADMIN BUTTON
+       ============================================================ */
+
+    function injectAdminButton() {
+
+        const panel =
+            document.getElementById(
+                "adminDiscoverPanel"
+            );
+
+        if (!panel) {
+            return;
+        }
+
+        if (
+            document.getElementById(
+                "gc33-content-button"
+            )
+        ) {
+            return;
+        }
+
+        const button =
+            document.createElement(
+                "button"
+            );
+
+        button.id =
+            "gc33-content-button";
+
+        button.className =
+            "btn btn-primary btn-block btn-sm";
+
+        button.style.marginTop =
+            "8px";
+
+        button.innerHTML =
+            '<i class="fas fa-book-bible"></i> ' +
+            "Bible Content Manager";
+
+        button.onclick =
+            openContentManager;
+
+        panel.appendChild(
+            button
+        );
+    }
+
+    /* ============================================================
+       REGISTRATION BLOCKLIST HELPER
+       ============================================================ */
+
+    /*
+     * Other registration code can call:
+     *
+     * await window.gc33IsEmailBlocked(email)
+     *
+     * BEFORE creating the Supabase account.
+     */
+
+    window.gc33ValidateRegistrationEmail =
+        async function (email) {
+
+            const blocked =
+                await isEmailBlocked(
+                    email
+                );
+
+            if (blocked) {
+
+                notify(
+                    "Registration is unavailable for this email address.",
+                    "error"
+                );
+
+                return false;
+            }
+
+            return true;
+        };
+
+    /* ============================================================
+       INITIALIZATION
+       ============================================================ */
+
+    let lastTriviaVisible =
+        false;
+
+    function isVisible(element) {
+
+        if (!element) {
+            return false;
+        }
+
+        const style =
+            window.getComputedStyle(
+                element
+            );
+
+        return (
+            style.display !== "none" &&
+            style.visibility !== "hidden"
+        );
+    }
+
+    function initialize() {
+
+        injectStyles();
+
+        injectAdminButton();
+
+        const trivia =
+            document.getElementById(
+                "home-trivia"
+            );
+
+        if (trivia) {
+
+            const visible =
+                isVisible(trivia);
+
+            if (
+                visible &&
+                !lastTriviaVisible
+            ) {
+
+                renderTrivia();
+            }
+
+            lastTriviaVisible =
+                visible;
+        }
+
+        const devotional =
+            document.getElementById(
+                "home-devotional"
+            );
+
+        if (
+            devotional &&
+            isVisible(devotional)
+        ) {
+
+            renderDevotional();
+        }
+    }
+
+    /*
+     * The existing application changes screens dynamically,
+     * so periodically check for the relevant containers.
+     */
+
+    setTimeout(
+        initialize,
+        700
     );
 
-    renderManager();
-
-  }catch(e){
-
-    toast(
-      'Character sync failed: '+
-      formatSupabaseError(e),
-      'error'
+    setInterval(
+        initialize,
+        1500
     );
-  }
-}
 
+    /* ============================================================
+       PUBLIC API
+       ============================================================ */
 
-/* =========================================================
-   DEVOTIONAL ADMIN
-   ========================================================= */
+    window.gc33OpenContentManager =
+        openContentManager;
 
-async function renderDevoAdmin(h){
+    window.gc33OpenBibleContentManager =
+        openContentManager;
 
-  var c=db();
+    window.gc33RenderTrivia =
+        renderTrivia;
 
-  var r=await c
-    .from(DEVO_TABLE)
-    .select('*')
-    .order(
-      'date',
-      {ascending:false}
-    )
-    .limit(100);
+    window.gc33RenderDevotional =
+        renderDevotional;
 
-  var rows=(r.data||[])
-    .map(function(x){
+    window.gc33IsEmailBlocked =
+        isEmailBlocked;
 
-      return '<div class="gc33-row">'+
-
-        '<div>'+
-
-        '<b>'+
-        esc(
-          x.title||
-          'Untitled'
-        )+
-        '</b>'+
-
-        '<small>'+
-        esc(x.date||'')+
-        ' · '+
-        esc(
-          x.source_name||
-          'GraceConnect'
-        )+
-        '</small>'+
-
-        '</div>'+
-
-        '<button class="gc33-btn gc33-muted" data-id="'+
-        esc(x.id)+
-        '">'+
-        'Edit'+
-        '</button>'+
-
-        '</div>';
-
-    })
-    .join("");
-
-  h.innerHTML=
-
-    '<div class="gc33-actions">'+
-
-    '<button class="gc33-btn gc33-primary" id="new">'+
-    '+ Add / Override Today'+
-    '</button>'+
-
-    '</div>'+
-
-    '<div class="gc33-help">'+
-    'Custom devotionals override the fallback. If there is no active custom entry for today, GraceConnect uses the Christ Himself API. '+
-    'Its original devotional content is CC BY-NC-SA 4.0; attribution is displayed in the app.'+
-    '</div>'+
-
-    '<div class="gc33-list">'+
-    (
-      rows||
-      '<div>No custom devotionals yet.</div>'
-    )+
-    '</div>';
-
-  h.querySelector(
-    '#new'
-  ).onclick=function(){
-    editorModal('devotionals');
-  };
-
-  Array.from(
-    h.querySelectorAll('[data-id]')
-  ).forEach(function(b){
-
-    b.onclick=async function(){
-
-      var x=(
-        await c
-          .from(DEVO_TABLE)
-          .select('*')
-          .eq(
-            'id',
-            b.dataset.id
-          )
-          .single()
-      ).data;
-
-      editorModal(
-        'devotionals',
-        x
-      );
-    };
-  });
-}
-
-
-/* =========================================================
-   ADMIN DISCOVER BUTTON
-   ========================================================= */
-
-/* ---------- admin Discover button ---------- */
-function injectAdminButton(){
-  if(document.getElementById('gc33-content-button'))return;
-
-  admin().then(function(isAdmin){
-    if(!isAdmin)return;
-
-    var p=document.getElementById('adminDiscoverPanel');
-
-    /*
-      Preferred location:
-      Use the existing Admin Discover panel when available.
-    */
-    if(p){
-      var b=document.createElement('button');
-      b.id='gc33-content-button';
-      b.className='btn btn-primary btn-block btn-sm';
-      b.style.marginTop='8px';
-      b.innerHTML='<i class="fas fa-book-bible"></i> Bible Content Manager';
-      b.onclick=function(){openManager();};
-      p.appendChild(b);
-      return;
-    }
-
-    /*
-      Fallback:
-      If the original adminDiscoverPanel is not present in the
-      current frontend, place the button into the admin area
-      without removing or replacing existing elements.
-    */
-    var candidates=[
-      document.getElementById('adminPanel'),
-      document.getElementById('admin-dashboard'),
-      document.getElementById('adminDashboard'),
-      document.querySelector('[data-admin-panel]'),
-      document.querySelector('.admin-panel'),
-      document.querySelector('.admin-dashboard')
-    ];
-
-    var target=null;
-    for(var i=0;i<candidates.length;i++){
-      if(candidates[i]){
-        target=candidates[i];
-        break;
-      }
-    }
-
-    /*
-      Last-resort fallback:
-      Create a small dedicated container at the end of the body.
-      It does not replace existing UI.
-    */
-    if(!target){
-      target=document.createElement('div');
-      target.id='gc33-admin-content-entry';
-      target.style.cssText=
-        'position:fixed;right:18px;bottom:18px;z-index:99999;';
-      document.body.appendChild(target);
-    }
-
-    var b2=document.createElement('button');
-    b2.id='gc33-content-button';
-    b2.className='btn btn-primary btn-block btn-sm';
-    b2.style.cssText=
-      'margin-top:8px;cursor:pointer;border:0;border-radius:10px;padding:10px 14px;font-weight:800;';
-    b2.innerHTML='<i class="fas fa-book-bible"></i> Bible Content Manager';
-    b2.onclick=function(){openManager();};
-
-    target.appendChild(b2);
-  }).catch(function(e){
-    console.warn('[GraceConnect] Unable to determine admin status for Content Manager button:',e);
-  });
-}
-
-
-/* =========================================================
-   WATCH EXISTING APP
-   ========================================================= */
-
-function watch(){
-
-  style();
-
-  injectAdminButton();
-
-  var h=document.getElementById(
-    'home-trivia'
-  );
-
-  if(h){
-
-    var visible=
-      getComputedStyle(h).display!=='none';
-
-    if(
-      visible&&
-      !lastTriviaVisible
-    ){
-      renderTrivia();
-    }
-
-    lastTriviaVisible=visible;
-  }
-
-  var d=document.getElementById(
-    'home-devotional'
-  );
-
-  if(
-    d&&
-    getComputedStyle(d).display!=='none'
-  ){
-    renderDevotional33();
-  }
-}
-
-setInterval(
-  watch,
-  1500
-);
-
-setTimeout(
-  watch,
-  700
-);
-
-
-/* =========================================================
-   PUBLIC API
-   ========================================================= */
-
-window.gc33RenderTrivia=
-  renderTrivia;
-
-window.gc33RenderDevotional=
-  renderDevotional33;
-
-window.gc33OpenContentManager=
-  openManager;
+    window.gc33SyncBiblePeople =
+        syncBiblePeople;
 
 })();
