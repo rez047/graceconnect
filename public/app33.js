@@ -4212,709 +4212,256 @@ window.gc33RenderTrivia =
        IMPORT TRIVIA JSON
        ============================================================ */
 
-function importTriviaJSON() {
+    function importTriviaJSON() {
 
-    const modal =
-        createModal(
-            "gc33-import-trivia",
-            `
-            <div class="gc33-head">
-                <h2>Import Bible Trivia JSON</h2>
-                <button
-                    class="gc33-close"
-                    onclick="closeElement('gc33-import-trivia')"
-                >×</button>
-            </div>
+        const modal =
+            createModal(
 
-            <div class="gc33-body">
+                "gc33-trivia-import",
 
-                <div class="gc33-help">
-                    Paste a JSON array of Bible questions.
-                    <br><br>
-                    <b>correct_index accepts:</b>
-                    <br>
-                    A / B / C / D / E / F
-                    <br>
-                    1 / 2 / 3 / 4 / 5 / 6
-                    <br>
-                    or the exact correct answer text.
-                    <br><br>
-                    Example:
-                    <code>"correct_index": "C"</code>
-                    or
-                    <code>"correct_index": 3</code>
-                </div>
+                '<div class="gc33-head">' +
 
-                <textarea
-                    id="gc33-trivia-json"
-                    style="
-                        width:100%;
-                        min-height:320px;
-                        box-sizing:border-box;
-                        border:1px solid #dbe2ea;
-                        border-radius:12px;
-                        padding:12px;
-                        font:inherit;
-                    "
-                    placeholder='[
-  {
-    "question": "Who denied Jesus three times?",
-    "options": [
-      "John",
-      "James",
-      "Peter",
-      "Andrew"
-    ],
-    "correct_index": "C",
-    "reference": "Matthew 26:69-75",
-    "explanation": "Peter denied knowing Jesus three times.",
-    "category": "Scripture",
-    "difficulty": "NORMAL",
-    "source_name": "Bible",
-    "source_url": ""
-  }
-]'></textarea>
+                "<h2>Import Bible Trivia JSON</h2>" +
 
-                <div
-                    id="gc33-trivia-import-status"
-                    style="
-                        display:none;
-                        margin-top:12px;
-                        padding:12px;
-                        border-radius:10px;
-                        background:#f8fafc;
-                        font-size:13px;
-                        line-height:1.6;
-                    "
-                ></div>
+                '<button class="gc33-close" id="gc33-close-import">' +
+                "×" +
+                "</button>" +
 
-                <div class="gc33-actions">
+                "</div>" +
 
-                    <button
-                        class="gc33-btn gc33-primary"
-                        id="gc33-trivia-import-button"
-                    >
-                        Validate & Import
-                    </button>
+                '<div class="gc33-body">' +
 
-                    <button
-                        class="gc33-btn gc33-muted"
-                        onclick="closeElement('gc33-import-trivia')"
-                    >
-                        Cancel
-                    </button>
+                '<div class="gc33-help">' +
 
-                </div>
+                "Paste a JSON array of Bible questions. " +
+                "Each object should contain question, " +
+                "options, correct_index, reference, " +
+                "explanation, category, difficulty, " +
+                "source_name and source_url where available." +
 
-            </div>
-            `
-        );
+                "<br><br>" +
 
-    const textarea =
-        modal.querySelector("#gc33-trivia-json");
+                "For a 10,000+ question library, import " +
+                "the questions in batches rather than placing " +
+                "them inside app33.js." +
 
-    const status =
-        modal.querySelector("#gc33-trivia-import-status");
+                "</div>" +
 
-    const button =
-        modal.querySelector("#gc33-trivia-import-button");
+                '<textarea id="gc33-json-import" ' +
+                'style="width:100%;min-height:320px;' +
+                'box-sizing:border-box;border:1px solid #dbe2ea;' +
+                'border-radius:12px;padding:12px;font:inherit">' +
+                "</textarea>" +
 
+                '<div class="gc33-actions">' +
 
-    button.onclick = async function () {
+                '<button class="gc33-btn gc33-primary" id="gc33-run-import">' +
+                "Import Questions" +
+                "</button>" +
 
-        try {
+                "</div>" +
 
-            button.disabled = true;
-
-            button.textContent = "Validating...";
-
-            status.style.display = "block";
-
-            status.textContent =
-                "Validating questions...";
-
-
-            const raw =
-                textarea.value.trim();
-
-
-            if (!raw) {
-
-                throw new Error(
-                    "Paste the JSON array first."
-                );
-            }
-
-
-            let data;
-
-            try {
-
-                data = JSON.parse(raw);
-
-            } catch (jsonError) {
-
-                throw new Error(
-                    "Invalid JSON: " +
-                    jsonError.message
-                );
-            }
-
-
-            if (!Array.isArray(data)) {
-
-                throw new Error(
-                    "JSON must contain an array of questions."
-                );
-            }
-
-
-            if (!data.length) {
-
-                throw new Error(
-                    "The JSON array is empty."
-                );
-            }
-
-
-            const rows = [];
-
-
-            data.forEach(function (item, index) {
-
-                const rowNumber =
-                    index + 1;
-
-
-                if (
-                    !item ||
-                    typeof item !== "object" ||
-                    Array.isArray(item)
-                ) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": each item must be an object."
-                    );
-                }
-
-
-                const question =
-                    String(
-                        item.question == null
-                            ? ""
-                            : item.question
-                    ).trim();
-
-
-                if (!question) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": question is required."
-                    );
-                }
-
-
-                if (!Array.isArray(item.options)) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": options must be an array."
-                    );
-                }
-
-
-                const options =
-                    item.options
-                        .map(function (option) {
-
-                            return String(
-                                option == null
-                                    ? ""
-                                    : option
-                            ).trim();
-
-                        })
-                        .filter(Boolean);
-
-
-                if (options.length < 2) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": at least 2 options are required."
-                    );
-                }
-
-
-                /*
-                 * ------------------------------------------------
-                 * CONVERT CORRECT ANSWER TO ZERO-BASED DB INDEX
-                 *
-                 * User-facing:
-                 *
-                 * A = 1
-                 * B = 2
-                 * C = 3
-                 * D = 4
-                 * E = 5
-                 * F = 6
-                 *
-                 * Database:
-                 *
-                 * A = 0
-                 * B = 1
-                 * C = 2
-                 * D = 3
-                 * E = 4
-                 * F = 5
-                 * ------------------------------------------------
-                 */
-
-                let correctIndex =
-                    item.correct_index;
-
-
-                if (
-                    correctIndex === null ||
-                    correctIndex === undefined ||
-                    String(correctIndex).trim() === ""
-                ) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": correct_index is required."
-                    );
-                }
-
-
-                /*
-                 * LETTER FORMAT
-                 *
-                 * "A", "B", "C", "D", "E", "F"
-                 */
-
-                if (
-                    typeof correctIndex === "string" &&
-                    /^[A-Fa-f]$/.test(
-                        correctIndex.trim()
-                    )
-                ) {
-
-                    correctIndex =
-                        correctIndex
-                            .trim()
-                            .toUpperCase()
-                            .charCodeAt(0) -
-                        65;
-                }
-
-
-                /*
-                 * NUMERIC FORMAT
-                 *
-                 * 1 = A
-                 * 2 = B
-                 * 3 = C
-                 * ...
-                 */
-
-                else if (
-                    typeof correctIndex === "number" ||
-                    (
-                        typeof correctIndex === "string" &&
-                        /^\d+$/.test(
-                            correctIndex.trim()
-                        )
-                    )
-                ) {
-
-                    const numericValue =
-                        Number(correctIndex);
-
-
-                    if (
-                        !Number.isInteger(
-                            numericValue
-                        )
-                    ) {
-
-                        throw new Error(
-                            "Question " +
-                            rowNumber +
-                            ": correct_index must be a whole number."
-                        );
-                    }
-
-
-                    /*
-                     * User-facing numbers are 1-based.
-                     * Convert them to the DB's 0-based index.
-                     */
-
-                    correctIndex =
-                        numericValue - 1;
-                }
-
-
-                /*
-                 * EXACT ANSWER TEXT
-                 */
-
-                else {
-
-                    const answerText =
-                        String(correctIndex)
-                            .trim()
-                            .toLowerCase();
-
-
-                    correctIndex =
-                        options.findIndex(
-                            function (option) {
-
-                                return String(option)
-                                    .trim()
-                                    .toLowerCase() ===
-                                    answerText;
-
-                            }
-                        );
-
-
-                    if (correctIndex === -1) {
-
-                        throw new Error(
-                            "Question " +
-                            rowNumber +
-                            ": correct_index must be A-F, a number from 1-" +
-                            options.length +
-                            ", or exactly match one of the options."
-                        );
-                    }
-                }
-
-
-                /*
-                 * Validate final zero-based index.
-                 */
-
-                if (
-                    !Number.isInteger(
-                        correctIndex
-                    ) ||
-                    correctIndex < 0 ||
-                    correctIndex >= options.length
-                ) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": correct_index is out of range. " +
-                        "Use A-" +
-                        String.fromCharCode(
-                            64 + options.length
-                        ) +
-                        " or 1-" +
-                        options.length +
-                        "."
-                    );
-                }
-
-
-                const difficulty =
-                    String(
-                        item.difficulty == null
-                            ? "NORMAL"
-                            : item.difficulty
-                    )
-                    .trim()
-                    .toUpperCase();
-
-
-                if (
-                    ![
-                        "EASY",
-                        "NORMAL",
-                        "HARD"
-                    ].includes(difficulty)
-                ) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": difficulty must be EASY, NORMAL, or HARD."
-                    );
-                }
-
-
-                const sourceUrl =
-                    String(
-                        item.source_url == null
-                            ? ""
-                            : item.source_url
-                    ).trim();
-
-
-                if (
-                    sourceUrl &&
-                    !/^https?:\/\//i.test(
-                        sourceUrl
-                    )
-                ) {
-
-                    throw new Error(
-                        "Question " +
-                        rowNumber +
-                        ": source_url must begin with http:// or https://."
-                    );
-                }
-
-
-                rows.push({
-
-                    question: question,
-
-                    options: options,
-
-                    /*
-                     * IMPORTANT:
-                     * This is now ZERO-BASED for Supabase.
-                     */
-                    correct_index:
-                        correctIndex,
-
-                    reference:
-                        String(
-                            item.reference == null
-                                ? ""
-                                : item.reference
-                        ).trim(),
-
-                    explanation:
-                        String(
-                            item.explanation == null
-                                ? ""
-                                : item.explanation
-                        ).trim(),
-
-                    category:
-                        String(
-                            item.category == null
-                                ? "Scripture"
-                                : item.category
-                        ).trim() || "Scripture",
-
-                    difficulty:
-                        difficulty,
-
-                    source_name:
-                        String(
-                            item.source_name == null
-                                ? ""
-                                : item.source_name
-                        ).trim(),
-
-                    source_url:
-                        sourceUrl,
-
-                    approved:
-                        item.approved !== false
-
-                });
-
-            });
-
-
-            /*
-             * Get current signed-in user.
-             */
-
-            const user =
-                await currentUser();
-
-            const userId =
-                user ? user.id : null;
-
-
-            if (!userId) {
-
-                throw new Error(
-                    "You must be signed in as an administrator."
-                );
-            }
-
-
-            const client =
-                db();
-
-
-            if (!client) {
-
-                throw new Error(
-                    "Supabase client is unavailable."
-                );
-            }
-
-
-            /*
-             * Insert in batches so large imports work.
-             */
-
-            button.textContent =
-                "Importing...";
-
-
-            status.textContent =
-                "Validated " +
-                rows.length +
-                " question" +
-                (
-                    rows.length === 1
-                        ? ""
-                        : "s"
-                ) +
-                ". Importing into Supabase...";
-
-
-            for (
-                let i = 0;
-                i < rows.length;
-                i += 500
-            ) {
-
-                const batch =
-                    rows.slice(
-                        i,
-                        i + 500
-                    ).map(function (row) {
-
-                        return {
-
-                            ...row,
-
-                            created_by:
-                                userId,
-
-                            updated_by:
-                                userId
-
-                        };
-
-                    });
-
-
-                const result =
-                    await client
-                        .from(TRIVIA_TABLE)
-                        .insert(batch);
-
-
-                if (result.error) {
-
-                    throw result.error;
-                }
-
-            }
-
-
-            status.style.background =
-                "#ecfdf5";
-
-            status.style.color =
-                "#065f46";
-
-            status.textContent =
-                "✓ Successfully imported " +
-                rows.length +
-                " question" +
-                (
-                    rows.length === 1
-                        ? ""
-                        : "s"
-                ) +
-                ".";
-
-
-            notify(
-                rows.length +
-                " trivia question" +
-                (
-                    rows.length === 1
-                        ? ""
-                        : "s"
-                ) +
-                " imported successfully.",
-                "success"
+                "</div>"
             );
 
+        modal.querySelector(
+            "#gc33-close-import"
+        ).onclick =
+            function () {
 
-            setTimeout(
-                function () {
+                closeElement(
+                    "gc33-trivia-import"
+                );
+            };
+
+        modal.querySelector(
+            "#gc33-run-import"
+        ).onclick =
+            async function () {
+
+                try {
+
+                    const raw =
+                        modal.querySelector(
+                            "#gc33-json-import"
+                        ).value;
+
+                    const questions =
+                        JSON.parse(raw);
+
+                    if (
+                        !Array.isArray(
+                            questions
+                        )
+                    ) {
+                        throw new Error(
+                            "JSON must contain an array."
+                        );
+                    }
+
+                    const client =
+                        db();
+
+                    const userId =
+                        await currentUserId();
+
+                    const rows =
+                        questions
+                            .map(function (item) {
+
+                                return {
+
+                                    question:
+                                        String(
+                                            item.question ||
+                                            ""
+                                        ).trim(),
+
+                                    options:
+                                        Array.isArray(
+                                            item.options
+                                        )
+                                            ? item.options
+                                            : [],
+
+                                    correct_index:
+                                        Number(
+                                            item.correct_index ||
+                                            0
+                                        ),
+
+                                    reference:
+                                        String(
+                                            item.reference ||
+                                            ""
+                                        ),
+
+                                    explanation:
+                                        String(
+                                            item.explanation ||
+                                            ""
+                                        ),
+
+                                    category:
+                                        String(
+                                            item.category ||
+                                            "Scripture"
+                                        ),
+
+                                    difficulty:
+                                        String(
+                                            item.difficulty ||
+                                            "NORMAL"
+                                        ),
+
+                                    source_name:
+                                        String(
+                                            item.source_name ||
+                                            ""
+                                        ),
+
+                                    source_url:
+                                        String(
+                                            item.source_url ||
+                                            ""
+                                        ),
+
+                                    approved:
+                                        true,
+
+                                    created_by:
+                                        userId,
+
+                                    updated_by:
+                                        userId,
+
+                                    updated_at:
+                                        new Date().toISOString()
+
+                                };
+
+                            })
+                            .filter(function (item) {
+
+                                return (
+                                    item.question &&
+                                    item.options.length >=
+                                    2
+                                );
+
+                            });
+
+                    if (!rows.length) {
+
+                        throw new Error(
+                            "No valid questions were found."
+                        );
+                    }
+
+                    let imported =
+                        0;
+
+                    for (
+                        let index = 0;
+                        index < rows.length;
+                        index += 500
+                    ) {
+
+                        const batch =
+                            rows.slice(
+                                index,
+                                index + 500
+                            );
+
+                        const result =
+                            await client
+                                .from(
+                                    TRIVIA_TABLE
+                                )
+                                .insert(
+                                    batch
+                                );
+
+                        if (
+                            result.error
+                        ) {
+                            throw result.error;
+                        }
+
+                        imported +=
+                            batch.length;
+                    }
+
+                    notify(
+                        imported +
+                        " Bible trivia questions imported.",
+                        "success"
+                    );
 
                     closeElement(
-                        "gc33-import-trivia"
+                        "gc33-trivia-import"
                     );
 
-                    /*
-                     * Refresh the Bible Content Manager.
-                     */
-                    if (
-                        typeof window.gc33OpenContentManager ===
-                        "function"
-                    ) {
-                        window.gc33OpenContentManager();
-                    }
+                    renderManager();
 
-                },
-                800
-            );
+                } catch (error) {
 
+                    console.error(
+                        "Trivia import failed:",
+                        error
+                    );
 
-        } catch (error) {
-
-            console.error(
-                "Trivia import failed:",
-                error
-            );
-
-
-            status.style.display =
-                "block";
-
-            status.style.background =
-                "#fef2f2";
-
-            status.style.color =
-                "#991b1b";
-
-            status.textContent =
-                "✗ " +
-                (
-                    error &&
-                    error.message
-                        ? error.message
-                        : "Trivia import failed."
-                );
-
-
-            button.disabled =
-                false;
-
-            button.textContent =
-                "Validate & Import";
-
-        }
-
-    };
-
-}
+                    notify(
+                        "Import failed: " +
+                        (
+                            error.message ||
+                            "Invalid JSON"
+                        ),
+                        "error"
+                    );
+                }
+            };
+    }
 
     /* ============================================================
        ADMIN BUTTON
