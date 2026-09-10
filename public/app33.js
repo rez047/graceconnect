@@ -4208,7 +4208,7 @@ window.gc33RenderTrivia =
             };
     }
 
-    /* ============================================================
+   /* ============================================================
        IMPORT TRIVIA JSON
        ============================================================ */
 
@@ -4235,7 +4235,7 @@ window.gc33RenderTrivia =
 
                 "Paste a JSON array of Bible questions. " +
                 "Each object should contain question, " +
-                "options, correct_index, reference, " +
+                "options (or choices), correct_index (or answer_index), reference, " +
                 "explanation, category, difficulty, " +
                 "source_name and source_url where available." +
 
@@ -4309,6 +4309,17 @@ window.gc33RenderTrivia =
                         questions
                             .map(function (item) {
 
+                                // Support BOTH formats: options/correct_index AND choices/answer_index
+                                const optionsArray = Array.isArray(item.options) 
+                                    ? item.options 
+                                    : (Array.isArray(item.choices) ? item.choices : []);
+
+                                const correctIdx = (item.correct_index !== undefined && item.correct_index !== null)
+                                    ? Number(item.correct_index)
+                                    : ((item.answer_index !== undefined && item.answer_index !== null)
+                                        ? Number(item.answer_index)
+                                        : 0);
+
                                 return {
 
                                     question:
@@ -4317,18 +4328,9 @@ window.gc33RenderTrivia =
                                             ""
                                         ).trim(),
 
-                                    options:
-                                        Array.isArray(
-                                            item.options
-                                        )
-                                            ? item.options
-                                            : [],
+                                    options: optionsArray,
 
-                                    correct_index:
-                                        Number(
-                                            item.correct_index ||
-                                            0
-                                        ),
+                                    correct_index: correctIdx,
 
                                     reference:
                                         String(
@@ -4462,7 +4464,6 @@ window.gc33RenderTrivia =
                 }
             };
     }
-
     /* ============================================================
        ADMIN BUTTON
        ============================================================ */
