@@ -12,49 +12,65 @@
        ============================================================ */
 
     function getSupabase() {
-        try {
-            if (
-                window.supabaseClient &&
-                typeof window.supabaseClient.from === "function"
-            ) {
-                return window.supabaseClient;
-            }
+    try {
+        if (
+            typeof window.sb === "function"
+        ) {
+            const client = window.sb();
 
             if (
-                window.supabase &&
-                typeof window.supabase.from === "function"
+                client &&
+                typeof client.from === "function"
             ) {
-                return window.supabase;
+                return client;
             }
-
-            if (
-                window.sb &&
-                typeof window.sb.from === "function"
-            ) {
-                return window.sb;
-            }
-
-            if (typeof window.getSupabaseClient === "function") {
-                const client = window.getSupabaseClient();
-
-                if (
-                    client &&
-                    typeof client.from === "function"
-                ) {
-                    return client;
-                }
-            }
-
-            return null;
-        } catch (error) {
-            console.error(
-                "GraceConnect App34: Supabase detection failed:",
-                error
-            );
-
-            return null;
         }
+
+        if (
+            window.sb &&
+            typeof window.sb.from === "function"
+        ) {
+            return window.sb;
+        }
+
+        if (
+            window.supabaseClient &&
+            typeof window.supabaseClient.from === "function"
+        ) {
+            return window.supabaseClient;
+        }
+
+        if (
+            window.supabase &&
+            typeof window.supabase.from === "function"
+        ) {
+            return window.supabase;
+        }
+
+        if (
+            typeof window.getSupabaseClient === "function"
+        ) {
+            const client = window.getSupabaseClient();
+
+            if (
+                client &&
+                typeof client.from === "function"
+            ) {
+                return client;
+            }
+        }
+
+        return null;
+
+    } catch (error) {
+        console.error(
+            "GraceConnect App34: Supabase detection failed:",
+            error
+        );
+
+        return null;
     }
+}
 
 
     /* ============================================================
