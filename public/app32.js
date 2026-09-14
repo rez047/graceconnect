@@ -4058,4 +4058,951 @@ body.dark .gc32-landing-row input,
 
     }
 
+/* ============================================================
+   GRACECONNECT — CATEGORY FORUM + MEMBER CHAT FINAL FIX
+   ------------------------------------------------------------
+   Category forum:
+     - Users delete only their own posts/comments/replies.
+     - Admin deletes any category post/comment/reply.
+
+   Category members:
+     - Adds ONE Chat button beside every other member.
+     - Uses the existing GraceConnect chat system.
+     - Does not remove or alter attachment buttons.
+   ============================================================ */
+(function () {
+  'use strict';
+
+  if (window.__GC_CATEGORY_FINAL_FIX__) return;
+  window.__GC_CATEGORY_FINAL_FIX__ = true;
+
+  function gc32DB() {
+
+    try {
+
+      if (typeof window.sb === 'function') {
+
+        var c = window.sb();
+
+        if (c && typeof c.from === 'function') {
+          return c;
+        }
+      }
+
+      if (
+        window.sb &&
+        typeof window.sb.from === 'function'
+      ) {
+        return window.sb;
+      }
+
+      if (
+        window.supabaseClient &&
+        typeof window.supabaseClient.from === 'function'
+      ) {
+        return window.supabaseClient;
+      }
+
+    } catch (e) {}
+
+    return null;
+  }
+
+  function gc32User() {
+
+    try {
+
+      if (window.user && window.user.id) {
+        return window.user;
+      }
+
+      if (
+        window.currentUser &&
+        window.currentUser.id
+      ) {
+        return window.currentUser;
+      }
+
+      if (
+        window.loggedInUser &&
+        window.loggedInUser.id
+      ) {
+        return window.loggedInUser;
+      }
+
+    } catch (e) {}
+
+    return null;
+  }
+
+  function gc32Uid() {
+
+    var u = gc32User();
+
+    return u && u.id
+      ? String(u.id)
+      : null;
+  }
+
+  function gc32Admin() {
+
+    try {
+
+      if (typeof window.isAdmin === 'function') {
+        return !!window.isAdmin();
+      }
+
+    } catch (e) {}
+
+    var u = gc32User();
+
+    if (!u) return false;
+
+    return (
+      u.is_admin === true ||
+      u.isAdmin === true ||
+      u.role === 'admin' ||
+      u.user_type === 'admin' ||
+      u.user_type === 1
+    );
+  }
+
+  function gc32CanDelete(ownerId) {
+
+    if (gc32Admin()) {
+      return true;
+    }
+
+    var me = gc32Uid();
+
+    return (
+      me &&
+      ownerId &&
+      String(me) === String(ownerId)
+    );
+  }
+
+  function gc32Message(message, type) {
+
+    try {
+
+      if (typeof window.showToast === 'function') {
+        window.showToast(message, type || 'info');
+        return;
+      }
+
+      if (typeof window.toast === 'function') {
+        window.toast(message, type || 'info');
+        return;
+      }
+
+    } catch (e) {}
+
+    alert(message);
+  }
+
+  /*
+   * Delete category comment + all replies beneath it.
+   */
+  async function gc32DeleteCommentTree(commentId) {
+
+    var db = gc32DB();
+
+    if (!db) {
+      throw new Error('Supabase client is not available.');
+    }
+
+    var root = await db
+      .from('community_comments')
+      .select(
+        'id,user_id,post_id,parent_comment_id'
+      )
+      .eq('id', commentId)
+      .maybeSingle();
+
+    if (root.error) {
+      throw root.error;
+    }
+
+    if (!root.data) {
+      throw new Error('Comment no longer exists.');
+    }
+
+    if (!gc32CanDelete(root.data.user_id)) {
+      throw new Error(
+        'You can only delete your own comment.'
+      );
+    }
+
+    var all = await db
+      .from('community_comments')
+      .select('id,parent_comment_id')
+      .eq('post_id', root.data.post_id);
+
+    if (all.error) {
+      throw all.error;
+    }
+
+    var comments = all.data || [];
+
+    var ids = [String(commentId)];
+
+    var changed = true;
+
+    while (changed) {
+
+      changed = false;
+
+      comments.forEach(function (row) {
+
+        var id = String(row.id);
+
+        var parent =
+          row.parent_comment_id
+            ? String(row.parent_comment_id)
+            : null;
+
+        if (
+          parent &&
+          ids.indexOf(parent) !== -1 &&
+          ids.indexOf(id) === -1
+        ) {
+
+          ids.push(id);
+
+          changed = true;
+        }
+
+      });
+    }
+
+    function depth(id, seen) {
+
+      seen = seen || {};
+
+      if (seen[id]) return 0;
+
+      seen[id] = true;
+
+      var row = comments.find(function (x) {
+        return String(x.id) === String(id);
+      });
+
+      if (
+        !row ||
+        !row.parent_comment_id
+      ) {
+        return 0;
+      }
+
+      return (
+        depth(
+          String(row.parent_comment_id),
+          seen
+        ) + 1
+      );
+    }
+
+    ids.sort(function (a, b) {
+      return depth(b) - depth(a);
+    });
+
+    for (var i = 0; i < ids.length; i++) {
+
+      var result = await db
+        .from('community_comments')
+        .delete()
+        .eq('id', ids[i]);
+
+      if (result.error) {
+        throw result.error;
+      }
+    }
+  }
+
+  /*
+   * Delete category post + all comments/replies.
+   */
+  async function gc32DeleteCategoryPost(postId) {
+
+    var db = gc32DB();
+
+    if (!db) {
+      throw new Error('Supabase client is not available.');
+    }
+
+    var post = await db
+      .from('community_posts')
+      .select(
+        'id,user_id,group_type,group_id'
+      )
+      .eq('id', postId)
+      .maybeSingle();
+
+    if (post.error) {
+      throw post.error;
+    }
+
+    if (!post.data) {
+      throw new Error('Post no longer exists.');
+    }
+
+    if (post.data.group_type !== 'category') {
+      throw new Error(
+        'This is not a category forum post.'
+      );
+    }
+
+    if (!gc32CanDelete(post.data.user_id)) {
+      throw new Error(
+        'You can only delete your own post.'
+      );
+    }
+
+    var all = await db
+      .from('community_comments')
+      .select('id,parent_comment_id')
+      .eq('post_id', postId);
+
+    if (all.error) {
+      throw all.error;
+    }
+
+    var comments = all.data || [];
+
+    function depth(id, seen) {
+
+      seen = seen || {};
+
+      if (seen[id]) return 0;
+
+      seen[id] = true;
+
+      var row = comments.find(function (x) {
+        return String(x.id) === String(id);
+      });
+
+      if (
+        !row ||
+        !row.parent_comment_id
+      ) {
+        return 0;
+      }
+
+      return (
+        depth(
+          String(row.parent_comment_id),
+          seen
+        ) + 1
+      );
+    }
+
+    comments.sort(function (a, b) {
+
+      return (
+        depth(String(b.id)) -
+        depth(String(a.id))
+      );
+
+    });
+
+    for (var i = 0; i < comments.length; i++) {
+
+      var commentDelete = await db
+        .from('community_comments')
+        .delete()
+        .eq('id', comments[i].id);
+
+      if (commentDelete.error) {
+        throw commentDelete.error;
+      }
+    }
+
+    var postDelete = await db
+      .from('community_posts')
+      .delete()
+      .eq('id', postId);
+
+    if (postDelete.error) {
+      throw postDelete.error;
+    }
+  }
+
+  /*
+   * CATEGORY FORUM — DELETE POST
+   */
+  window.h32CatDelPost = async function (postId) {
+
+    if (
+      !confirm(
+        'Delete this post and all of its comments and replies?'
+      )
+    ) {
+      return;
+    }
+
+    try {
+
+      await gc32DeleteCategoryPost(postId);
+
+      gc32Message(
+        'Category post deleted successfully.',
+        'success'
+      );
+
+      if (
+        typeof window.h32CatTab === 'function'
+      ) {
+        await window.h32CatTab('forum');
+      }
+
+    } catch (error) {
+
+      console.error(
+        'GraceConnect category post deletion error:',
+        error
+      );
+
+      gc32Message(
+        error && error.message
+          ? error.message
+          : 'Unable to delete category post.',
+        'error'
+      );
+    }
+  };
+
+  /*
+   * CATEGORY FORUM — DELETE COMMENT
+   */
+  window.h32CatDelComment = async function (
+    commentId
+  ) {
+
+    if (
+      !confirm(
+        'Delete this comment/reply and its replies?'
+      )
+    ) {
+      return;
+    }
+
+    try {
+
+      await gc32DeleteCommentTree(commentId);
+
+      gc32Message(
+        'Category comment deleted successfully.',
+        'success'
+      );
+
+      if (
+        typeof window.h32CatTab === 'function'
+      ) {
+        await window.h32CatTab('forum');
+      }
+
+    } catch (error) {
+
+      console.error(
+        'GraceConnect category comment deletion error:',
+        error
+      );
+
+      gc32Message(
+        error && error.message
+          ? error.message
+          : 'Unable to delete category comment.',
+        'error'
+      );
+    }
+  };
+
+  /* ==========================================================
+     CATEGORY MEMBER CHAT
+     ========================================================== */
+
+  function gc32OpenChat(userId) {
+
+    if (!userId) return;
+
+    try {
+
+      if (
+        typeof window.c26OpenChat === 'function'
+      ) {
+        window.c26OpenChat(userId);
+        return;
+      }
+
+      if (
+        typeof window.h27ChatWith === 'function'
+      ) {
+        window.h27ChatWith(userId);
+        return;
+      }
+
+    } catch (e) {
+
+      console.error(
+        'GraceConnect chat error:',
+        e
+      );
+
+    }
+
+    gc32Message(
+      'Chat is currently unavailable.',
+      'error'
+    );
+  }
+
+  /*
+   * Find the current category.
+   */
+  function gc32Category() {
+
+    try {
+
+      if (
+        window._h32Cat &&
+        window._h32Cat.id
+      ) {
+        return window._h32Cat;
+      }
+
+    } catch (e) {}
+
+    return null;
+  }
+
+  /*
+   * Add exactly ONE Chat button to every member card.
+   */
+  async function gc32AddMemberChatButtons() {
+
+    var container =
+      document.getElementById(
+        'h32c-members'
+      );
+
+    if (!container) return;
+
+    var category = gc32Category();
+
+    if (!category || !category.id) {
+      return;
+    }
+
+    var db = gc32DB();
+
+    if (!db) return;
+
+    var result = await db
+      .from(
+        'church_group_category_members'
+      )
+      .select(
+        'user_id,role'
+      )
+      .eq(
+        'category_id',
+        category.id
+      );
+
+    if (result.error) {
+
+      console.error(
+        'Category members query failed:',
+        result.error
+      );
+
+      return;
+    }
+
+    var members = result.data || [];
+
+    if (!members.length) return;
+
+    var ids = members
+      .map(function (x) {
+        return x.user_id;
+      })
+      .filter(Boolean);
+
+    if (!ids.length) return;
+
+    var profilesResult = await db
+      .from('profiles')
+      .select(
+        'id,name,profile_pic,role'
+      )
+      .in(
+        'id',
+        ids
+      );
+
+    if (profilesResult.error) {
+
+      console.error(
+        'Category member profiles query failed:',
+        profilesResult.error
+      );
+
+      return;
+    }
+
+    var profiles =
+      profilesResult.data || [];
+
+    var currentId =
+      gc32Uid();
+
+    /*
+     * Get all member cards.
+     */
+    var cards =
+      container.querySelectorAll(
+        '.card'
+      );
+
+    for (
+      var i = 0;
+      i < cards.length;
+      i++
+    ) {
+
+      var card = cards[i];
+
+      /*
+       * Never create duplicate Chat buttons.
+       */
+      if (
+        card.querySelector(
+          '[data-gc-category-chat]'
+        )
+      ) {
+        continue;
+      }
+
+      /*
+       * Determine member from the visible
+       * member name in the card.
+       */
+      var text =
+        (
+          card.textContent ||
+          ''
+        )
+          .trim()
+          .toLowerCase();
+
+      var member = null;
+
+      for (
+        var m = 0;
+        m < members.length;
+        m++
+      ) {
+
+        var profile =
+          profiles.find(function (p) {
+
+            return (
+              String(p.id) ===
+              String(
+                members[m].user_id
+              )
+            );
+
+          });
+
+        if (!profile) continue;
+
+        var name =
+          (
+            profile.name ||
+            ''
+          )
+            .trim()
+            .toLowerCase();
+
+        if (
+          name &&
+          text.indexOf(name) !== -1
+        ) {
+
+          member = members[m];
+
+          break;
+        }
+      }
+
+      /*
+       * If matching by name failed,
+       * use the corresponding member position.
+       */
+      if (!member && members[i]) {
+        member = members[i];
+      }
+
+      if (!member || !member.user_id) {
+        continue;
+      }
+
+      /*
+       * Do not show Chat beside yourself.
+       */
+      if (
+        currentId &&
+        String(member.user_id) ===
+          String(currentId)
+      ) {
+        continue;
+      }
+
+      /*
+       * Locate the card's button/control area.
+       */
+      var controlRow =
+        card.querySelector(
+          '[style*="display:flex"]'
+        );
+
+      if (!controlRow) {
+        controlRow =
+          card.querySelector(
+            '.d-flex'
+          );
+      }
+
+      if (!controlRow) {
+        controlRow =
+          card.lastElementChild;
+      }
+
+      if (!controlRow) {
+        continue;
+      }
+
+      /*
+       * Create ONE blue Chat button.
+       */
+      var chatButton =
+        document.createElement(
+          'button'
+        );
+
+      chatButton.type =
+        'button';
+
+      chatButton.className =
+        'btn btn-primary btn-sm';
+
+      chatButton.setAttribute(
+        'data-gc-category-chat',
+        'true'
+      );
+
+      chatButton.innerHTML =
+        '<i class="fas fa-comment-dots"></i> Chat';
+
+      chatButton.style.marginLeft =
+        '8px';
+
+      (
+        function (id) {
+
+          chatButton.onclick =
+            function (event) {
+
+              event.preventDefault();
+              event.stopPropagation();
+
+              gc32OpenChat(id);
+            };
+
+        }
+      )(
+        member.user_id
+      );
+
+      controlRow.appendChild(
+        chatButton
+      );
+    }
+  }
+
+  /*
+   * Category member tab can render asynchronously,
+   * so run repeatedly for a short period.
+   */
+  function gc32InstallMemberChat() {
+
+    gc32AddMemberChatButtons();
+
+    setTimeout(
+      gc32AddMemberChatButtons,
+      100
+    );
+
+    setTimeout(
+      gc32AddMemberChatButtons,
+      400
+    );
+
+    setTimeout(
+      gc32AddMemberChatButtons,
+      900
+    );
+
+    setTimeout(
+      gc32AddMemberChatButtons,
+      1500
+    );
+  }
+
+  /*
+   * Watch the member container for rerenders.
+   */
+  function gc32ObserveMembers() {
+
+    var container =
+      document.getElementById(
+        'h32c-members'
+      );
+
+    if (!container) return;
+
+    if (
+      container.__gc32ChatObserver
+    ) {
+      return;
+    }
+
+    var timer = null;
+
+    var observer =
+      new MutationObserver(
+        function () {
+
+          clearTimeout(timer);
+
+          timer =
+            setTimeout(
+              gc32AddMemberChatButtons,
+              100
+            );
+        }
+      );
+
+    observer.observe(
+      container,
+      {
+        childList: true,
+        subtree: true
+      }
+    );
+
+    container.__gc32ChatObserver =
+      observer;
+  }
+
+  /*
+   * Hook the existing category tabs.
+   */
+  function gc32HookCategoryTabs() {
+
+    if (
+      typeof window.h32CatTab !==
+      'function'
+    ) {
+      return;
+    }
+
+    if (
+      window.h32CatTab.__gc32ChatHook
+    ) {
+      return;
+    }
+
+    var original =
+      window.h32CatTab;
+
+    var wrapped =
+      function (tab) {
+
+        var result =
+          original.apply(
+            this,
+            arguments
+          );
+
+        if (
+          tab === 'members'
+        ) {
+
+          gc32InstallMemberChat();
+
+          setTimeout(
+            gc32ObserveMembers,
+            100
+          );
+        }
+
+        return result;
+      };
+
+    wrapped.__gc32ChatHook =
+      true;
+
+    window.h32CatTab =
+      wrapped;
+  }
+
+  /*
+   * Initial installation.
+   */
+  function gc32Install() {
+
+    gc32HookCategoryTabs();
+
+    gc32ObserveMembers();
+
+    if (
+      document.getElementById(
+        'h32c-members'
+      )
+    ) {
+      gc32InstallMemberChat();
+    }
+  }
+
+  gc32Install();
+
+  /*
+   * app32 may finish constructing the category
+   * interface after this block executes.
+   */
+  var attempts = 0;
+
+  var installer =
+    setInterval(
+      function () {
+
+        gc32Install();
+
+        attempts++;
+
+        if (attempts >= 40) {
+          clearInterval(
+            installer
+          );
+        }
+
+      },
+      250
+    );
+
+})();
 })();
