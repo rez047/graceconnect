@@ -12,7 +12,8 @@
   async function upload(file, path) { if (!file) return null; if (window.uploadMediaFile) { try { return await window.uploadMediaFile(file); } catch (e) {} } var n = (path || 'media') + '/' + Date.now() + '_' + file.name; var r = await sb().storage.from('media').upload(n, file); if (r.error) { alert('Upload failed: ' + r.error.message); return null; } return sb().storage.from('media').getPublicUrl(n).data.publicUrl; }
   function mediaHtml(url) { if (!url) return ''; if (/\.(jpg|jpeg|png|gif|webp|svg)$/i.test(url)) return '<img src="' + url + '" style="width:100%;max-height:280px;object-fit:cover;border-radius:14px;margin-top:6px;display:block">'; if (/\.(mp4|webm|ogg|ogv|mov|m4v|mkv|avi|3gp)$/i.test(url)) return '<video src="' + url + '" controls playsinline style="width:100%;max-height:320px;border-radius:14px;margin-top:6px;display:block"></video>'; if (/\.(mp3|wav|m4a|aac)$/i.test(url)) return '<audio src="' + url + '" controls style="width:100%;margin-top:6px;display:block"></audio>'; return '<a href="' + url + '" target="_blank" class="btn btn-secondary-alt btn-sm" style="margin-top:6px"><i class="fas fa-paperclip"></i> File</a>'; }
   function avatarHtml(u, s) { s = s || 38; if (u && u.profile_pic) return '<img src="' + u.profile_pic + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block">'; return '<div class="post-avatar" style="width:' + s + 'px;height:' + s + 'px">' + ini(u && u.name) + '</div>'; }
-  
+  window._h32Media = window._h32Media || {};
+  window.h32Attach = function (key, labelId) { var i = document.createElement('input'); i.type = 'file'; i.accept = '*/*'; i.onchange = function () { var f = i.files && i.files[0]; if (!f) return; window._h32Media[key] = f; var l = document.getElementById(labelId); if (l) l.innerHTML = '<i class="fas fa-check-circle"></i> ' + esc(f.name); }; i.click(); };
 
   // FIX #2 + APOLOGY VISIBILITY: .btn-secondary is white-on-white inside the app.
   // Make it visible everywhere EXCEPT the public landing hero (where white-on-gradient is correct).
@@ -138,7 +139,7 @@
     var canPost = await catCanPost(cat);
     var html = '<div class="card">';
     if (canPost) html += '<textarea class="form-textarea" id="h32cfText" rows="2" placeholder="Post to ' + esc(cat.name) + ' forum..."></textarea>'
-      
+      + '<div class="media-upload" id="h32cfUp" onclick="h32Attach(\'cfpost\',\'h32cfUp\')"><i class="fas fa-cloud-upload-alt"></i><span>Add media/video/file (optional)</span></div>'
       + '<button class="btn btn-primary btn-block" onclick="h32CatPost()"><i class="fas fa-paper-plane"></i> Post</button>';
     else html += '<div style="font-size:.8rem;color:var(--text-light)">Leadership & teachers can post. Members can comment on posts (with optional media).</div>';
     html += '<div id="h32cfList" style="margin-top:10px"></div></div>';
@@ -183,7 +184,7 @@
           + '<div style="display:flex;gap:6px;align-items:center">' + avatarHtml(u, 26) + '<b style="font-size:.78rem;flex:1">' + esc((u && u.name) || 'Member') + '</b>' + (canDel ? '<button class="btn btn-danger btn-sm" onclick="h32CatDelComment(\'' + c.id + '\')"><i class="fas fa-trash"></i></button>' : '') + '</div>'
           + '<div style="font-size:.88rem;white-space:pre-wrap;margin-top:4px">' + esc(c.text || '') + '</div>' + mediaHtml(c.media_url)
           + '<button style="border:none;background:none;color:var(--primary);font-size:.72rem;font-weight:800;margin-top:4px" onclick="h32Toggle(\'h32r-' + c.id + '\')"><i class="fas fa-reply"></i> Reply</button>'
-          
+          + '<div id="h32r-' + c.id + '" style="display:none;margin-top:6px"><div style="display:flex;gap:6px;align-items:center"><input class="form-input" id="h32rt-' + c.id + '" placeholder="Reply..." style="flex:1"><button class="btn btn-secondary btn-sm" onclick="h32Attach(\'cr_' + c.id + '\',\'h32ru-' + c.id + '\')"><i class="fas fa-paperclip"></i></button><span id="h32ru-' + c.id + '" style="font-size:.65rem"></span><button class="btn btn-primary btn-sm" onclick="h32CatComment(\'' + postId + '\',\'' + c.id + '\')"><i class="fas fa-paper-plane"></i></button></div></div>'
           + comments(c._k || [], depth + 1, postId) + '</div>';
       }).join('');
     }
@@ -195,7 +196,7 @@
         + (canDel ? '<button class="btn btn-danger btn-sm" onclick="h32CatDelPost(\'' + p.id + '\')"><i class="fas fa-trash"></i></button>' : '') + '</div>'
         + '<div style="white-space:pre-wrap;margin:8px 0">' + esc(p.text || '') + '</div>' + mediaHtml(p.media_url)
         + comments(tree(byPost[p.id] || []), 0, p.id)
-       
+        + '<div style="display:flex;gap:6px;margin-top:8px;align-items:center"><input class="form-input" id="h32ci-' + p.id + '" placeholder="Comment..." style="flex:1"><button class="btn btn-secondary btn-sm" onclick="h32Attach(\'cc_' + p.id + '\',\'h32cu-' + p.id + '\')"><i class="fas fa-paperclip"></i></button><span id="h32cu-' + p.id + '" style="font-size:.65rem"></span><button class="btn btn-primary btn-sm" onclick="h32CatComment(\'' + p.id + '\',null)"><i class="fas fa-paper-plane"></i></button></div></div>';
     }).join('') || '<div style="color:var(--text-light);text-align:center">No posts yet.</div>';
   }
   async function h32CatMembers() {
