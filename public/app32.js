@@ -4788,7 +4788,42 @@ body.dark .gc32-landing-row input,
       /*
        * Create ONE blue Chat button.
        */
-      var chatButton =
+        // existing member code
+        var userId = member.user_id;
+
+        // existing member/card creation code
+       // ...
+
+        var chatButton = document.createElement('button');
+
+        chatButton.type = 'button';
+        chatButton.className = 'gc32-btn gc32-btn-primary';
+
+        chatButton.innerHTML =
+            '<i class="fas fa-comment-dots"></i> Chat';
+
+        chatButton.onclick = function (event) {
+            if (event) {
+                event.preventDefault();
+                event.stopPropagation();
+            }
+
+           if (!userId) {
+                alert('Unable to identify this member.');
+                return false;
+            }
+
+            if (typeof window.c26OpenChat !== 'function') {
+                alert('Chat is not available yet.');
+                return false;
+            }
+
+            window.c26OpenChat(String(userId));
+            return false;
+        };
+
+        // existing code that adds the button to the member card
+        // ...
         document.createElement(
           'button'
         );
