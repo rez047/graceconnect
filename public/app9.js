@@ -214,30 +214,138 @@ window.addUshComment = function(postId){
     });
 };
 
-window.deleteUshComment = function(commentId, postId){
-    if(!user || !sb) return;
+// ============================================================
+// USHIRIKA COMMENT DELETE
+// Same deletion pattern as the working category/forum system
+// ============================================================
+window.deleteUshComment = async function(commentId, postId) {
 
-    if(!confirm('Delete this comment?')) return;
+    if (!commentId) {
+        alert('Invalid comment.');
+        return;
+    }
 
-    sb.from('post_comments')
-        .delete()
-        .eq('id', commentId)
-        .select('id')
-        .then(function(r){
+    if (!confirm('Delete this comment?')) {
+        return;
+    }
 
-            if(r.error){
-                console.error('Ushirika comment delete failed:', r.error);
-                alert('Could not delete comment: ' + r.error.message);
-                return;
-            }
+    try {
 
-            if(!r.data || !r.data.length){
-                alert('Comment was not deleted. Supabase RLS may be blocking this action.');
-                return;
-            }
+        var client = sb;
 
+        if (typeof window.sb === 'function') {
+            client = window.sb();
+        }
+
+        if (!client || typeof client.from !== 'function') {
+            alert('Supabase client is not available.');
+            return;
+        }
+
+        var currentUser = window.user || window.currentUser;
+
+        if (!currentUser || !currentUser.id) {
+            alert('Please log in again.');
+            return;
+        }
+
+        // Get the actual comment first.
+        var check = await client
+            .from('post_comments')
+            .select('id,user_id')
+            .eq('id', commentId)
+            .maybeSingle();
+
+        if (check.error) {
+            console.error('Ushirika comment lookup failed:', check.error);
+            alert('Unable to find this comment: ' + check.error.message);
+            return;
+        }
+
+        if (!check.data) {
+            alert('Comment no longer exists.');
             loadUshPostComments(postId);
-        });
+            return;
+        }
+
+        // Use the same ownership/admin logic as the working sections.
+        var admin = false;
+
+        try {
+            if (typeof window.isAdmin === 'function') {
+                admin = !!window.isAdmin();
+            } else if (currentUser.isAdmin === true) {
+                admin = true;
+            } else if (
+                String(currentUser.role || '').toLowerCase() === 'admin'
+            ) {
+                admin = true;
+            }
+        } catch (e) {}
+
+        if (
+            !admin &&
+            String(check.data.user_id) !== String(currentUser.id)
+        ) {
+            alert('You can only delete your own comment.');
+            return;
+        }
+
+        // IMPORTANT:
+        // select() lets us verify that Supabase actually deleted a row.
+        var result = await client
+            .from('post_comments')
+            .delete()
+            .eq('id', commentId)
+            .select('id');
+
+        if (result.error) {
+            console.error(
+                'Ushirika comment delete failed:',
+                result.error
+            );
+
+            alert(
+                'Unable to delete comment: ' +
+                result.error.message
+            );
+
+            return;
+        }
+
+        if (!result.data || result.data.length === 0) {
+            console.error(
+                'Ushirika comment was not deleted.',
+                {
+                    commentId: commentId,
+                    userId: currentUser.id
+                }
+            );
+
+            alert(
+                'Comment was not deleted. ' +
+                'Supabase did not return a deleted row. ' +
+                'Check the post_comments SELECT/DELETE policies.'
+            );
+
+            return;
+        }
+
+        // Refresh exactly the same Ushirika post.
+        await loadUshPostComments(postId);
+
+    } catch (error) {
+
+        console.error(
+            'deleteUshComment error:',
+            error
+        );
+
+        alert(
+            'Unable to delete comment: ' +
+            (error.message || error)
+        );
+    }
 };
 
 // ═══════════════════════════════════════════════
