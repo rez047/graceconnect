@@ -5193,9 +5193,7 @@ window.h32CategoryChat = function (uid) {
         */
         var categoryPanels = [
             'h32c-members',
-            'h32c-forum',
-            'h32c-meetings',
-            'h32c-reports'
+
         ];
 
         categoryPanels.forEach(
