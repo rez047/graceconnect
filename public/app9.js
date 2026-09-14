@@ -214,11 +214,30 @@ window.addUshComment = function(postId){
     });
 };
 
-// Delete Ushirika Comment
 window.deleteUshComment = function(commentId, postId){
-    sb.from('post_comments').delete().eq('id', commentId).then(function(){
-        loadUshPostComments(postId);
-    });
+    if(!user || !sb) return;
+
+    if(!confirm('Delete this comment?')) return;
+
+    sb.from('post_comments')
+        .delete()
+        .eq('id', commentId)
+        .select('id')
+        .then(function(r){
+
+            if(r.error){
+                console.error('Ushirika comment delete failed:', r.error);
+                alert('Could not delete comment: ' + r.error.message);
+                return;
+            }
+
+            if(!r.data || !r.data.length){
+                alert('Comment was not deleted. Supabase RLS may be blocking this action.');
+                return;
+            }
+
+            loadUshPostComments(postId);
+        });
 };
 
 // ═══════════════════════════════════════════════
