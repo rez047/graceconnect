@@ -4808,7 +4808,7 @@ body.dark .gc32-landing-row input,
                 event.stopPropagation();
             }
 
-           if (!userId) {
+           if (!uid) {
                 alert('Unable to identify this member.');
                 return false;
             }
@@ -4818,7 +4818,7 @@ body.dark .gc32-landing-row input,
                 return false;
             }
 
-            window.c26OpenChat(String(userId));
+            window.c26OpenChat(uid);
             return false;
         };
 
