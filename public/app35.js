@@ -4675,6 +4675,22 @@
             }
 
         } catch (e) {}
+       
+          var html = '';
+
+        /*
+         * CHAT INBOX BUTTON
+         * Placed at the top of the Category Members section
+         */
+        html +=
+            '<div class="card" style="margin-bottom:12px">' +
+            '<button class="btn btn-primary btn-block" style="font-weight:700"' +
+            ' onclick="window.showSubPage ? window.showSubPage(\'messages\') : (window.switchSection && window.switchSection(\'messages\'))">' +
+            '<i class="fas fa-inbox"></i> Open Chat Inbox' +
+            '</button>' +
+            '</div>';
+
+        if (!members.length) {
 
         var html = '';
 
