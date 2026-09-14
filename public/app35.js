@@ -3277,13 +3277,58 @@
 
     var originalC26Tab = window.c26Tab;
 
-    window.c26GroupDeleteComment = function (id) {
-        DELETE_COMMENT_TREE(id, function () {
-            if (typeof window.c26Tab === 'function') {
-                window.c26Tab('feed');
-            }
-        });
+    window.c26gx_DeleteComment = async function (id) {
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var comment = await db
+            .from('community_comments')
+            .select('id,user_id,post_id')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (comment.error) {
+            alert(comment.error.message);
+            return;
+        }
+
+        if (!comment.data) {
+            alert('Comment no longer exists.');
+            return;
+        }
+
+        if (
+            !ADMIN() &&
+            String(comment.data.user_id) !== String(user.id)
+        ) {
+            alert('You can only delete your own comment.');
+            return;
+        }
+
+        if (!confirm('Delete comment/reply?')) {
+            return;
+        }
+
+        var deleted = await db
+            .from('community_comments')
+            .delete()
+            .eq('id', id);
+
+        if (deleted.error) {
+            alert(deleted.error.message);
+            return;
+        }
+
+        if (typeof window.c26Tab === 'function') {
+            window.c26Tab('feed');
+        }
     };
+    window.c26GroupDeleteComment = window.c26gx_DeleteComment;
 
     window.c26GroupToggleReply = function (id) {
         var el = document.getElementById('c26gx_reply_' + id);
@@ -3900,23 +3945,58 @@
         input.click();
     };
 
-    window.ggGroupDeleteComment =
-        async function (id) {
+    window.gggx_DeleteComment = async function (id) {
+        var db = DB();
+        var user = USER();
 
-        await DELETE_COMMENT_TREE(
-            id,
-            function () {
-                if (
-                    typeof window.ggSwitchGroupTab ===
-                    'function'
-                ) {
-                    window.ggSwitchGroupTab(
-                        'feed'
-                    );
-                }
-            }
-        );
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var comment = await db
+            .from('community_comments')
+            .select('id,user_id,post_id')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (comment.error) {
+            alert(comment.error.message);
+            return;
+        }
+
+        if (!comment.data) {
+            alert('Comment no longer exists.');
+            return;
+        }
+
+        if (
+            !ADMIN() &&
+            String(comment.data.user_id) !== String(user.id)
+        ) {
+            alert('You can only delete your own comment.');
+            return;
+        }
+
+        if (!confirm('Delete comment/reply?')) {
+            return;
+        }
+
+        var deleted = await db
+            .from('community_comments')
+            .delete()
+            .eq('id', id);
+
+        if (deleted.error) {
+            alert(deleted.error.message);
+            return;
+        }
+
+        if (typeof window.ggSwitchGroupTab === 'function') {
+            window.ggSwitchGroupTab('feed');
+        }
     };
+    window.ggGroupDeleteComment = window.gggx_DeleteComment;
 
     window.ggGroupComment =
         async function (
