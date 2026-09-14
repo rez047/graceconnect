@@ -304,37 +304,7 @@
     });
   }, 1500);
 
-  // ---------- SYSTEM-WIDE OPTIONAL MEDIA ON REPLIES/COMMENTS ----------
-  setInterval(function () {
-    document.querySelectorAll('input[placeholder*="omment"],input[placeholder*="eply"],textarea[placeholder*="omment"],textarea[placeholder*="eply"]').forEach(function (inp) {
-      if (inp.closest('#h32c-forum')) return;
-      var wrap = inp.parentElement; if (!wrap || wrap.querySelector('[data-h32clip]')) return;
-      var b = document.createElement('button'); b.type = 'button'; b.className = 'btn btn-secondary btn-sm'; b.setAttribute('data-h32clip', '1'); b.innerHTML = '<i class="fas fa-paperclip"></i>';
-      b.onclick = function () { var i = document.createElement('input'); i.type = 'file'; i.accept = '*/*'; i.onchange = function () { var f = i.files && i.files[0]; if (!f) return; window._h32Pending = f; b.innerHTML = '<i class="fas fa-check-circle"></i>'; }; i.click(); };
-      wrap.insertBefore(b, inp.nextSibling);
-    });
-  }, 1500);
-  setInterval(function () {
-    ['ggComment', 'ggAddComment', 'ggSubmitComment', 'ggReply', 'c26Comment', 'c26AddComment', 'c26Reply', 'submitComment', 'addComment', 'replyComment', 'submitPrayer', 'prayerReply', 'submitPrayerReply', 'h27PrayerReply', 'h27Comment'].forEach(function (n) {
-      var fn = window[n]; if (typeof fn !== 'function' || fn._h32w) return;
-      window[n] = function () {
-        var pending = window._h32Pending;
-        var res = fn.apply(this, arguments);
-        var after = async function () {
-          if (!pending) return; window._h32Pending = null;
-          try {
-            var url = await upload(pending, 'replies');
-            var since = new Date(Date.now() - 8000).toISOString();
-            var r = await sb().from('community_comments').select('id').eq('user_id', me().id).gte('created_at', since).order('created_at', { ascending: false }).limit(1);
-            if (r.data && r.data[0]) await sb().from('community_comments').update({ media_url: url }).eq('id', r.data[0].id);
-          } catch (e) {}
-        };
-        if (res && res.then) res.then(after, after); else setTimeout(after, 900);
-        return res;
-      };
-      window[n]._h32w = true;
-    });
-  }, 2000);
+
 
 // =====================================================
   // STABILIZER v2 — crash fix: dedupe floods, one sub-page per section, old pages never render
