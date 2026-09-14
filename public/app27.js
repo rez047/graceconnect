@@ -83,58 +83,11 @@
     i.click();
   };
 
-  // =====================================================
-  // visible chat buttons everywhere
-  // =====================================================
-  function h28Css() {
-    if (document.getElementById('h28Css')) return;
-    const s = document.createElement('style');
-    s.id = 'h28Css';
-    s.textContent = `
 
 
-      .h28-post-delete{
-        border:none!important;
-        background:#FEE2E2!important;
-        color:#DC2626!important;
-        border-radius:999px!important;
-        width:34px!important;
-        height:34px!important;
-        display:flex!important;
-        align-items:center!important;
-        justify-content:center!important;
-      }
-    `;
-    document.head.appendChild(s);
-  }
 
-  function openChat(uid) {
-    if (!uid || (me() && uid === me().id)) return;
-    if (typeof window.h27ChatWith === 'function') return window.h27ChatWith(uid);
-    if (typeof window.c26OpenChat === 'function') return window.c26OpenChat(uid);
-    alert('Chat module not loaded.');
-  }
 
-  async function injectVisibleChatButtons() {
-    if (!me()) return;
-    const us = await users();
 
-    // Department/Ushirika members from c26 exact state
-    const c26MembersBox = document.getElementById('c26-members');
-    if (c26MembersBox && window._c26 && Array.isArray(window._c26.members)) {
-      const cards = Array.from(c26MembersBox.querySelectorAll('.card'));
-      cards.forEach((card, idx) => {
-        if (card.querySelector('.h28-chat-btn')) return;
-        const m = window._c26.members[idx];
-        if (!m || !m.user_id || m.user_id === me().id) return;
-        card.style.position = 'relative';
-        const btn = document.createElement('button');
-        btn.className = 'h28-chat-btn h28-chat-float';
-        btn.innerHTML = '<i class="fas fa-comment-dots"></i> Chat';
-        btn.onclick = function () { openChat(m.user_id); };
-        card.appendChild(btn);
-      });
-    }
 
     // Department/Ushirika leadership by name scan
     ['#c26-leadership', '#gg-tab-members', '#gg-tab-leadership', '#gg-members', '#ggMemberList'].forEach(sel => {
@@ -162,7 +115,7 @@
         const uid = el.getAttribute('data-h28-user');
         if (!uid || uid === me().id) return;
         const btn = document.createElement('button');
-        btn.className = 'h28-chat-btn';
+        
         btn.innerHTML = '<i class="fas fa-comment-dots"></i> Chat';
         btn.onclick = function () { openChat(uid); };
         el.appendChild(btn);
