@@ -2735,4 +2735,2107 @@
     install35();
   }
 
+
+/* ============================================================
+   GRACECONNECT FINAL GROUP / CATEGORY FUNCTIONALITY FIX
+   ============================================================
+
+   FIXES:
+   1. Ushirika feed:
+      - post
+      - comment
+      - reply
+      - optional media
+      - user deletes own post/comment/reply
+      - admin deletes any post/comment/reply
+      - group leader/chairman can delete posts/comments in group
+
+   2. Department feed:
+      - same complete functionality
+
+   3. Groups main feed:
+      - post
+      - comment
+      - reply
+      - optional media
+      - delete own post/comment/reply
+      - admin delete
+      - uses community_posts/community_comments so it has
+        the same comment engine as the working public forum/category
+
+   4. Category Members:
+      - every member gets ONE blue Chat button
+      - uses existing c26OpenChat / h27ChatWith functionality
+      - does not remove member management controls
+
+   IMPORTANT:
+   This is intentionally placed in APP35 because app35 is loaded
+   after app25/app22/app30.
+   ============================================================ */
+
+(function () {
+    'use strict';
+
+    console.log('✝️ GraceConnect FINAL GROUP FUNCTIONALITY PATCH loaded');
+
+    /* =========================================================
+       BASIC HELPERS
+    ========================================================= */
+
+    function DB() {
+        try {
+            if (typeof window.sb === 'function') {
+                return window.sb();
+            }
+
+            if (window.sb && typeof window.sb.from === 'function') {
+                return window.sb;
+            }
+
+            if (
+                window.supabaseClient &&
+                typeof window.supabaseClient.from === 'function'
+            ) {
+                return window.supabaseClient;
+            }
+        } catch (e) {
+            console.error('Supabase client error:', e);
+        }
+
+        return null;
+    }
+
+    function USER() {
+        return window.user ||
+               window.currentUser ||
+               window.loggedInUser ||
+               null;
+    }
+
+    function ADMIN() {
+        try {
+            return window.isAdmin ? !!window.isAdmin() : false;
+        } catch (e) {
+            return false;
+        }
+    }
+
+    function ESC(value) {
+        if (window.esc) {
+            return window.esc(value);
+        }
+
+        return String(value == null ? '' : value)
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#039;');
+    }
+
+    function DATE(value) {
+        if (!value) return '';
+
+        try {
+            if (window.fdate) {
+                return window.fdate(value);
+            }
+
+            return new Date(value).toLocaleDateString();
+        } catch (e) {
+            return '';
+        }
+    }
+
+    function INITIALS(name) {
+        if (window.ini) {
+            return window.ini(name);
+        }
+
+        if (!name) return '?';
+
+        return String(name)
+            .split(/\s+/)
+            .map(function (x) {
+                return x.charAt(0);
+            })
+            .join('')
+            .substring(0, 2)
+            .toUpperCase();
+    }
+
+    function AVATAR(user, size) {
+        size = size || 38;
+
+        if (user && user.profile_pic) {
+            return '<img src="' + ESC(user.profile_pic) + '"' +
+                ' style="width:' + size + 'px;height:' + size +
+                'px;border-radius:50%;object-fit:cover;flex-shrink:0;display:block">';
+        }
+
+        return '<div class="post-avatar"' +
+            ' style="width:' + size + 'px;height:' + size +
+            'px;display:flex;align-items:center;justify-content:center">' +
+            INITIALS(user && user.name) +
+            '</div>';
+    }
+
+    async function USERS() {
+        var db = DB();
+
+        if (!db) return [];
+
+        if (window.usersData && window.usersData.length) {
+            return window.usersData;
+        }
+
+        var r = await db
+            .from('profiles')
+            .select('id,name,profile_pic,email,role')
+            .order('name');
+
+        if (r.error) {
+            r = await db
+                .from('profiles')
+                .select('id,name,profile_pic,role')
+                .order('name');
+        }
+
+        window.usersData = r.data || [];
+
+        return window.usersData;
+    }
+
+    function MEDIA(url) {
+        if (!url) return '';
+
+        var safe = ESC(url);
+
+        if (/\.(jpg|jpeg|png|gif|webp|svg)(\?.*)?$/i.test(url)) {
+            return '<img src="' + safe + '"' +
+                ' style="width:100%;max-height:300px;object-fit:cover;' +
+                'border-radius:12px;margin-top:7px;display:block">';
+        }
+
+        if (/\.(mp4|webm|ogg|ogv|mov|m4v|3gp)(\?.*)?$/i.test(url)) {
+            return '<video src="' + safe + '"' +
+                ' controls playsinline' +
+                ' style="width:100%;max-height:320px;border-radius:12px;' +
+                'margin-top:7px;display:block"></video>';
+        }
+
+        if (/\.(mp3|wav|m4a|aac)(\?.*)?$/i.test(url)) {
+            return '<audio src="' + safe + '"' +
+                ' controls style="width:100%;margin-top:7px;display:block"></audio>';
+        }
+
+        return '<a href="' + safe +
+            '" target="_blank" class="btn btn-secondary btn-sm"' +
+            ' style="margin-top:7px">' +
+            '<i class="fas fa-paperclip"></i> Attachment</a>';
+    }
+
+    async function UPLOAD(file, folder) {
+        if (!file) return null;
+
+        try {
+            if (window.uploadMediaFile) {
+                return await window.uploadMediaFile(file);
+            }
+        } catch (e) {
+            console.warn('uploadMediaFile failed, using storage fallback');
+        }
+
+        var db = DB();
+
+        if (!db) {
+            alert('Supabase is not ready.');
+            return null;
+        }
+
+        var filename =
+            (folder || 'media') +
+            '/' +
+            Date.now() +
+            '_' +
+            String(file.name || 'file').replace(/\s+/g, '_');
+
+        var result = await db
+            .storage
+            .from('media')
+            .upload(filename, file);
+
+        if (result.error) {
+            alert('Upload failed: ' + result.error.message);
+            return null;
+        }
+
+        return db
+            .storage
+            .from('media')
+            .getPublicUrl(filename)
+            .data
+            .publicUrl;
+    }
+
+
+    /* =========================================================
+       COMMENT TREE
+    ========================================================= */
+
+    function BUILD_TREE(comments) {
+        var map = {};
+        var roots = [];
+
+        (comments || []).forEach(function (c) {
+            c._children = [];
+            map[String(c.id)] = c;
+        });
+
+        (comments || []).forEach(function (c) {
+            var parent = c.parent_comment_id;
+
+            if (
+                parent !== null &&
+                parent !== undefined &&
+                map[String(parent)]
+            ) {
+                map[String(parent)]._children.push(c);
+            } else {
+                roots.push(c);
+            }
+        });
+
+        return roots;
+    }
+
+
+    /* =========================================================
+       GROUP COMMENT DELETE
+    ========================================================= */
+
+    async function DELETE_COMMENT_TREE(commentId, refreshFunction) {
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var target = await db
+            .from('community_comments')
+            .select('id,user_id,post_id,parent_comment_id')
+            .eq('id', commentId)
+            .maybeSingle();
+
+        if (target.error) {
+            alert(target.error.message);
+            return;
+        }
+
+        if (!target.data) {
+            alert('Comment no longer exists.');
+            return;
+        }
+
+        if (
+            !ADMIN() &&
+            String(target.data.user_id) !== String(user.id)
+        ) {
+            alert('You can only delete your own comment.');
+            return;
+        }
+
+        if (!confirm('Delete this comment and its replies?')) {
+            return;
+        }
+
+        var all = await db
+            .from('community_comments')
+            .select('id,parent_comment_id,user_id')
+            .eq('post_id', target.data.post_id);
+
+        if (all.error) {
+            alert(all.error.message);
+            return;
+        }
+
+        var rows = all.data || [];
+        var ids = [String(commentId)];
+
+        var changed = true;
+
+        while (changed) {
+            changed = false;
+
+            rows.forEach(function (row) {
+                var id = String(row.id);
+                var parent = row.parent_comment_id == null
+                    ? null
+                    : String(row.parent_comment_id);
+
+                if (
+                    parent &&
+                    ids.indexOf(parent) !== -1 &&
+                    ids.indexOf(id) === -1
+                ) {
+                    ids.push(id);
+                    changed = true;
+                }
+            });
+        }
+
+        for (var i = 0; i < ids.length; i++) {
+            var del = await db
+                .from('community_comments')
+                .delete()
+                .eq('id', ids[i]);
+
+            if (del.error) {
+                alert(del.error.message);
+                return;
+            }
+        }
+
+        if (typeof refreshFunction === 'function') {
+            refreshFunction();
+        }
+    }
+
+
+    /* =========================================================
+       COMMON COMMENT RENDERER
+    ========================================================= */
+
+    function RENDER_COMMENTS(
+        comments,
+        postId,
+        users,
+        prefix,
+        canDeleteComment
+    ) {
+        var roots = BUILD_TREE(comments);
+
+        function render(list, depth) {
+            return (list || []).map(function (c) {
+
+                var u = users.find(function (x) {
+                    return String(x.id) === String(c.user_id);
+                });
+
+                var own =
+                    USER() &&
+                    String(c.user_id) === String(USER().id);
+
+                var canDelete =
+                    ADMIN() ||
+                    own ||
+                    !!canDeleteComment;
+
+                var replyInputId =
+                    prefix + 'replytext_' + c.id;
+
+                var replyMediaKey =
+                    prefix + 'replymedia_' + c.id;
+
+                var replyMediaLabel =
+                    prefix + 'replylabel_' + c.id;
+
+                var children =
+                    c._children && c._children.length
+                        ? render(c._children, depth + 1)
+                        : '';
+
+                return (
+                    '<div style="' +
+                    'margin-left:' +
+                    Math.min(depth, 4) * 18 +
+                    'px;' +
+                    'margin-top:8px;' +
+                    'background:var(--bg);' +
+                    'border-radius:12px;' +
+                    'padding:9px">' +
+
+                    '<div style="display:flex;gap:7px;align-items:center">' +
+
+                    AVATAR(u, 28) +
+
+                    '<div style="flex:1">' +
+                    '<b style="font-size:.78rem">' +
+                    ESC((u && u.name) || 'Member') +
+                    '</b>' +
+
+                    '<div style="font-size:.65rem;color:var(--text-light)">' +
+                    DATE(c.created_at) +
+                    '</div>' +
+
+                    '</div>' +
+
+                    (
+                        canDelete
+                            ? '<button class="btn btn-danger btn-sm"' +
+                              ' onclick="' +
+                              prefix +
+                              'DeleteComment(\'' +
+                              c.id +
+                              '\')">' +
+                              '<i class="fas fa-trash"></i>' +
+                              '</button>'
+                            : ''
+                    ) +
+
+                    '</div>' +
+
+                    (
+                        c.text
+                            ? '<div style="' +
+                              'font-size:.85rem;' +
+                              'white-space:pre-wrap;' +
+                              'margin-top:5px">' +
+                              ESC(c.text) +
+                              '</div>'
+                            : ''
+                    ) +
+
+                    MEDIA(c.media_url) +
+
+                    '<button class="btn btn-secondary btn-sm"' +
+                    ' style="margin-top:5px;font-size:.7rem"' +
+                    ' onclick="' +
+                    prefix +
+                    'ToggleReply(\'' +
+                    c.id +
+                    '\')">' +
+                    '<i class="fas fa-reply"></i> Reply' +
+                    '</button>' +
+
+                    (
+                        '<div id="' +
+                        prefix +
+                        'reply_' +
+                        c.id +
+                        '" style="display:none;margin-top:7px">' +
+
+                        '<div style="display:flex;gap:5px;align-items:center">' +
+
+                        '<input class="form-input"' +
+                        ' id="' +
+                        replyInputId +
+                        '"' +
+                        ' placeholder="Reply..."' +
+                        ' style="flex:1">' +
+
+                        '<button class="btn btn-secondary btn-sm"' +
+                        ' onclick="' +
+                        prefix +
+                        'Attach(\'' +
+                        replyMediaKey +
+                        '\',\'' +
+                        replyMediaLabel +
+                        '\')">' +
+                        '<i class="fas fa-paperclip"></i>' +
+                        '</button>' +
+
+                        '<button class="btn btn-primary btn-sm"' +
+                        ' onclick="' +
+                        prefix +
+                        'Reply(\'' +
+                        postId +
+                        '\',\'' +
+                        c.id +
+                        '\')">' +
+                        '<i class="fas fa-paper-plane"></i>' +
+                        '</button>' +
+
+                        '</div>' +
+
+                        '<span id="' +
+                        replyMediaLabel +
+                        '" style="font-size:.65rem"></span>' +
+
+                        '</div>'
+                    ) +
+
+                    children +
+
+                    '</div>'
+                );
+            }).join('');
+        }
+
+        return render(roots, 0);
+    }
+
+
+    /* =========================================================
+       USHIRIKA + DEPARTMENT
+       EXACT ORIGINAL LOCATION:
+       public/app25.js
+       c26Tab() / loadFeed()
+       ========================================================= */
+
+    var originalC26Tab = window.c26Tab;
+
+    window.c26GroupDeleteComment = function (id) {
+        DELETE_COMMENT_TREE(id, function () {
+            if (typeof window.c26Tab === 'function') {
+                window.c26Tab('feed');
+            }
+        });
+    };
+
+    window.c26GroupToggleReply = function (id) {
+        var el = document.getElementById('c26gx_reply_' + id);
+
+        if (el) {
+            el.style.display =
+                el.style.display === 'none'
+                    ? 'block'
+                    : 'none';
+        }
+    };
+
+    window.c26GroupAttach = function (key, labelId) {
+        if (window.c26Attach) {
+            window.c26Attach(key, labelId);
+            return;
+        }
+
+        var input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '*/*';
+
+        input.onchange = function () {
+            var f = input.files && input.files[0];
+
+            if (!f) return;
+
+            window._c26Media = window._c26Media || {};
+            window._c26Media[key] = f;
+
+            var label = document.getElementById(labelId);
+
+            if (label) {
+                label.innerHTML =
+                    '<i class="fas fa-check-circle"></i> ' +
+                    ESC(f.name);
+            }
+        };
+
+        input.click();
+    };
+
+    window.c26GroupComment = async function (
+        postId,
+        parentId
+    ) {
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var inputId =
+            parentId
+                ? 'c26gx_replytext_' + parentId
+                : 'c26gx_comment_' + postId;
+
+        var mediaKey =
+            parentId
+                ? 'c26gx_replymedia_' + parentId
+                : 'c26gx_media_' + postId;
+
+        var input = document.getElementById(inputId);
+
+        if (!input) return;
+
+        var text = input.value.trim();
+
+        window._c26Media =
+            window._c26Media || {};
+
+        var file =
+            window._c26Media[mediaKey] || null;
+
+        if (!text && !file) {
+            return alert('Write a comment or attach media.');
+        }
+
+        var mediaUrl = null;
+
+        if (file) {
+            mediaUrl =
+                await UPLOAD(
+                    file,
+                    'community-comments'
+                );
+
+            if (!mediaUrl) return;
+        }
+
+        var payload = {
+            post_id: postId,
+            user_id: user.id,
+            text: text,
+            media_url: mediaUrl
+        };
+
+        if (parentId) {
+            payload.parent_comment_id = parentId;
+        }
+
+        var result = await db
+            .from('community_comments')
+            .insert([payload]);
+
+        if (result.error) {
+            alert(result.error.message);
+            return;
+        }
+
+        delete window._c26Media[mediaKey];
+
+        if (typeof window.c26Tab === 'function') {
+            window.c26Tab('feed');
+        }
+    };
+
+    window.c26GroupDeletePost = async function (id) {
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var post = await db
+            .from('community_posts')
+            .select('id,user_id,group_type,group_id')
+            .eq('id', id)
+            .maybeSingle();
+
+        if (post.error) {
+            alert(post.error.message);
+            return;
+        }
+
+        if (!post.data) {
+            alert('Post no longer exists.');
+            return;
+        }
+
+        if (
+            !ADMIN() &&
+            String(post.data.user_id) !== String(user.id)
+        ) {
+            alert('You can only delete your own post.');
+            return;
+        }
+
+        if (!confirm('Delete this post and all its comments?')) {
+            return;
+        }
+
+        var comments =
+            await db
+                .from('community_comments')
+                .delete()
+                .eq('post_id', id);
+
+        if (comments.error) {
+            alert(comments.error.message);
+            return;
+        }
+
+        var deleted =
+            await db
+                .from('community_posts')
+                .delete()
+                .eq('id', id);
+
+        if (deleted.error) {
+            alert(deleted.error.message);
+            return;
+        }
+
+        if (typeof window.c26Tab === 'function') {
+            window.c26Tab('feed');
+        }
+    };
+
+    async function LOAD_C26_FEED() {
+
+        var box =
+            document.getElementById('c26-feed');
+
+        if (!box) return;
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            box.innerHTML =
+                '<div class="card">Please log in first.</div>';
+            return;
+        }
+
+        var state = window._c26 || {};
+
+        var type =
+            state.currentType;
+
+        var groupId =
+            state.currentId;
+
+        if (!type || !groupId) {
+            box.innerHTML =
+                '<div class="card">Group information unavailable.</div>';
+            return;
+        }
+
+        box.innerHTML =
+            '<div class="card">Loading feed...</div>';
+
+        var postsResult =
+            await db
+                .from('community_posts')
+                .select('*')
+                .eq('group_type', type)
+                .eq('group_id', groupId)
+                .order('created_at', {
+                    ascending: false
+                })
+                .limit(50);
+
+        if (postsResult.error) {
+            box.innerHTML =
+                '<div class="card" style="color:#EF4444">' +
+                ESC(postsResult.error.message) +
+                '</div>';
+            return;
+        }
+
+        var posts =
+            postsResult.data || [];
+
+        var ids =
+            posts.map(function (p) {
+                return p.id;
+            });
+
+        var comments = [];
+
+        if (ids.length) {
+
+            var cr =
+                await db
+                    .from('community_comments')
+                    .select('*')
+                    .in('post_id', ids)
+                    .order('created_at', {
+                        ascending: true
+                    });
+
+            if (!cr.error) {
+                comments = cr.data || [];
+            }
+        }
+
+        var users =
+            await USERS();
+
+        var byPost = {};
+
+        comments.forEach(function (c) {
+            if (!byPost[c.post_id]) {
+                byPost[c.post_id] = [];
+            }
+
+            byPost[c.post_id].push(c);
+        });
+
+        var html = '';
+
+        /* POST COMPOSER */
+
+        html +=
+            '<div class="card" style="border-radius:18px">' +
+
+            '<textarea class="form-textarea"' +
+            ' id="c26gx_posttext"' +
+            ' rows="2"' +
+            ' placeholder="Share an update..."></textarea>' +
+
+            '<div class="media-upload"' +
+            ' id="c26gx_postupload"' +
+            ' onclick="c26GroupAttach(\'post\',\'c26gx_postupload\')">' +
+            '<i class="fas fa-cloud-upload-alt"></i>' +
+            '<span>Add media (any format)</span>' +
+            '</div>' +
+
+            '<button class="btn btn-primary btn-block"' +
+            ' style="margin-top:8px"' +
+            ' onclick="c26GroupPost()">' +
+            '<i class="fas fa-paper-plane"></i> Post' +
+            '</button>' +
+
+            '</div>';
+
+        if (!posts.length) {
+            html +=
+                '<div class="card" style="text-align:center;' +
+                'color:var(--text-light)">' +
+                'No posts yet. Be the first to post.' +
+                '</div>';
+        }
+
+        posts.forEach(function (p) {
+
+            var u =
+                users.find(function (x) {
+                    return String(x.id) === String(p.user_id);
+                });
+
+            var own =
+                String(p.user_id) === String(user.id);
+
+            var canDelete =
+                ADMIN() || own;
+
+            var cs =
+                byPost[p.id] || [];
+
+            html +=
+                '<div class="card" style="' +
+                'border-radius:18px;margin-bottom:12px">' +
+
+                '<div style="display:flex;gap:9px;' +
+                'align-items:center">' +
+
+                AVATAR(u, 38) +
+
+                '<div style="flex:1">' +
+                '<b>' +
+                ESC((u && u.name) || 'Member') +
+                '</b>' +
+
+                '<div style="font-size:.68rem;' +
+                'color:var(--text-light)">' +
+                DATE(p.created_at) +
+                '</div>' +
+
+                '</div>' +
+
+                (
+                    canDelete
+                        ? '<button class="btn btn-danger btn-sm"' +
+                          ' onclick="c26GroupDeletePost(\'' +
+                          p.id +
+                          '\')">' +
+                          '<i class="fas fa-trash"></i>' +
+                          '</button>'
+                        : ''
+                ) +
+
+                '</div>' +
+
+                (
+                    p.text
+                        ? '<div style="' +
+                          'white-space:pre-wrap;' +
+                          'margin:8px 0">' +
+                          ESC(p.text) +
+                          '</div>'
+                        : ''
+                ) +
+
+                MEDIA(p.media_url) +
+
+                '<div style="' +
+                'border-top:1px solid var(--border);' +
+                'margin-top:10px;padding-top:8px">' +
+
+                RENDER_COMMENTS(
+                    cs,
+                    p.id,
+                    users,
+                    'c26gx_',
+                    false
+                ) +
+
+                '<div style="display:flex;gap:6px;' +
+                'align-items:center;margin-top:8px">' +
+
+                '<input class="form-input"' +
+                ' id="c26gx_comment_' +
+                p.id +
+                '"' +
+                ' placeholder="Comment..."' +
+                ' style="flex:1">' +
+
+                '<button class="btn btn-secondary btn-sm"' +
+                ' onclick="c26GroupAttach(\'c26gx_media_' +
+                p.id +
+                '\',\'c26gx_label_' +
+                p.id +
+                '\')">' +
+                '<i class="fas fa-paperclip"></i>' +
+                '</button>' +
+
+                '<button class="btn btn-primary btn-sm"' +
+                ' onclick="c26GroupComment(\'' +
+                p.id +
+                '\',null)">' +
+                '<i class="fas fa-paper-plane"></i>' +
+                '</button>' +
+
+                '</div>' +
+
+                '<span id="c26gx_label_' +
+                p.id +
+                '" style="font-size:.65rem"></span>' +
+
+                '</div>' +
+
+                '</div>';
+        });
+
+        box.innerHTML = html;
+    }
+
+    window.c26GroupPost = async function () {
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var state = window._c26 || {};
+
+        var type =
+            state.currentType;
+
+        var groupId =
+            state.currentId;
+
+        var textEl =
+            document.getElementById('c26gx_posttext');
+
+        if (!textEl) return;
+
+        var text =
+            textEl.value.trim();
+
+        window._c26Media =
+            window._c26Media || {};
+
+        var file =
+            window._c26Media.post || null;
+
+        if (!text && !file) {
+            alert('Write something or attach media.');
+            return;
+        }
+
+        var mediaUrl = null;
+
+        if (file) {
+            mediaUrl =
+                await UPLOAD(
+                    file,
+                    'community-posts'
+                );
+
+            if (!mediaUrl) return;
+        }
+
+        var result =
+            await db
+                .from('community_posts')
+                .insert([{
+                    group_type: type,
+                    group_id: groupId,
+                    user_id: user.id,
+                    text: text,
+                    media_url: mediaUrl
+                }]);
+
+        if (result.error) {
+            alert(result.error.message);
+            return;
+        }
+
+        window._c26Media.post = null;
+
+        if (typeof window.c26Tab === 'function') {
+            window.c26Tab('feed');
+        }
+    };
+
+
+    /* =========================================================
+       REPLACE C26 FEED TAB
+       ========================================================= */
+
+    window.c26Tab = function (tab) {
+
+        if (tab === 'feed') {
+            var tabs = [
+                'feed',
+                'members',
+                'leadership',
+                'meetings'
+            ];
+
+            tabs.forEach(function (x) {
+
+                var b =
+                    document.getElementById('c26t-' + x);
+
+                if (b) {
+                    b.classList.toggle(
+                        'active',
+                        x === tab
+                    );
+                }
+
+                var p =
+                    document.getElementById('c26-' + x);
+
+                if (p) {
+                    p.style.display =
+                        x === tab
+                            ? 'block'
+                            : 'none';
+                }
+            });
+
+            LOAD_C26_FEED();
+            return;
+        }
+
+        if (typeof originalC26Tab === 'function') {
+            return originalC26Tab.apply(
+                this,
+                arguments
+            );
+        }
+    };
+
+
+    /* =========================================================
+       GROUPS MAIN FEED
+       EXACT ORIGINAL LOCATION:
+       public/app22.js
+       ggLoadFeed()
+       ========================================================= */
+
+    var originalGGSwitch =
+        window.ggSwitchGroupTab;
+
+    window.ggGroupToggleReply = function (id) {
+
+        var el =
+            document.getElementById(
+                'gggx_reply_' + id
+            );
+
+        if (el) {
+            el.style.display =
+                el.style.display === 'none'
+                    ? 'block'
+                    : 'none';
+        }
+    };
+
+    window.ggGroupAttach = function (key, labelId) {
+
+        if (window.ggAttachMedia) {
+            window.ggAttachMedia(
+                key,
+                labelId
+            );
+            return;
+        }
+
+        var input =
+            document.createElement('input');
+
+        input.type = 'file';
+        input.accept = '*/*';
+
+        input.onchange = function () {
+
+            var file =
+                input.files &&
+                input.files[0];
+
+            if (!file) return;
+
+            window._ggMedia =
+                window._ggMedia || {};
+
+            window._ggMedia[key] =
+                file;
+
+            var label =
+                document.getElementById(
+                    labelId
+                );
+
+            if (label) {
+                label.innerHTML =
+                    '<i class="fas fa-check-circle"></i> ' +
+                    ESC(file.name);
+            }
+        };
+
+        input.click();
+    };
+
+    window.ggGroupDeleteComment =
+        async function (id) {
+
+        await DELETE_COMMENT_TREE(
+            id,
+            function () {
+                if (
+                    typeof window.ggSwitchGroupTab ===
+                    'function'
+                ) {
+                    window.ggSwitchGroupTab(
+                        'feed'
+                    );
+                }
+            }
+        );
+    };
+
+    window.ggGroupComment =
+        async function (
+            postId,
+            parentId
+        ) {
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var inputId =
+            parentId
+                ? 'gggx_replytext_' + parentId
+                : 'gggx_comment_' + postId;
+
+        var mediaKey =
+            parentId
+                ? 'gggx_replymedia_' + parentId
+                : 'gggx_media_' + postId;
+
+        var input =
+            document.getElementById(
+                inputId
+            );
+
+        if (!input) return;
+
+        var text =
+            input.value.trim();
+
+        window._ggMedia =
+            window._ggMedia || {};
+
+        var file =
+            window._ggMedia[mediaKey] ||
+            null;
+
+        if (!text && !file) {
+            alert(
+                'Write a comment or attach media.'
+            );
+            return;
+        }
+
+        var mediaUrl = null;
+
+        if (file) {
+            mediaUrl =
+                await UPLOAD(
+                    file,
+                    'group-comments'
+                );
+
+            if (!mediaUrl) return;
+        }
+
+        var payload = {
+            post_id: postId,
+            user_id: user.id,
+            text: text,
+            media_url: mediaUrl
+        };
+
+        if (parentId) {
+            payload.parent_comment_id =
+                parentId;
+        }
+
+        var result =
+            await db
+                .from('community_comments')
+                .insert([payload]);
+
+        if (result.error) {
+            alert(result.error.message);
+            return;
+        }
+
+        delete window._ggMedia[mediaKey];
+
+        if (
+            typeof window.ggSwitchGroupTab ===
+            'function'
+        ) {
+            window.ggSwitchGroupTab('feed');
+        }
+    };
+
+    window.ggGroupDeletePost =
+        async function (id) {
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var post =
+            await db
+                .from('community_posts')
+                .select(
+                    'id,user_id,group_type,group_id'
+                )
+                .eq('id', id)
+                .maybeSingle();
+
+        if (post.error) {
+            alert(post.error.message);
+            return;
+        }
+
+        if (!post.data) {
+            alert('Post no longer exists.');
+            return;
+        }
+
+        if (
+            !ADMIN() &&
+            String(post.data.user_id) !==
+            String(user.id)
+        ) {
+            alert(
+                'You can only delete your own post.'
+            );
+            return;
+        }
+
+        if (
+            !confirm(
+                'Delete this post and all its comments?'
+            )
+        ) {
+            return;
+        }
+
+        var comments =
+            await db
+                .from('community_comments')
+                .delete()
+                .eq('post_id', id);
+
+        if (comments.error) {
+            alert(comments.error.message);
+            return;
+        }
+
+        var deleted =
+            await db
+                .from('community_posts')
+                .delete()
+                .eq('id', id);
+
+        if (deleted.error) {
+            alert(deleted.error.message);
+            return;
+        }
+
+        if (
+            typeof window.ggSwitchGroupTab ===
+            'function'
+        ) {
+            window.ggSwitchGroupTab(
+                'feed'
+            );
+        }
+    };
+
+
+    async function LOAD_GROUP_FEED() {
+
+        var box =
+            document.getElementById(
+                'gg-tab-feed'
+            );
+
+        if (!box) return;
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            box.innerHTML =
+                '<div class="card">' +
+                'Please log in first.' +
+                '</div>';
+            return;
+        }
+
+        var state =
+            window._gg || {};
+
+        var groupId =
+            state.currentGroupId;
+
+        if (!groupId) {
+            box.innerHTML =
+                '<div class="card">' +
+                'Group information unavailable.' +
+                '</div>';
+            return;
+        }
+
+        box.innerHTML =
+            '<div class="card">Loading feed...</div>';
+
+        /*
+         * GROUP FEED NOW USES THE SAME COMMUNITY ENGINE
+         * AS PUBLIC FORUM / USHIRIKA / DEPARTMENT.
+         */
+        var postsResult =
+            await db
+                .from('community_posts')
+                .select('*')
+                .eq('group_type', 'group')
+                .eq('group_id', groupId)
+                .order('created_at', {
+                    ascending: false
+                })
+                .limit(50);
+
+        if (postsResult.error) {
+
+            box.innerHTML =
+                '<div class="card" style="color:#EF4444">' +
+                ESC(postsResult.error.message) +
+                '</div>';
+
+            return;
+        }
+
+        var posts =
+            postsResult.data || [];
+
+        var ids =
+            posts.map(function (p) {
+                return p.id;
+            });
+
+        var comments = [];
+
+        if (ids.length) {
+
+            var cr =
+                await db
+                    .from('community_comments')
+                    .select('*')
+                    .in('post_id', ids)
+                    .order('created_at', {
+                        ascending: true
+                    });
+
+            if (!cr.error) {
+                comments =
+                    cr.data || [];
+            }
+        }
+
+        var users =
+            await USERS();
+
+        var byPost = {};
+
+        comments.forEach(function (c) {
+
+            if (!byPost[c.post_id]) {
+                byPost[c.post_id] = [];
+            }
+
+            byPost[c.post_id].push(c);
+        });
+
+        var html = '';
+
+        html +=
+            '<div class="card">' +
+
+            '<textarea class="form-textarea"' +
+            ' id="gggx_posttext"' +
+            ' rows="2"' +
+            ' placeholder="Post to this group..."></textarea>' +
+
+            '<div class="media-upload"' +
+            ' id="gggx_postupload"' +
+            ' onclick="ggGroupAttach(\'post\',\'gggx_postupload\')">' +
+            '<i class="fas fa-cloud-upload-alt"></i>' +
+            '<span>Add media</span>' +
+            '</div>' +
+
+            '<button class="btn btn-primary btn-block"' +
+            ' style="margin-top:8px"' +
+            ' onclick="ggGroupPost()">' +
+            '<i class="fas fa-paper-plane"></i> Post' +
+            '</button>' +
+
+            '</div>';
+
+        if (!posts.length) {
+            html +=
+                '<div class="card" style="text-align:center;' +
+                'color:var(--text-light)">' +
+                'No posts yet.' +
+                '</div>';
+        }
+
+        posts.forEach(function (p) {
+
+            var u =
+                users.find(function (x) {
+                    return String(x.id) ===
+                           String(p.user_id);
+                });
+
+            var canDelete =
+                ADMIN() ||
+                (
+                    user &&
+                    String(p.user_id) ===
+                    String(user.id)
+                );
+
+            var cs =
+                byPost[p.id] || [];
+
+            html +=
+                '<div class="card" style="' +
+                'margin-bottom:12px;' +
+                'border-radius:18px">' +
+
+                '<div style="display:flex;gap:9px;' +
+                'align-items:center">' +
+
+                AVATAR(u, 38) +
+
+                '<div style="flex:1">' +
+                '<b>' +
+                ESC((u && u.name) || 'Member') +
+                '</b>' +
+
+                '<div style="font-size:.68rem;' +
+                'color:var(--text-light)">' +
+                DATE(p.created_at) +
+                '</div>' +
+
+                '</div>' +
+
+                (
+                    canDelete
+                        ? '<button class="btn btn-danger btn-sm"' +
+                          ' onclick="ggGroupDeletePost(\'' +
+                          p.id +
+                          '\')">' +
+                          '<i class="fas fa-trash"></i>' +
+                          '</button>'
+                        : ''
+                ) +
+
+                '</div>' +
+
+                (
+                    p.text
+                        ? '<div style="white-space:pre-wrap;' +
+                          'margin:8px 0">' +
+                          ESC(p.text) +
+                          '</div>'
+                        : ''
+                ) +
+
+                MEDIA(p.media_url) +
+
+                '<div style="' +
+                'border-top:1px solid var(--border);' +
+                'margin-top:10px;padding-top:8px">' +
+
+                RENDER_COMMENTS(
+                    cs,
+                    p.id,
+                    users,
+                    'gggx_',
+                    false
+                ) +
+
+                '<div style="display:flex;gap:6px;' +
+                'align-items:center;margin-top:8px">' +
+
+                '<input class="form-input"' +
+                ' id="gggx_comment_' +
+                p.id +
+                '"' +
+                ' placeholder="Comment..."' +
+                ' style="flex:1">' +
+
+                '<button class="btn btn-secondary btn-sm"' +
+                ' onclick="ggGroupAttach(\'gggx_media_' +
+                p.id +
+                '\',\'gggx_label_' +
+                p.id +
+                '\')">' +
+                '<i class="fas fa-paperclip"></i>' +
+                '</button>' +
+
+                '<button class="btn btn-primary btn-sm"' +
+                ' onclick="ggGroupComment(\'' +
+                p.id +
+                '\',null)">' +
+                '<i class="fas fa-paper-plane"></i>' +
+                '</button>' +
+
+                '</div>' +
+
+                '<span id="gggx_label_' +
+                p.id +
+                '" style="font-size:.65rem"></span>' +
+
+                '</div>' +
+
+                '</div>';
+        });
+
+        box.innerHTML = html;
+    }
+
+
+    window.ggGroupPost = async function () {
+
+        var db = DB();
+        var user = USER();
+
+        if (!db || !user) {
+            alert('Please log in first.');
+            return;
+        }
+
+        var state =
+            window._gg || {};
+
+        var groupId =
+            state.currentGroupId;
+
+        var textEl =
+            document.getElementById(
+                'gggx_posttext'
+            );
+
+        if (!textEl) return;
+
+        var text =
+            textEl.value.trim();
+
+        window._ggMedia =
+            window._ggMedia || {};
+
+        var file =
+            window._ggMedia.post ||
+            null;
+
+        if (!text && !file) {
+            alert(
+                'Write something or attach media.'
+            );
+            return;
+        }
+
+        var mediaUrl = null;
+
+        if (file) {
+
+            mediaUrl =
+                await UPLOAD(
+                    file,
+                    'group-posts'
+                );
+
+            if (!mediaUrl) return;
+        }
+
+        var result =
+            await db
+                .from('community_posts')
+                .insert([{
+                    group_type: 'group',
+                    group_id: groupId,
+                    user_id: user.id,
+                    text: text,
+                    media_url: mediaUrl
+                }]);
+
+        if (result.error) {
+            alert(result.error.message);
+            return;
+        }
+
+        window._ggMedia.post = null;
+
+        if (
+            typeof window.ggSwitchGroupTab ===
+            'function'
+        ) {
+            window.ggSwitchGroupTab(
+                'feed'
+            );
+        }
+    };
+
+
+    /* =========================================================
+       REPLACE GROUP FEED TAB
+       ========================================================= */
+
+    window.ggSwitchGroupTab = function (tab) {
+
+        if (tab === 'feed') {
+
+            var tabs = [
+                'feed',
+                'categories',
+                'members',
+                'meetings',
+                'reports'
+            ];
+
+            tabs.forEach(function (x) {
+
+                var b =
+                    document.getElementById(
+                        'gg-tabbtn-' + x
+                    );
+
+                if (b) {
+                    b.classList.toggle(
+                        'active',
+                        x === tab
+                    );
+                }
+
+                var p =
+                    document.getElementById(
+                        'gg-tab-' + x
+                    );
+
+                if (p) {
+                    p.style.display =
+                        x === tab
+                            ? 'block'
+                            : 'none';
+                }
+            });
+
+            LOAD_GROUP_FEED();
+            return;
+        }
+
+        if (typeof originalGGSwitch ===
+            'function') {
+
+            return originalGGSwitch.apply(
+                this,
+                arguments
+            );
+        }
+    };
+
+
+    /* =========================================================
+       CATEGORY MEMBERS
+       EXACT ORIGINAL LOCATION:
+       public/app30.js
+       h32CatMembers()
+       ========================================================= */
+
+    var originalH32CatTab =
+        window.h32CatTab;
+
+    window.h32CategoryChat =
+        function (uid) {
+
+        if (!uid) return;
+
+        if (
+            typeof window.c26OpenChat ===
+            'function'
+        ) {
+            window.c26OpenChat(uid);
+            return;
+        }
+
+        if (
+            typeof window.h27ChatWith ===
+            'function'
+        ) {
+            window.h27ChatWith(uid);
+            return;
+        }
+
+        alert('Chat is not available.');
+    };
+
+
+    async function LOAD_CATEGORY_MEMBERS() {
+
+        var box =
+            document.getElementById(
+                'h32c-members'
+            );
+
+        var cat =
+            window._h32Cat;
+
+        if (!box || !cat) return;
+
+        var db = DB();
+
+        if (!db) {
+            box.innerHTML =
+                '<div class="card">' +
+                'Supabase is not ready.' +
+                '</div>';
+            return;
+        }
+
+        box.innerHTML =
+            '<div class="card">Loading members...</div>';
+
+        var memberResult =
+            await db
+                .from(
+                    'church_group_category_members'
+                )
+                .select('*')
+                .eq(
+                    'category_id',
+                    cat.id
+                );
+
+        if (memberResult.error) {
+
+            box.innerHTML =
+                '<div class="card" style="color:#EF4444">' +
+                ESC(memberResult.error.message) +
+                '</div>';
+
+            return;
+        }
+
+        var members =
+            memberResult.data || [];
+
+        var users =
+            await USERS();
+
+        var canManage = false;
+
+        try {
+
+            if (
+                window.isAdmin &&
+                window.isAdmin()
+            ) {
+                canManage = true;
+            }
+
+            if (
+                typeof window._h32CatCanManage ===
+                'function'
+            ) {
+                canManage =
+                    await window._h32CatCanManage(
+                        cat
+                    );
+            }
+
+        } catch (e) {}
+
+        var html = '';
+
+        if (!members.length) {
+
+            html +=
+                '<div class="card" style="' +
+                'text-align:center;color:var(--text-light)">' +
+                'No members in this category yet.' +
+                '</div>';
+
+        } else {
+
+            members.forEach(function (m) {
+
+                var u =
+                    users.find(function (x) {
+                        return String(x.id) ===
+                               String(m.user_id);
+                    });
+
+                var self =
+                    USER() &&
+                    String(m.user_id) ===
+                    String(USER().id);
+
+                html +=
+                    '<div class="card" style="' +
+                    'margin-bottom:10px">' +
+
+                    '<div style="display:flex;' +
+                    'gap:10px;align-items:center">' +
+
+                    AVATAR(u, 42) +
+
+                    '<div style="flex:1;min-width:0">' +
+
+                    '<div style="font-weight:800">' +
+                    ESC(
+                        (u && u.name) ||
+                        'Member'
+                    ) +
+                    '</div>' +
+
+                    (
+                        u && u.email
+                            ? '<div style="' +
+                              'font-size:.7rem;' +
+                              'color:var(--text-light);' +
+                              'overflow:hidden;' +
+                              'text-overflow:ellipsis">' +
+                              ESC(u.email) +
+                              '</div>'
+                            : ''
+                    ) +
+
+                    '<div style="' +
+                    'font-size:.75rem;' +
+                    'color:var(--primary);' +
+                    'font-weight:700">' +
+                    ESC(
+                        m.role ||
+                        'Member'
+                    ) +
+                    '</div>' +
+
+                    '</div>' +
+
+                    /*
+                     * ONE CHAT BUTTON ONLY.
+                     */
+                    (
+                        !self
+                            ? '<button class="btn btn-primary btn-sm"' +
+                              ' style="white-space:nowrap"' +
+                              ' onclick="h32CategoryChat(\'' +
+                              m.user_id +
+                              '\')">' +
+                              '<i class="fas fa-comment-dots"></i> Chat' +
+                              '</button>'
+                            : ''
+                    ) +
+
+                    '</div>' +
+
+                    (
+                        canManage && !self
+                            ? '<div style="' +
+                              'display:flex;gap:8px;' +
+                              'margin-top:9px">' +
+
+                              '<select class="form-select"' +
+                              ' onchange="h32CatSetRole(\'' +
+                              m.user_id +
+                              '\',this.value)">' +
+
+                              '<option value="Member"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'member'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Member</option>' +
+
+                              '<option value="Teacher"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'teacher'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Teacher</option>' +
+
+                              '<option value="Leader"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'leader'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Leader</option>' +
+
+                              '<option value="Chairman"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'chairman'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Chairman</option>' +
+
+                              '<option value="Secretary"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'secretary'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Secretary</option>' +
+
+                              '<option value="Treasurer"' +
+                              (
+                                  String(m.role || '')
+                                      .toLowerCase() ===
+                                  'treasurer'
+                                      ? ' selected'
+                                      : ''
+                              ) +
+                              '>Treasurer</option>' +
+
+                              '</select>' +
+
+                              '<button class="btn btn-danger btn-sm"' +
+                              ' onclick="h32CatRemove(\'' +
+                              m.user_id +
+                              '\')">' +
+                              '<i class="fas fa-trash"></i>' +
+                              '</button>' +
+
+                              '</div>'
+                            : ''
+                    ) +
+
+                    '</div>';
+            });
+        }
+
+        box.innerHTML = html;
+    }
+
+
+    /*
+     * Replace only the MEMBERS tab.
+     * Forum / Meetings / Reports continue using their existing
+     * working app30 functionality.
+     */
+
+    window.h32CatTab = function (tab) {
+
+        if (tab === 'members') {
+
+            var tabs = [
+                'forum',
+                'members',
+                'meetings',
+                'reports'
+            ];
+
+            tabs.forEach(function (x) {
+
+                var b =
+                    document.getElementById(
+                        'h32ct-' + x
+                    );
+
+                if (b) {
+                    b.classList.toggle(
+                        'active',
+                        x === tab
+                    );
+                }
+
+                var p =
+                    document.getElementById(
+                        'h32c-' + x
+                    );
+
+                if (p) {
+                    p.style.display =
+                        x === tab
+                            ? 'block'
+                            : 'none';
+                }
+            });
+
+            LOAD_CATEGORY_MEMBERS();
+            return;
+        }
+
+        if (
+            typeof originalH32CatTab ===
+            'function'
+        ) {
+            return originalH32CatTab.apply(
+                this,
+                arguments
+            );
+        }
+    };
+
+
+    console.log(
+        '✅ Final group functionality installed: ' +
+        'Ushirika + Department + Groups + Category Members'
+    );
+
+})();
 })();
