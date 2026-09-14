@@ -149,49 +149,7 @@
 
   setInterval(function () { if (H.chatOpen) chatLoad(); }, 3000);
 
-  // =====================================================
-  // CHAT BUTTON INJECTION — departments, ushirika, groups, feeds
-  // =====================================================
-  async function h27InjectChat() {
-    const us = await users();
-    if (!us || !us.length) return;
 
-    const scopes = ['#c26-members', '#c26-leadership', '#c26-feed', '#gg-tab-members', '#gg-tab-feed', '#h27PostList'];
-
-    scopes.forEach(function (sel) {
-      const scope = document.querySelector(sel);
-      if (!scope) return;
-      const cards = sel === '#h27PostList' ? Array.from(scope.children) : Array.from(scope.querySelectorAll('.card'));
-
-      cards.forEach(function (card) {
-        if (!card || !card.querySelectorAll) return;
-        if (card.querySelector('[data-h27chat]')) return;
-
-        const leaves = Array.from(card.querySelectorAll('div,span,b,strong')).filter(function (d) {
-          return d.children.length === 0;
-        });
-
-        for (let i = 0; i < leaves.length; i++) {
-          const nm = (leaves[i].textContent || '').trim();
-          if (nm.length < 2 || nm.length > 40) continue;
-          const u = us.find(function (x) { return x.name && x.name.trim().toLowerCase() === nm.toLowerCase(); });
-          if (!u) continue;
-          if (me() && u.id === me().id) { card.setAttribute('data-h27chat', 'self'); return; }
-          const btn = document.createElement('button');
-          btn.setAttribute('data-h27chat', '1');
-          btn.className = 'btn btn-secondary btn-sm';
-          btn.style.marginLeft = '6px';
-          btn.title = 'Chat';
-          btn.innerHTML = '<i class="fas fa-comment-dots"></i>';
-          btn.onclick = (function (id) { return function () { window.h27ChatWith(id); }; })(u.id);
-          leaves[i].parentNode.insertBefore(btn, leaves[i].nextSibling);
-          return;
-        }
-        card.setAttribute('data-h27chat', 'scan');
-      });
-    });
-  }
-  setInterval(h27InjectChat, 2000);
 
   // =====================================================
   // EXACT MEMBERSHIPS LIST → FORUM
