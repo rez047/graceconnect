@@ -4576,30 +4576,29 @@
     var originalH32CatTab =
         window.h32CatTab;
 
-window.h32CategoryChat = function (uid) {
+    window.h32CategoryChat =
+        function (uid) {
 
-    if (!uid) return;
+        if (!uid) return;
 
-    /* Use the same Inbox system used by the other
-       member lists throughout GraceConnect. */
-    if (typeof window.openChatWith === 'function') {
-        window.openChatWith(uid);
-        return;
-    }
+        if (
+            typeof window.c26OpenChat ===
+            'function'
+        ) {
+            window.c26OpenChat(uid);
+            return;
+        }
 
-    /* Existing fallback */
-    if (typeof window.c26OpenChat === 'function') {
-        window.c26OpenChat(uid);
-        return;
-    }
+        if (
+            typeof window.h27ChatWith ===
+            'function'
+        ) {
+            window.h27ChatWith(uid);
+            return;
+        }
 
-    if (typeof window.h27ChatWith === 'function') {
-        window.h27ChatWith(uid);
-        return;
-    }
-
-    alert('Chat is not available.');
-};
+        alert('Chat is not available.');
+    };
 
 
     async function LOAD_CATEGORY_MEMBERS() {
@@ -4754,7 +4753,7 @@ window.h32CategoryChat = function (uid) {
                               ' onclick="h32CategoryChat(\'' +
                               m.user_id +
                               '\')">' +
-                              '<i class="fas fa-inbox"></i> Inbox' +
+                              '<i class="fas fa-comment-dots"></i> Chat' +
                               '</button>'
                             : ''
                     ) +
