@@ -1372,6 +1372,38 @@
   }
 
   /* ============================================================
+     DELETE DEVOTIONAL
+     ============================================================ */
+  async function gc35DeleteDevotional(){
+    if(!confirm('Delete this devotional?')) return;
+    
+    var c = db();
+    if(!c) return;
+    
+    var actions = document.getElementById('gc35-devo-actions');
+    var id = actions ? actions.dataset.devoId : null;
+    if(!id) return;
+    
+    var r = await c.from('devotionals').delete().eq('id', id);
+    
+    if(r.error){
+      toast35(r.error.message, 'error');
+    }else{
+      toast35('Devotional deleted', 'success');
+      
+      // Reset UI
+      var t = document.getElementById('gc35-devo-title');
+      var v = document.getElementById('gc35-devo-verse');
+      var b = document.getElementById('gc35-devo-body');
+      
+      if(t) t.textContent = 'Today’s Devotional';
+      if(v) v.textContent = '';
+      if(b) b.textContent = 'Spend time in prayer, Scripture and reflection today.';
+      if(actions) actions.style.display = 'none';
+    }
+  }
+
+  /* ============================================================
      COMMENTS
      ============================================================ */
 
@@ -2114,6 +2146,12 @@
       +'</div>'
 
       +'<div id="gc35-devo-body" style="margin-top:10px;line-height:1.6">'
+      +'</div>'
+
+      +'<div id="gc35-devo-actions" style="margin-top:12px;display:none">'
+      +'<button class="gc35-btn gc35-danger" onclick="gc35DeleteDevotional()">'
+      +'<i class="fas fa-trash"></i> Delete Devotional'
+      +'</button>'
       +'</div>';
 
     host.appendChild(
@@ -2303,6 +2341,17 @@
       b.textContent=
         d.body||
         '';
+    }
+
+    // Show delete button if admin and devotional is from DB
+    var actions = document.getElementById('gc35-devo-actions');
+    if (actions) {
+        if (admin35() && d && d.id) {
+            actions.style.display = 'block';
+            actions.dataset.devoId = d.id;
+        } else {
+            actions.style.display = 'none';
+        }
     }
   }
 
@@ -2641,6 +2690,9 @@
 
     window.gc35CloseHistory=
       gc35CloseHistory;
+
+    window.gc35DeleteDevotional=
+      gc35DeleteDevotional;
 
     /*
       Bell notifications.
@@ -4675,8 +4727,8 @@
             }
 
         } catch (e) {}
-       
-          var html = '';
+
+        var html = '';
 
         /*
          * CHAT INBOX BUTTON
@@ -4689,10 +4741,6 @@
             '<i class="fas fa-inbox"></i> Open Chat Inbox' +
             '</button>' +
             '</div>';
-
-        if (!members.length) {
-
-        var html = '';
 
         if (!members.length) {
 
