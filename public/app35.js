@@ -4919,3 +4919,357 @@
 
 })();
 })();
+/* ============================================================
+   GRACECONNECT — GROUP + CATEGORY MEMBER CHAT
+   Uses the EXISTING c26OpenChat() functionality.
+   Add AFTER the final existing })(); in app35.js
+   ============================================================ */
+
+(function () {
+    'use strict';
+
+    function gcChatReady() {
+        return typeof window.c26OpenChat === 'function';
+    }
+
+    function gcEsc(value) {
+        return String(value == null ? '' : value)
+            .replace(/\\/g, '\\\\')
+            .replace(/'/g, "\\'");
+    }
+
+    function gcCurrentUserId() {
+        try {
+            if (window.user && window.user.id) {
+                return window.user.id;
+            }
+
+            if (window.currentUser && window.currentUser.id) {
+                return window.currentUser.id;
+            }
+
+            if (window.loggedInUser && window.loggedInUser.id) {
+                return window.loggedInUser.id;
+            }
+        } catch (e) {}
+
+        return null;
+    }
+
+    /*
+     * Creates the SAME chat button used elsewhere:
+     * c26OpenChat(member.user_id)
+     */
+    function gcChatButton(userId) {
+
+        if (!userId) {
+            return '';
+        }
+
+        var currentId = gcCurrentUserId();
+
+        if (currentId && String(userId) === String(currentId)) {
+            return '';
+        }
+
+        if (!gcChatReady()) {
+            return '';
+        }
+
+        return (
+            '<button ' +
+            'type="button" ' +
+            'class="btn btn-sm btn-chat" ' +
+            'style="background:#2563eb;color:#fff;border:none;" ' +
+            'onclick="c26OpenChat(\'' +
+            gcEsc(userId) +
+            '\');return false;"' +
+            '>' +
+            '<i class="fas fa-inbox"></i> Chat' +
+            '</button>'
+        );
+    }
+
+    /*
+     * GROUP MEMBERS
+     *
+     * Finds the existing Group Members area and adds
+     * exactly one Chat button to each member row.
+     *
+     * It does NOT replace the existing member-management
+     * buttons or remove anything else.
+     */
+    function gcPatchGroupMembers() {
+
+        var selectors = [
+            '#ggMemberList',
+            '#gg-members',
+            '#gg-tab-members'
+        ];
+
+        selectors.forEach(function (selector) {
+
+            var box = document.querySelector(selector);
+
+            if (!box) {
+                return;
+            }
+
+            box.querySelectorAll('[data-user-id]').forEach(
+                function (row) {
+
+                    if (row.dataset.gc26ChatAdded === '1') {
+                        return;
+                    }
+
+                    var uid =
+                        row.getAttribute('data-user-id');
+
+                    if (!uid) {
+                        return;
+                    }
+
+                    var button =
+                        document.createElement('span');
+
+                    button.innerHTML =
+                        gcChatButton(uid);
+
+                    if (
+                        !button.firstElementChild
+                    ) {
+                        return;
+                    }
+
+                    row.appendChild(
+                        button.firstElementChild
+                    );
+
+                    row.dataset.gc26ChatAdded = '1';
+                }
+            );
+        });
+    }
+
+    /*
+     * CATEGORY MEMBERS
+     *
+     * Existing category Members container:
+     * #h32c-members
+     */
+    function gcPatchCategoryMembers() {
+
+        var box =
+            document.getElementById(
+                'h32c-members'
+            );
+
+        if (!box) {
+            return;
+        }
+
+        /*
+         * First handle rows/cards which already expose
+         * the member ID through data-user-id.
+         */
+        box.querySelectorAll('[data-user-id]').forEach(
+            function (row) {
+
+                if (row.dataset.gc26ChatAdded === '1') {
+                    return;
+                }
+
+                var uid =
+                    row.getAttribute('data-user-id');
+
+                if (!uid) {
+                    return;
+                }
+
+                var html =
+                    gcChatButton(uid);
+
+                if (!html) {
+                    return;
+                }
+
+                var holder =
+                    document.createElement('span');
+
+                holder.innerHTML = html;
+
+                if (!holder.firstElementChild) {
+                    return;
+                }
+
+                row.appendChild(
+                    holder.firstElementChild
+                );
+
+                row.dataset.gc26ChatAdded = '1';
+            }
+        );
+    }
+
+    /*
+     * DIRECT BUTTON FALLBACK
+     *
+     * Some existing member renderers do not put
+     * data-user-id on the outer row. In that case this
+     * finds existing member buttons/links containing a
+     * user ID and places the Chat button beside them.
+     *
+     * It never changes the existing button's onclick.
+     */
+    function gcPatchMemberContainers() {
+
+        var containers = [
+            '#ggMemberList',
+            '#gg-members',
+            '#h32c-members'
+        ];
+
+        containers.forEach(function (selector) {
+
+            var box =
+                document.querySelector(selector);
+
+            if (!box) {
+                return;
+            }
+
+            /*
+             * Look for elements whose onclick already contains
+             * a UUID/user ID. We use the surrounding member row.
+             */
+            box.querySelectorAll(
+                '[onclick*="user_id"],' +
+                '[onclick*="userId"],' +
+                '[onclick*="openChatWith"],' +
+                '[onclick*="c26OpenChat"]'
+            ).forEach(function (el) {
+
+                var row =
+                    el.closest(
+                        '[data-user-id], .member-card, .member-item, .member-row, .card, div'
+                    );
+
+                if (!row) {
+                    return;
+                }
+
+                if (
+                    row.dataset &&
+                    row.dataset.gc26ChatAdded === '1'
+                ) {
+                    return;
+                }
+
+                /*
+                 * If this is already a c26OpenChat button,
+                 * do not duplicate it.
+                 */
+                if (
+                    String(el.getAttribute('onclick') || '')
+                        .indexOf('c26OpenChat') !== -1
+                ) {
+                    if (row.dataset) {
+                        row.dataset.gc26ChatAdded = '1';
+                    }
+                    return;
+                }
+            });
+        });
+    }
+
+    /*
+     * Run after the existing Group/Category renderers
+     * have populated their member lists.
+     */
+    function gcPatchAllMemberChats() {
+
+        if (!gcChatReady()) {
+            return;
+        }
+
+        gcPatchGroupMembers();
+        gcPatchCategoryMembers();
+        gcPatchMemberContainers();
+    }
+
+    /*
+     * Wait for the existing application to finish loading.
+     */
+    function gcStartMemberChatPatch() {
+
+        gcPatchAllMemberChats();
+
+        setTimeout(
+            gcPatchAllMemberChats,
+            300
+        );
+
+        setTimeout(
+            gcPatchAllMemberChats,
+            800
+        );
+
+        setTimeout(
+            gcPatchAllMemberChats,
+            1500
+        );
+
+        setTimeout(
+            gcPatchAllMemberChats,
+            3000
+        );
+    }
+
+    /*
+     * Re-run when the application switches sections/tabs
+     * or when existing member HTML is rendered.
+     */
+    var gcObserver =
+        new MutationObserver(
+            function () {
+                gcPatchAllMemberChats();
+            }
+        );
+
+    function gcObserve() {
+
+        if (!document.body) {
+            return;
+        }
+
+        try {
+            gcObserver.observe(
+                document.body,
+                {
+                    childList: true,
+                    subtree: true
+                }
+            );
+        } catch (e) {}
+    }
+
+    if (
+        document.readyState ===
+        'loading'
+    ) {
+
+        document.addEventListener(
+            'DOMContentLoaded',
+            function () {
+                gcObserve();
+                gcStartMemberChatPatch();
+            }
+        );
+
+    } else {
+
+        gcObserve();
+        gcStartMemberChatPatch();
+    }
+
+})();
