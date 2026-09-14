@@ -91,29 +91,8 @@
     const s = document.createElement('style');
     s.id = 'h28Css';
     s.textContent = `
-      .h28-chat-btn{
-        display:inline-flex!important;
-        align-items:center!important;
-        justify-content:center!important;
-        gap:5px!important;
-        min-width:74px!important;
-        height:34px!important;
-        padding:0 10px!important;
-        border:none!important;
-        border-radius:999px!important;
-        background:linear-gradient(135deg,#4F46E5,#06B6D4)!important;
-        color:#fff!important;
-        font-size:.72rem!important;
-        font-weight:800!important;
-        box-shadow:0 8px 18px -8px rgba(79,70,229,.65)!important;
-        z-index:5!important;
-        flex-shrink:0!important;
-      }
-      .h28-chat-float{
-        position:absolute!important;
-        top:10px!important;
-        right:10px!important;
-      }
+
+
       .h28-post-delete{
         border:none!important;
         background:#FEE2E2!important;
