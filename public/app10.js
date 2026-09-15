@@ -84,18 +84,11 @@ window.showSubPage=function(id){var r=_sp9?_sp9.apply(this,arguments):undefined;
 
 // ═══════════ INBOX (works from any section) ═══════════
 window.openChatWith=function(id){
-  if(!user||id===user.id||!sb)return;
-  currentChatUserId=id;
-  var u=null;for(var i=0;i<usersData.length;i++){if(usersData[i].id===id){u=usersData[i];break;}}
-  if(!u)return;
-  var a=document.getElementById('chatAvatar');if(a)a.textContent=ini(u.name);
-  var n=document.getElementById('chatName');if(n)n.textContent=u.name;
-  var s=document.getElementById('chatStatus');if(s)s.textContent=esc(u.role||'Member')+' • Online';
-  activateSection('section-discover','discover-chat','discover');
-  closeModalDirect();
-  loadChatMessages();
-  if(chatSub&&sb.removeChannel){sb.removeChannel(chatSub);chatSub=null;}
-  try{chatSub=sb.channel('chat-'+user.id).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages'},function(){loadChatMessages();loadChatInbox();}).subscribe();}catch(e){}
+  if(!id)return;
+  // Route all Discover chat calls to the proven Ushirika/Department chat engine
+  if(typeof window.c26OpenChat==='function'){window.c26OpenChat(id);return;}
+  if(typeof window.h27ChatWith==='function'){window.h27ChatWith(id);return;}
+  alert('Chat is not available.');
 };
 
 // ═══════════ PERMISSIONS ═══════════
@@ -1578,10 +1571,10 @@ console.log('✝️ app17-append active (delete+insert roles + calm dept widget)
         if(!pk||!window.user)return;
         var list=(window.usersData||[]).filter(function(u){return u.id!==user.id;});
         pk.innerHTML=list.map(function(u){
-          return '<div class="user-pick-item" onclick="openChatWith(\''+u.id+'\')" style="cursor:pointer">'+
+          return '<div class="user-pick-item" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+u.id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+u.id+'\')}else{alert(\'Chat not available\')}" style="cursor:pointer">'+
             '<div class="post-avatar" style="width:32px;height:32px;font-size:.7rem">'+ini(u.name)+'</div>'+
             '<div style="flex:1"><div style="font-weight:600">'+esc(u.name)+'</div><div style="font-size:.7rem;color:var(--text-light)">'+esc(u.role||'member')+'</div></div>'+
-            '<button class="btn btn-sm btn-chat" onclick="event.stopPropagation();openChatWith(\''+u.id+'\')"><i class="fas fa-inbox"></i> Inbox</button></div>';
+            '<button class="btn btn-sm btn-primary" onclick="event.stopPropagation();if(window.c26OpenChat){window.c26OpenChat(\''+u.id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+u.id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button></div>';
         }).join('')||'<div style="text-align:center;padding:14px;color:var(--text-lighter)">No users yet.</div>';
       },200);
     }
