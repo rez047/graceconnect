@@ -865,7 +865,7 @@ async function getRandomTriviaQuestion() {
     if (!user) {
 
         notify(
-            "Please sign in to use Bible Trivia.",
+            "Please sign in get in touch with us.",
             "error"
         );
 
