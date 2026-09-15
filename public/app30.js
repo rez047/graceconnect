@@ -209,7 +209,7 @@
       var self = me() && String(r.user_id) === String(me().id);
       html += '<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center">' + avatarHtml(u, 38)
         + '<div style="flex:1"><b>' + esc((u && u.name) || 'Member') + '</b><div style="font-size:.72rem;color:var(--primary);font-weight:700">' + esc(r.role || 'Member') + '</div></div>'
-        + (!self ? '<button class="btn btn-primary btn-sm" style="white-space:nowrap;margin-left:auto;" onclick="window.h32CategoryChat(\'' + r.user_id + '\')"><i class="fas fa-comment-dots"></i> Chat</button>' : '') + '</div>'
+        + (!self ? '<button class="btn btn-primary btn-sm" style="white-space:nowrap;margin-left:auto;" onclick="if(window.c26OpenChat){window.c26OpenChat(\'' + r.user_id + '\')}else if(window.h27ChatWith){window.h27ChatWith(\'' + r.user_id + '\')}else{alert(\'Chat not ready\')}"><i class="fas fa-comment-dots"></i> Chat</button>' : '') + '</div>'
         + (gm ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="h32CatSetRole(\'' + r.user_id + '\',this.value)">' + ['Member', 'Teacher', 'Leader', 'Chairman'].map(function (o) { return '<option' + ((r.role || 'Member') === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select><button class="btn btn-danger btn-sm" onclick="h32CatRemove(\'' + r.user_id + '\')"><i class="fas fa-trash"></i></button></div>' : '') + '</div>';
     });
     if (!(m.data || []).length) html += '<div class="card">No category members yet. Join the category first.</div>';
