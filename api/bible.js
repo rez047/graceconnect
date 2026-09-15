@@ -470,10 +470,14 @@ function extractMegaVerses(data) {
   }
 
   return content
-    .filter(function (item) {
+    .filter(function (item, index) {
 
       if (!item) {
         return false;
+      }
+
+      if (typeof item === 'string') {
+        return item.trim().length > 0;
       }
 
       if (
@@ -488,21 +492,22 @@ function extractMegaVerses(data) {
         item.verse != null
       );
     })
-    .map(function (item) {
-
+    .map(function (item, index) {
+      if (typeof item === 'string') {
+        return normalizeVerse({
+          verse: index + 1,
+          text: item
+        });
+      }
       return normalizeVerse({
         verse:
           item.number != null
             ? item.number
-            : item.verse,
-
-        text:
-          item.text ||
-          item.value ||
-          item.content ||
-          ""
+            : item.verse != null
+            ? item.verse
+            : index + 1,
+        text: item.text || item.value || item.content || ""
       });
-
     })
     .filter(function (verse) {
       return !!verse;
