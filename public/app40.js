@@ -181,6 +181,51 @@
     var gt = null;
     new MutationObserver(function () { clearTimeout(gt); gt = setTimeout(gateReports40, 300); }).observe(document.body, { childList: true, subtree: true });
   }
+  /* ============================================================
+     M-PESA EXCLUSIVE: kill any injected payment-method UI
+     (gcPayMethodChange + its selector re-rendered by old patches)
+     ============================================================ */
+  window.gcPayMethodChange = function () { return false; };   /* neutralize handler */
+
+  function sweepPayMethod40() {
+    var modal = document.getElementById('giveModal');
+    if (!modal) return;
+    /* remove selects / segmented buttons / radios tied to method */
+    modal.querySelectorAll('select, [onclick*="gcPayMethodChange"], [data-pay-method], .pay-method, .payment-method').forEach(function (el) {
+      if (el.id === 'gc40MpesaPhone') return;
+      var wrap = el.closest ? el.closest('.form-group') : null;
+      if (wrap && /method/i.test(wrap.textContent || '') && !/M-Pesa Number/i.test(wrap.textContent || '')) wrap.remove();
+      else if (el.parentNode) el.parentNode.removeChild(el);
+    });
+    /* remove any form-group whose text is about payment method / bank / cash */
+    modal.querySelectorAll('.form-group').forEach(function (g) {
+      var t = (g.textContent || '').toLowerCase();
+      if (/payment method|method\s*:/.test(t) || (/bank/.test(t) && /cash/.test(t))) {
+        if (!/m-pesa number/i.test(t)) g.remove();
+      }
+    });
+    /* remove bank/cash radios or checkboxes if injected */
+    modal.querySelectorAll('input[type="radio"],input[type="checkbox"]').forEach(function (r) {
+      var n = ((r.name || '') + ' ' + (r.value || '') + ' ' + (r.id || '')).toLowerCase();
+      if (/bank|cash|method/.test(n)) {
+        var w = r.closest ? (r.closest('.form-group') || r.parentElement) : r.parentElement;
+        if (w && w.parentNode) w.parentNode.removeChild(w);
+      }
+    });
+  }
+
+  /* sweep continuously (old patch re-renders on a timer) + right after modal opens */
+  setInterval(sweepPayMethod40, 1200);
+  if (typeof window._gcGive === 'function' && !window._gcGive._gc40sweep) {
+    var g40s = window._gcGive;
+    window._gcGive = function () {
+      var r = g40s.apply(this, arguments);
+      setTimeout(sweepPayMethod40, 200);
+      setTimeout(sweepPayMethod40, 700);
+      return r;
+    };
+    window._gcGive._gc40sweep = true;
+  }
 /* ============================================================
      M-PESA DARAJA (STK Push) — Give Now flow
      ============================================================ */
