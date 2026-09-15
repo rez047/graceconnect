@@ -1,34 +1,38 @@
 /* ============================================================
    GRACECONNECT — APP36.JS
-   TARGETED FINAL PATCH
+   FINAL BIBLE + GROUP/CATEGORY CHAT PATCH
 
-   IMPORTANT:
-   - Does NOT replace the existing English Bible loader.
-     app19.js remains responsible for English/KJV/etc.
-   - Intercepts ONLY Swahili Bible requests.
-   - Uses MEGA.Bible's complete Swahili Biblia Takatifu first,
-     then GraceConnect /api/bible as fallback.
-   - Adds exactly one Chat button to actual GROUP and CATEGORY
-     member rows using the existing Supabase membership tables.
+   FIXES:
+   1. Keeps existing English/other Bible translations untouched.
+   2. Swahili New Testament remains working.
+   3. Swahili Old Testament uses MEGA.Bible correctly.
+   4. Handles multiple MEGA JSON verse structures.
+   5. Adds ONE Chat button per Group/Category member.
+   6. Chat button uses the EXISTING h27ChatWith/c26OpenChat engine.
+   7. Uses event delegation so dynamically rendered members work.
+   8. Does not create another chat system.
    ============================================================ */
 
 (function () {
     'use strict';
 
-    console.log('GC APP36: targeted patch loading');
+    console.log('GC APP36 FINAL: loading');
 
     /* ============================================================
-       HELPERS
+       BASIC HELPERS
        ============================================================ */
 
-    function db36() {
+    function SB36() {
         try {
             if (typeof window.sb === 'function') {
                 var c = window.sb();
                 if (c && typeof c.from === 'function') return c;
             }
 
-            if (window.sb && typeof window.sb.from === 'function') {
+            if (
+                window.sb &&
+                typeof window.sb.from === 'function'
+            ) {
                 return window.sb;
             }
 
@@ -38,15 +42,20 @@
             ) {
                 return window.supabaseClient;
             }
-        } catch (e) {}
+        } catch (e) {
+            console.error('APP36 SB:', e);
+        }
 
         return null;
     }
 
-    function esc36(v) {
-        if (typeof window.esc === 'function') return window.esc(v);
 
-        return String(v == null ? '' : v).replace(
+    function esc36(value) {
+        if (typeof window.esc === 'function') {
+            return window.esc(value);
+        }
+
+        return String(value == null ? '' : value).replace(
             /[&<>"']/g,
             function (c) {
                 return {
@@ -60,12 +69,9 @@
         );
     }
 
-    function me36() {
-        return window.user || null;
-    }
 
-    function normalize36(v) {
-        return String(v || '')
+    function norm36(value) {
+        return String(value || '')
             .trim()
             .toLowerCase()
             .replace(/\s+/g, ' ');
@@ -76,7 +82,10 @@
        SWAHILI BOOK MAP
        ============================================================ */
 
-    var SW36 = {
+    var SW_BOOKS36 = {
+
+        /* ---------- OLD TESTAMENT ---------- */
+
         'mwanzo': ['Genesis', 'gen'],
         'kutoka': ['Exodus', 'exo'],
         'walawi': ['Leviticus', 'lev'],
@@ -87,12 +96,16 @@
         'yoshua': ['Joshua', 'jos'],
         'waamuzi': ['Judges', 'jdg'],
         'ruthu': ['Ruth', 'rut'],
+
         '1 samweli': ['1 Samuel', '1sa'],
         '2 samweli': ['2 Samuel', '2sa'],
+
         '1 wafalme': ['1 Kings', '1ki'],
         '2 wafalme': ['2 Kings', '2ki'],
+
         '1 nyakati': ['1 Chronicles', '1ch'],
         '2 nyakati': ['2 Chronicles', '2ch'],
+
         'ezra': ['Ezra', 'ezr'],
         'nehemia': ['Nehemiah', 'neh'],
         'esta': ['Esther', 'est'],
@@ -121,6 +134,8 @@
         'zekaria': ['Zechariah', 'zec'],
         'malaki': ['Malachi', 'mal'],
 
+        /* ---------- NEW TESTAMENT ---------- */
+
         'mathayo': ['Matthew', 'mat'],
         'matayo': ['Matthew', 'mat'],
         'marko': ['Mark', 'mrk'],
@@ -130,16 +145,20 @@
         'matendo': ['Acts', 'act'],
         'matendo ya mitume': ['Acts', 'act'],
         'warumi': ['Romans', 'rom'],
+
         '1 wakorintho': ['1 Corinthians', '1co'],
         '2 wakorintho': ['2 Corinthians', '2co'],
         '1 wakorinto': ['1 Corinthians', '1co'],
         '2 wakorinto': ['2 Corinthians', '2co'],
+
         'wagalatia': ['Galatians', 'gal'],
         'waefeso': ['Ephesians', 'eph'],
         'wafilipi': ['Philippians', 'php'],
         'wakolosai': ['Colossians', 'col'],
+
         '1 wathesalonike': ['1 Thessalonians', '1th'],
         '2 wathesalonike': ['2 Thessalonians', '2th'],
+
         '1 timotheo': ['1 Timothy', '1ti'],
         '2 timotheo': ['2 Timothy', '2ti'],
         'tito': ['Titus', 'tit'],
@@ -156,7 +175,9 @@
         'ufunuo wa yohana': ['Revelation', 'rev']
     };
 
-    var EN36 = {
+
+    var EN_BOOKS36 = {
+
         'genesis': ['Genesis', 'gen'],
         'exodus': ['Exodus', 'exo'],
         'leviticus': ['Leviticus', 'lev'],
@@ -165,12 +186,16 @@
         'joshua': ['Joshua', 'jos'],
         'judges': ['Judges', 'jdg'],
         'ruth': ['Ruth', 'rut'],
+
         '1 samuel': ['1 Samuel', '1sa'],
         '2 samuel': ['2 Samuel', '2sa'],
+
         '1 kings': ['1 Kings', '1ki'],
         '2 kings': ['2 Kings', '2ki'],
+
         '1 chronicles': ['1 Chronicles', '1ch'],
         '2 chronicles': ['2 Chronicles', '2ch'],
+
         'ezra': ['Ezra', 'ezr'],
         'nehemiah': ['Nehemiah', 'neh'],
         'esther': ['Esther', 'est'],
@@ -197,6 +222,7 @@
         'haggai': ['Haggai', 'hag'],
         'zechariah': ['Zechariah', 'zec'],
         'malachi': ['Malachi', 'mal'],
+
         'matthew': ['Matthew', 'mat'],
         'mark': ['Mark', 'mrk'],
         'luke': ['Luke', 'luk'],
@@ -228,109 +254,341 @@
 
 
     /* ============================================================
-       BIBLE REFERENCE
+       BIBLE REFERENCE PARSER
        ============================================================ */
 
-    function parse36(ref) {
-        var m = String(ref || '').trim().match(
+    function parseBible36(ref) {
+
+        var text = String(ref || '')
+            .trim();
+
+        var match = text.match(
             /^(.+?)\s+(\d+)(?:\s*:\s*(\d+)(?:\s*-\s*(\d+))?)?$/
         );
 
-        if (!m) return null;
+        if (!match) {
+            return null;
+        }
 
-        var name = normalize36(m[1]);
-        var book = SW36[name] || EN36[name];
+        var name = norm36(match[1]);
 
-        if (!book) return null;
+        var book =
+            SW_BOOKS36[name] ||
+            EN_BOOKS36[name];
+
+        if (!book) {
+            return null;
+        }
 
         return {
-            book: book[0],
+            name: book[0],
             slug: book[1],
-            chapter: parseInt(m[2], 10),
-            start: m[3] ? parseInt(m[3], 10) : null,
-            end: m[4]
-                ? parseInt(m[4], 10)
-                : (m[3] ? parseInt(m[3], 10) : null)
+            chapter: parseInt(match[2], 10),
+            start: match[3]
+                ? parseInt(match[3], 10)
+                : null,
+            end: match[4]
+                ? parseInt(match[4], 10)
+                : (
+                    match[3]
+                        ? parseInt(match[3], 10)
+                        : null
+                )
         };
     }
 
 
-    function collectVerses36(value, out, seen) {
-        if (!value || typeof value !== 'object') return;
+    /* ============================================================
+       GENERIC MEGA VERSE EXTRACTOR
+       ============================================================ */
 
-        if (!seen) seen = [];
+    function collectVerses36(
+        value,
+        output,
+        seen
+    ) {
 
-        if (seen.indexOf(value) !== -1) return;
-        seen.push(value);
-
-        if (Array.isArray(value)) {
-            value.forEach(function (x) {
-                collectVerses36(x, out, seen);
-            });
+        if (
+            value === null ||
+            value === undefined
+        ) {
             return;
         }
 
-        var n =
-            value.verse != null ? value.verse :
-            value.number != null ? value.number :
-            value.verseNumber != null ? value.verseNumber :
-            null;
-
-        var text =
-            value.text ||
-            value.value ||
-            (
-                typeof value.content === 'string'
-                    ? value.content
-                    : ''
-            );
-
-        if (
-            n != null &&
-            text &&
-            /^\d+$/.test(String(n))
-        ) {
-            out.push({
-                verse: parseInt(n, 10),
-                text: String(text).replace(/\s+/g, ' ').trim()
-            });
+        if (!output) {
+            output = [];
         }
 
-        Object.keys(value).forEach(function (key) {
-            var child = value[key];
+        if (!seen) {
+            seen = [];
+        }
+
+        if (
+            typeof value === 'object' &&
+            seen.indexOf(value) !== -1
+        ) {
+            return;
+        }
+
+        if (
+            typeof value === 'object'
+        ) {
+            seen.push(value);
+        }
+
+
+        /* Array */
+
+        if (Array.isArray(value)) {
+
+            value.forEach(function (item) {
+                collectVerses36(
+                    item,
+                    output,
+                    seen
+                );
+            });
+
+            return;
+        }
+
+
+        /* String */
+
+        if (typeof value === 'string') {
+
+            var lines =
+                value.split(/\n+/);
+
+            lines.forEach(function (line) {
+
+                var m =
+                    line.trim().match(
+                        /^(\d+)\s+(.+)$/
+                    );
+
+                if (m) {
+
+                    output.push({
+                        verse:
+                            parseInt(
+                                m[1],
+                                10
+                            ),
+
+                        text:
+                            m[2]
+                                .replace(
+                                    /\s+/g,
+                                    ' '
+                                )
+                                .trim()
+                    });
+                }
+            });
+
+            return;
+        }
+
+
+        if (
+            typeof value !== 'object'
+        ) {
+            return;
+        }
+
+
+        /* --------------------------------------------
+           Direct verse number fields
+           -------------------------------------------- */
+
+        var number =
+            value.verse != null
+                ? value.verse
+                : value.number != null
+                    ? value.number
+                    : value.verseNumber != null
+                        ? value.verseNumber
+                        : value.n != null
+                            ? value.n
+                            : null;
+
+
+        var text =
+            value.text != null
+                ? value.text
+                : value.value != null
+                    ? value.value
+                    : value.content != null &&
+                      typeof value.content === 'string'
+                        ? value.content
+                        : value.verseText != null
+                            ? value.verseText
+                            : null;
+
+
+        if (
+            number != null &&
+            text != null &&
+            String(text).trim()
+        ) {
+
+            var parsedNumber =
+                parseInt(
+                    String(number)
+                        .replace(/[^\d]/g, ''),
+                    10
+                );
 
             if (
-                child &&
-                typeof child === 'object' &&
-                key !== 'crossReferences' &&
-                key !== 'references' &&
-                key !== 'topics' &&
-                key !== 'people' &&
-                key !== 'events'
+                !isNaN(parsedNumber) &&
+                parsedNumber > 0
             ) {
-                collectVerses36(child, out, seen);
+
+                output.push({
+                    verse: parsedNumber,
+                    text:
+                        String(text)
+                            .replace(
+                                /\s+/g,
+                                ' '
+                            )
+                            .trim()
+                });
             }
-        });
+        }
+
+
+        /* --------------------------------------------
+           Common alternate MEGA structures
+           -------------------------------------------- */
+
+        if (
+            value.verses &&
+            typeof value.verses === 'object'
+        ) {
+
+            collectVerses36(
+                value.verses,
+                output,
+                seen
+            );
+        }
+
+
+        if (
+            value.data &&
+            typeof value.data === 'object'
+        ) {
+
+            collectVerses36(
+                value.data,
+                output,
+                seen
+            );
+        }
+
+
+        if (
+            value.chapter &&
+            typeof value.chapter === 'object'
+        ) {
+
+            collectVerses36(
+                value.chapter,
+                output,
+                seen
+            );
+        }
+
+
+        /*
+         * Walk everything else.
+         */
+
+        Object.keys(value).forEach(
+            function (key) {
+
+                if (
+                    key === 'crossReferences' ||
+                    key === 'references' ||
+                    key === 'topics' ||
+                    key === 'people' ||
+                    key === 'places' ||
+                    key === 'events'
+                ) {
+                    return;
+                }
+
+                var child =
+                    value[key];
+
+                if (
+                    child &&
+                    typeof child === 'object'
+                ) {
+
+                    collectVerses36(
+                        child,
+                        output,
+                        seen
+                    );
+                }
+            }
+        );
     }
 
 
-    function uniqueVerses36(list) {
+    function uniqueVerses36(
+        verses
+    ) {
+
         var map = {};
 
-        list.forEach(function (v) {
-            if (
-                v &&
-                v.verse > 0 &&
-                v.text &&
-                !map[v.verse]
-            ) {
-                map[v.verse] = v;
+        (verses || []).forEach(
+            function (verse) {
+
+                if (
+                    !verse ||
+                    !verse.verse ||
+                    !verse.text
+                ) {
+                    return;
+                }
+
+                var n =
+                    parseInt(
+                        verse.verse,
+                        10
+                    );
+
+                if (
+                    isNaN(n) ||
+                    n <= 0
+                ) {
+                    return;
+                }
+
+                if (!map[n]) {
+                    map[n] = {
+                        verse: n,
+                        text:
+                            String(
+                                verse.text
+                            )
+                                .replace(
+                                    /\s+/g,
+                                    ' '
+                                )
+                                .trim()
+                    };
+                }
             }
-        });
+        );
 
         return Object.keys(map)
-            .map(function (k) {
-                return map[k];
+            .map(function (key) {
+                return map[key];
             })
             .sort(function (a, b) {
                 return a.verse - b.verse;
@@ -338,167 +596,304 @@
     }
 
 
-    function fetchJSON36(url) {
-        return fetch(url, {
-            method: 'GET',
-            mode: 'cors',
-            headers: {
-                'Accept': 'application/json'
-            }
-        }).then(function (r) {
-            if (!r.ok) {
-                throw new Error('HTTP ' + r.status);
-            }
+    /* ============================================================
+       FETCH JSON
+       ============================================================ */
 
-            return r.json();
-        });
+    function fetch36(
+        url
+    ) {
+
+        return fetch(
+            url,
+            {
+                method: 'GET',
+                mode: 'cors',
+                cache: 'no-store',
+                headers: {
+                    'Accept':
+                        'application/json,text/plain,*/*'
+                }
+            }
+        ).then(
+            function (response) {
+
+                if (!response.ok) {
+                    throw new Error(
+                        'HTTP ' +
+                        response.status
+                    );
+                }
+
+                return response.json();
+            }
+        );
     }
 
 
     /* ============================================================
-       SWAHILI LOADER — ONLY SWAHILI IS OVERRIDDEN
+       SWAHILI BIBLE LOADER
        ============================================================ */
 
-    function loadSwahili36(parsed) {
-        var key =
-            'gc36_sw_' +
+    function loadSwahili36(
+        parsed
+    ) {
+
+        var cacheKey =
+            'gc36_swahili_' +
             parsed.slug +
             '_' +
             parsed.chapter;
 
-        var mega =
-            'https://mega.bible/sw/biblia-takatifu/' +
+
+        /*
+         * IMPORTANT:
+         *
+         * The correct MEGA API structure is:
+         *
+         * /sw/biblia-takatifu/{book}/{chapter}.json
+         *
+         * This covers Old AND New Testament.
+         */
+
+        var url =
+            'https://mega.bible/sw/' +
+            'biblia-takatifu/' +
             parsed.slug +
             '/' +
             parsed.chapter +
             '.json';
 
-        /*
-         * MEGA.Bible is tried first because it contains the complete
-         * Swahili Old + New Testament.
-         */
 
-        return fetchJSON36(mega)
-            .then(function (data) {
-                var found = [];
+        console.log(
+            'APP36 Swahili request:',
+            url
+        );
 
-                collectVerses36(
-                    data,
-                    found
-                );
 
-                var verses =
-                    uniqueVerses36(found);
+        return fetch36(url)
 
-                if (!verses.length) {
-                    throw new Error(
-                        'No verses from MEGA'
+            .then(
+                function (data) {
+
+                    var found = [];
+
+                    collectVerses36(
+                        data,
+                        found
                     );
-                }
 
-                try {
-                    localStorage.setItem(
-                        key,
-                        JSON.stringify(verses)
-                    );
-                } catch (e) {}
-
-                return verses;
-            })
-
-            .catch(function () {
-                /*
-                 * Server fallback preserves compatibility with the
-                 * existing GraceConnect Bible API.
-                 */
-
-                return fetchJSON36(
-                    '/api/bible?translation=swahili' +
-                    '&book=' +
-                    encodeURIComponent(parsed.book) +
-                    '&chapter=' +
-                    encodeURIComponent(parsed.chapter)
-                )
-                    .then(function (data) {
-                        var found = [];
-
-                        collectVerses36(
-                            data,
+                    var verses =
+                        uniqueVerses36(
                             found
                         );
 
-                        var verses =
-                            uniqueVerses36(found);
 
-                        if (!verses.length) {
-                            throw new Error(
-                                'No Swahili verses'
-                            );
-                        }
+                    if (
+                        !verses.length
+                    ) {
 
-                        return verses;
-                    });
-            })
+                        console.warn(
+                            'APP36 MEGA returned data but no verses',
+                            data
+                        );
 
-            .catch(function (err) {
-                var cached = null;
+                        throw new Error(
+                            'No verses parsed from MEGA'
+                        );
+                    }
 
-                try {
-                    cached = JSON.parse(
-                        localStorage.getItem(key) || 'null'
-                    );
-                } catch (e) {}
 
-                if (
-                    Array.isArray(cached) &&
-                    cached.length
-                ) {
-                    return cached;
+                    try {
+                        localStorage.setItem(
+                            cacheKey,
+                            JSON.stringify(
+                                verses
+                            )
+                        );
+                    } catch (e) {}
+
+
+                    return verses;
                 }
+            )
 
-                throw err;
-            });
+            .catch(
+                function (megaError) {
+
+                    console.warn(
+                        'APP36 MEGA failed:',
+                        megaError
+                    );
+
+
+                    /*
+                     * Existing GraceConnect API.
+                     */
+
+                    return fetch36(
+                        '/api/bible' +
+                        '?translation=swahili' +
+                        '&book=' +
+                        encodeURIComponent(
+                            parsed.name
+                        ) +
+                        '&chapter=' +
+                        encodeURIComponent(
+                            parsed.chapter
+                        )
+                    )
+
+                        .then(
+                            function (data) {
+
+                                var found = [];
+
+                                collectVerses36(
+                                    data,
+                                    found
+                                );
+
+                                var verses =
+                                    uniqueVerses36(
+                                        found
+                                    );
+
+                                if (
+                                    !verses.length
+                                ) {
+
+                                    throw new Error(
+                                        'No verses from GraceConnect Bible API'
+                                    );
+                                }
+
+                                try {
+                                    localStorage.setItem(
+                                        cacheKey,
+                                        JSON.stringify(
+                                            verses
+                                        )
+                                    );
+                                } catch (e) {}
+
+                                return verses;
+                            }
+                        )
+
+                        .catch(
+                            function (apiError) {
+
+                                console.warn(
+                                    'APP36 Bible API failed:',
+                                    apiError
+                                );
+
+
+                                /*
+                                 * Local cached copy.
+                                 */
+
+                                try {
+
+                                    var cached =
+                                        JSON.parse(
+                                            localStorage.getItem(
+                                                cacheKey
+                                            ) ||
+                                            'null'
+                                        );
+
+                                    if (
+                                        Array.isArray(
+                                            cached
+                                        ) &&
+                                        cached.length
+                                    ) {
+                                        return cached;
+                                    }
+
+                                } catch (e) {}
+
+
+                                throw megaError;
+                            }
+                        );
+                }
+            );
     }
 
 
-    function paintSwahili36(
+    /* ============================================================
+       RENDER SWAHILI BIBLE
+       ============================================================ */
+
+    function renderSwahili36(
         parsed,
-        verses,
-        offline
+        verses
     ) {
-        var out =
-            document.getElementById('readerOut');
 
-        if (!out) return;
-
-        var shown = verses;
-
-        if (parsed.start != null) {
-            shown = verses.filter(function (v) {
-                return (
-                    v.verse >= parsed.start &&
-                    v.verse <= (
-                        parsed.end == null
-                            ? parsed.start
-                            : parsed.end
-                    )
-                );
-            });
-        }
-
-        if (!shown.length) {
-            throw new Error(
-                'Requested verse not found'
+        var output =
+            document.getElementById(
+                'readerOut'
             );
+
+        if (!output) {
+            return;
         }
 
-        window._bibleVerses = shown;
-        window._selectedVerses = [];
+
+        var visible =
+            verses || [];
+
+
+        if (
+            parsed.start != null
+        ) {
+
+            visible =
+                visible.filter(
+                    function (v) {
+
+                        return (
+                            v.verse >=
+                                parsed.start &&
+                            v.verse <=
+                                (
+                                    parsed.end != null
+                                        ? parsed.end
+                                        : parsed.start
+                                )
+                        );
+                    }
+                );
+        }
+
+
+        if (!visible.length) {
+
+            output.innerHTML =
+                '<div style="color:#991B1B">' +
+                'The requested verse could not be found.' +
+                '</div>';
+
+            return;
+        }
+
+
+        window._bibleVerses =
+            visible;
+
 
         var html =
-            '<div style="font-weight:800;color:#92400E;margin-bottom:8px">' +
+            '<div style="' +
+            'font-weight:800;' +
+            'color:#92400E;' +
+            'margin-bottom:10px' +
+            '">' +
+
             esc36(
-                parsed.book +
+                parsed.name +
                 ' ' +
                 parsed.chapter +
                 (
@@ -508,154 +903,245 @@
                           (
                             parsed.end != null &&
                             parsed.end !== parsed.start
-                                ? '-' + parsed.end
+                                ? '-' +
+                                  parsed.end
                                 : ''
                           )
                         : ''
                 )
             ) +
-            (
-                offline
-                    ? ' <span class="chip chip-green">offline</span>'
-                    : ''
-            ) +
+
             '</div>';
 
-        shown.forEach(function (v) {
-            html +=
-                '<p ' +
-                'data-v="' + v.verse + '"' +
-                'onclick="toggleVerseHighlight(this,' +
-                v.verse +
-                ')"' +
-                'style="padding:5px 6px;margin:0 0 2px;border-radius:7px;cursor:pointer">' +
-                '<sup style="font-weight:800">' +
-                v.verse +
-                '</sup> ' +
-                esc36(v.text) +
-                '</p>';
-        });
 
-        out.innerHTML = html;
+        visible.forEach(
+            function (verse) {
+
+                html +=
+                    '<p ' +
+                    'data-v="' +
+                    verse.verse +
+                    '" ' +
+
+                    'onclick="' +
+                    'if(typeof toggleVerseHighlight===\\'function\\')' +
+                    'toggleVerseHighlight(this,' +
+                    verse.verse +
+                    ')" ' +
+
+                    'style="' +
+                    'padding:6px 7px;' +
+                    'margin:0 0 3px;' +
+                    'border-radius:7px;' +
+                    'cursor:pointer' +
+                    '">' +
+
+                    '<sup style="' +
+                    'font-weight:800;' +
+                    'margin-right:4px' +
+                    '">' +
+
+                    verse.verse +
+
+                    '</sup>' +
+
+                    esc36(
+                        verse.text
+                    ) +
+
+                    '</p>';
+            }
+        );
+
+
+        output.innerHTML =
+            html;
     }
 
 
+    /* ============================================================
+       WRAP EXISTING BIBLE LOADER
+       ============================================================ */
+
     function installBible36() {
+
         var original =
             window.loadBibleChapter;
 
+
         if (
-            typeof original !== 'function' ||
+            typeof original !==
+            'function'
+        ) {
+            return;
+        }
+
+
+        if (
             original.__gc36Wrapped
         ) {
             return;
         }
 
-        function wrappedBible() {
-            var trans =
-                document.getElementById('readerTrans');
 
-            var ref =
-                document.getElementById('readerRef');
+        function wrappedBible36() {
 
             var translation =
-                trans
-                    ? String(trans.value || '')
-                    : '';
+                document.getElementById(
+                    'readerTrans'
+                );
+
+            var reference =
+                document.getElementById(
+                    'readerRef'
+                );
+
 
             /*
-             * CRITICAL:
-             *
-             * Every non-Swahili translation goes straight to the
-             * original loader.
-             *
-             * This preserves Mark 3 and all existing English Bible
-             * functionality.
+             * Preserve ALL existing loaders except Swahili.
              */
 
+            var translationValue =
+                translation
+                    ? norm36(
+                        translation.value
+                    )
+                    : '';
+
+
             if (
-                normalize36(translation) !==
+                translationValue !==
                 'swahili'
             ) {
+
                 return original.apply(
                     this,
                     arguments
                 );
             }
 
+
             var parsed =
-                parse36(
-                    ref
-                        ? ref.value
+                parseBible36(
+                    reference
+                        ? reference.value
                         : ''
                 );
 
-            if (!parsed) {
-                var invalidOut =
-                    document.getElementById(
-                        'readerOut'
-                    );
 
-                if (invalidOut) {
-                    invalidOut.innerHTML =
+            var output =
+                document.getElementById(
+                    'readerOut'
+                );
+
+
+            if (!parsed) {
+
+                if (output) {
+
+                    output.innerHTML =
                         '<div style="color:#991B1B">' +
-                        'Invalid Bible reference. Example: Mwanzo 1, ' +
-                        'Marko 3, Yohana 3:16.' +
+                        'Invalid Bible reference. Example: Mwanzo 1, Kutoka 1, Marko 3 or Yohana 3:16.' +
                         '</div>';
                 }
 
                 return;
             }
 
-            var out =
-                document.getElementById(
-                    'readerOut'
-                );
 
-            if (out) {
-                out.innerHTML =
+            if (output) {
+
+                output.innerHTML =
                     '<div style="color:#64748B">' +
+                    '<i class="fas fa-spinner fa-spin"></i> ' +
                     'Loading Swahili ' +
                     esc36(
-                        parsed.book +
+                        parsed.name +
                         ' ' +
                         parsed.chapter
                     ) +
-                    '…</div>';
+                    '…' +
+                    '</div>';
             }
 
-            loadSwahili36(parsed)
-                .then(function (verses) {
-                    paintSwahili36(
-                        parsed,
-                        verses,
-                        false
-                    );
-                })
-                .catch(function () {
-                    if (out) {
-                        out.innerHTML =
-                            '<div style="color:#991B1B">' +
-                            'Could not load ' +
-                            esc36(
-                                parsed.book +
-                                ' ' +
-                                parsed.chapter
-                            ) +
-                            '. ' +
-                            '<button type="button" class="btn btn-primary btn-sm" ' +
-                            'onclick="loadBibleChapter()">' +
-                            '<i class="fas fa-rotate-right"></i> Retry' +
-                            '</button>' +
-                            '</div>';
+
+            loadSwahili36(
+                parsed
+            )
+
+                .then(
+                    function (verses) {
+
+                        renderSwahili36(
+                            parsed,
+                            verses
+                        );
                     }
-                });
+                )
+
+                .catch(
+                    function (error) {
+
+                        console.error(
+                            'APP36 Swahili Bible:',
+                            error
+                        );
+
+
+                        if (output) {
+
+                            output.innerHTML =
+                                '<div style="' +
+                                'color:#991B1B;' +
+                                'padding:10px' +
+                                '">' +
+
+                                '<strong>' +
+                                'Could not load ' +
+                                esc36(
+                                    parsed.name +
+                                    ' ' +
+                                    parsed.chapter
+                                ) +
+                                '.</strong>' +
+
+                                '<br>' +
+
+                                '<small>' +
+                                'Please check your internet connection and try again.' +
+                                '</small>' +
+
+                                '<br><br>' +
+
+                                '<button ' +
+                                'type="button" ' +
+                                'class="btn btn-primary btn-sm" ' +
+                                'onclick="loadBibleChapter()"' +
+                                '>' +
+
+                                '<i class="fas fa-rotate-right"></i> ' +
+                                'Retry' +
+
+                                '</button>' +
+
+                                '</div>';
+                        }
+                    }
+                );
         }
 
-        wrappedBible.__gc36Wrapped = true;
+
+        wrappedBible36.__gc36Wrapped =
+            true;
+
 
         window.loadBibleChapter =
-            wrappedBible;
+            wrappedBible36;
+
+
+        console.log(
+            'APP36: Swahili Bible wrapper installed'
+        );
     }
 
 
@@ -663,234 +1149,452 @@
        CHAT
        ============================================================ */
 
-    function openChat36(uid) {
-        if (!uid) return false;
+    function openExistingChat36(
+        uid
+    ) {
+
+        if (!uid) {
+            console.warn(
+                'APP36: missing chat user id'
+            );
+
+            return false;
+        }
+
+
+        /*
+         * DO NOT create another chat engine.
+         *
+         * app26/app27 already provides:
+         *
+         * c26OpenChat(uid)
+         *       ↓
+         * h27ChatWith(uid)
+         */
 
         if (
             typeof window.c26OpenChat ===
             'function'
         ) {
-            window.c26OpenChat(uid);
-            return false;
+
+            try {
+
+                window.c26OpenChat(
+                    uid
+                );
+
+                return true;
+
+            } catch (error) {
+
+                console.error(
+                    'APP36 c26OpenChat error:',
+                    error
+                );
+            }
         }
+
 
         if (
             typeof window.h27ChatWith ===
             'function'
         ) {
-            window.h27ChatWith(uid);
-            return false;
+
+            try {
+
+                window.h27ChatWith(
+                    uid
+                );
+
+                return true;
+
+            } catch (error) {
+
+                console.error(
+                    'APP36 h27ChatWith error:',
+                    error
+                );
+            }
         }
 
-        if (
-            typeof window.openChatWith ===
-            'function'
-        ) {
-            window.openChatWith(uid);
-            return false;
-        }
+
+        alert(
+            'Chat is not ready yet. Please refresh the page and try again.'
+        );
 
         return false;
     }
 
 
     window.gc36OpenChat =
-        openChat36;
+        openExistingChat36;
 
 
-    function makeChat36(uid) {
-        var b =
+    /* ============================================================
+       CHAT BUTTON
+       ============================================================ */
+
+    function createChatButton36(
+        uid
+    ) {
+
+        var button =
             document.createElement(
                 'button'
             );
 
-        b.type = 'button';
 
-        b.className =
+        button.type =
+            'button';
+
+
+        button.className =
             'gc32-btn gc32-btn-primary gc36-chat-button';
 
-        b.style.cssText =
-            'display:inline-flex;' +
-            'align-items:center;' +
-            'gap:6px;' +
-            'white-space:nowrap;';
 
-        b.innerHTML =
-            '<i class="fas fa-comment-dots"></i> Chat';
-
-        b.setAttribute(
+        button.setAttribute(
             'data-gc36-chat',
-            '1'
+            'true'
         );
 
-        b.setAttribute(
+
+        button.setAttribute(
             'data-chat-user',
             uid
         );
 
-        b.onclick =
+
+        button.style.cssText =
+            'display:inline-flex;' +
+            'align-items:center;' +
+            'justify-content:center;' +
+            'gap:6px;' +
+            'white-space:nowrap;' +
+            'cursor:pointer;' +
+            'position:relative;' +
+            'z-index:50;';
+
+
+        button.innerHTML =
+            '<i class="fas fa-comment-dots"></i> Chat';
+
+
+        /*
+         * Direct event listener.
+         */
+
+        button.addEventListener(
+            'click',
             function (event) {
-                if (event) {
-                    event.preventDefault();
-                    event.stopPropagation();
+
+                event.preventDefault();
+
+                event.stopPropagation();
+
+                if (
+                    event.stopImmediatePropagation
+                ) {
+                    event.stopImmediatePropagation();
                 }
 
-                openChat36(uid);
+
+                openExistingChat36(
+                    button.getAttribute(
+                        'data-chat-user'
+                    )
+                );
+
 
                 return false;
-            };
+            },
+            true
+        );
 
-        return b;
+
+        return button;
     }
 
 
-    function removeExtraChat36(
+    /* ============================================================
+       REMOVE DUPLICATE CHAT BUTTONS
+       ============================================================ */
+
+    function cleanChatButtons36(
         row,
         keep
     ) {
-        var nodes =
+
+        if (!row) return;
+
+
+        var controls =
             row.querySelectorAll(
                 'button,a,[role="button"]'
             );
 
+
         Array.prototype.forEach.call(
-            nodes,
-            function (node) {
-                if (node === keep) return;
+            controls,
+            function (control) {
+
+                if (
+                    control === keep
+                ) {
+                    return;
+                }
+
 
                 var text =
-                    normalize36(
-                        node.textContent || ''
+                    norm36(
+                        control.textContent ||
+                        ''
                     );
 
+
                 var onclick =
-                    node.getAttribute(
+                    control.getAttribute(
                         'onclick'
-                    ) || '';
+                    ) ||
+                    '';
+
 
                 var isChat =
                     text === 'chat' ||
                     text === 'inbox' ||
-                    /c26openchat|h27chatwith|openchatwith|h32categorychat/i.test(
+                    /c26openchat/i.test(
+                        onclick
+                    ) ||
+                    /h27chatwith/i.test(
+                        onclick
+                    ) ||
+                    /openchatwith/i.test(
                         onclick
                     );
 
-                if (isChat) {
-                    node.remove();
+
+                if (
+                    isChat
+                ) {
+                    control.remove();
                 }
             }
         );
     }
 
 
-    function addChat36(
+    /* ============================================================
+       ADD CHAT BUTTON TO ROW
+       ============================================================ */
+
+    function addChatToRow36(
         row,
         uid
     ) {
-        if (!row || !uid) return;
+
+        if (
+            !row ||
+            !uid
+        ) {
+            return;
+        }
+
+
+        /*
+         * Never add Chat to yourself.
+         */
+
+        if (
+            window.user &&
+            window.user.id === uid
+        ) {
+            return;
+        }
+
 
         var existing =
             row.querySelector(
-                '[data-gc36-chat="1"]'
+                '[data-gc36-chat="true"]'
             );
 
+
         if (existing) {
+
             existing.setAttribute(
                 'data-chat-user',
                 uid
             );
 
-            removeExtraChat36(
+
+            /*
+             * Rebind the actual click every time.
+             */
+
+            existing.onclick =
+                null;
+
+
+            existing.onpointerdown =
+                null;
+
+
+            cleanChatButtons36(
                 row,
                 existing
             );
 
+
             return;
         }
 
+
         /*
-         * If app35/app27 already created a Chat/Inbox control,
-         * reuse it rather than creating a second button.
+         * Reuse an existing Chat/Inbox button
+         * if app35/app27 already inserted one.
          */
 
-        var candidates =
+        var controls =
             row.querySelectorAll(
                 'button,a,[role="button"]'
             );
 
-        var old = null;
+
+        var oldChat =
+            null;
+
 
         Array.prototype.some.call(
-            candidates,
-            function (node) {
+            controls,
+            function (control) {
+
                 var text =
-                    normalize36(
-                        node.textContent || ''
+                    norm36(
+                        control.textContent ||
+                        ''
                     );
 
+
                 var onclick =
-                    node.getAttribute(
+                    control.getAttribute(
                         'onclick'
-                    ) || '';
+                    ) ||
+                    '';
+
 
                 if (
                     text === 'chat' ||
                     text === 'inbox' ||
-                    /c26openchat|h27chatwith|openchatwith|h32categorychat/i.test(
+                    /c26openchat/i.test(
+                        onclick
+                    ) ||
+                    /h27chatwith/i.test(
                         onclick
                     )
                 ) {
-                    old = node;
+
+                    oldChat =
+                        control;
+
                     return true;
                 }
+
 
                 return false;
             }
         );
 
-        if (old) {
-            old.innerHTML =
+
+        if (oldChat) {
+
+            oldChat.innerHTML =
                 '<i class="fas fa-comment-dots"></i> Chat';
 
-            old.classList.add(
+
+            oldChat.classList.add(
                 'gc36-chat-button'
             );
 
-            old.setAttribute(
+
+            oldChat.setAttribute(
                 'data-gc36-chat',
-                '1'
+                'true'
             );
 
-            old.setAttribute(
+
+            oldChat.setAttribute(
                 'data-chat-user',
                 uid
             );
 
-            old.onclick =
+
+            oldChat.style.position =
+                'relative';
+
+
+            oldChat.style.zIndex =
+                '50';
+
+
+            /*
+             * Remove old inline handler.
+             */
+
+            oldChat.removeAttribute(
+                'onclick'
+            );
+
+
+            /*
+             * Replace with reliable direct handler.
+             */
+
+            oldChat.addEventListener(
+                'click',
                 function (event) {
-                    if (event) {
-                        event.preventDefault();
-                        event.stopPropagation();
+
+                    event.preventDefault();
+
+                    event.stopPropagation();
+
+                    if (
+                        event.stopImmediatePropagation
+                    ) {
+                        event.stopImmediatePropagation();
                     }
 
-                    openChat36(uid);
+
+                    openExistingChat36(
+                        uid
+                    );
 
                     return false;
-                };
-
-            removeExtraChat36(
-                row,
-                old
+                },
+                true
             );
+
+
+            cleanChatButtons36(
+                row,
+                oldChat
+            );
+
 
             return;
         }
 
-        var button =
-            makeChat36(uid);
 
         /*
-         * Append beside the existing controls.
+         * Create new button.
+         */
+
+        var button =
+            createChatButton36(
+                uid
+            );
+
+
+        /*
+         * Put it into the existing action
+         * area where possible.
          */
 
         var actions =
@@ -902,381 +1606,866 @@
                 '.gc35-actions'
             );
 
+
         if (actions) {
-            actions.appendChild(button);
+
+            actions.appendChild(
+                button
+            );
+
         } else {
-            row.appendChild(button);
+
+            /*
+             * Existing app rows frequently use
+             * a flex container. Append directly
+             * to the row.
+             */
+
+            row.appendChild(
+                button
+            );
         }
+
+
+        cleanChatButtons36(
+            row,
+            button
+        );
     }
 
 
-    /*
-     * Find a member row from the member's displayed name.
-     *
-     * This matches the existing DOM instead of assuming a fake
-     * #groupMembers element.
-     */
+    /* ============================================================
+       GROUP MEMBER IDENTIFICATION
+       ============================================================ */
 
-    function findRow36(
-        container,
-        name
+    function currentGroupId36() {
+
+        if (
+            window._gg &&
+            window._gg.currentGroupId
+        ) {
+
+            return (
+                window._gg.currentGroupId
+            );
+        }
+
+
+        if (
+            window._gg &&
+            window._gg.group &&
+            window._gg.group.id
+        ) {
+
+            return (
+                window._gg.group.id
+            );
+        }
+
+
+        return (
+            window._h29GroupId ||
+            window._h32GroupId ||
+            (
+                window._h32Group &&
+                window._h32Group.id
+            ) ||
+            null
+        );
+    }
+
+
+    function currentCategoryId36() {
+
+        if (
+            window._gg &&
+            window._gg.currentCategoryId
+        ) {
+
+            return (
+                window._gg.currentCategoryId
+            );
+        }
+
+
+        if (
+            window._h32Cat &&
+            window._h32Cat.id
+        ) {
+
+            return (
+                window._h32Cat.id
+            );
+        }
+
+
+        return null;
+    }
+
+
+    /* ============================================================
+       GET PROFILE DATA
+       ============================================================ */
+
+    function getProfiles36(
+        ids
     ) {
-        if (!container || !name) {
+
+        var client =
+            SB36();
+
+
+        if (
+            !client ||
+            !ids ||
+            !ids.length
+        ) {
+
+            return Promise.resolve(
+                []
+            );
+        }
+
+
+        return client
+            .from('profiles')
+            .select(
+                'id,name,profile_pic,email,role'
+            )
+            .in(
+                'id',
+                ids
+            )
+            .then(
+                function (result) {
+
+                    if (
+                        result.error
+                    ) {
+
+                        console.error(
+                            'APP36 profiles:',
+                            result.error
+                        );
+
+                        return [];
+                    }
+
+
+                    return (
+                        result.data ||
+                        []
+                    );
+                }
+            );
+    }
+
+
+    /* ============================================================
+       PATCH GROUP CHAT BUTTONS
+       ============================================================ */
+
+    function patchGroupChats36() {
+
+        var client =
+            SB36();
+
+
+        var groupId =
+            currentGroupId36();
+
+
+        if (
+            !client ||
+            !groupId
+        ) {
+
+            return;
+        }
+
+
+        /*
+         * THE REAL TABLE USED BY app22:
+         *
+         * church_group_members
+         *
+         * group_id
+         * user_id
+         */
+
+        client
+            .from(
+                'church_group_members'
+            )
+            .select(
+                'user_id'
+            )
+            .eq(
+                'group_id',
+                groupId
+            )
+            .then(
+                function (membershipResult) {
+
+                    if (
+                        membershipResult.error
+                    ) {
+
+                        console.error(
+                            'APP36 group members:',
+                            membershipResult.error
+                        );
+
+                        return;
+                    }
+
+
+                    var ids =
+                        (
+                            membershipResult.data ||
+                            []
+                        )
+                            .map(
+                                function (member) {
+                                    return member.user_id;
+                                }
+                            )
+                            .filter(Boolean);
+
+
+                    if (
+                        !ids.length
+                    ) {
+                        return;
+                    }
+
+
+                    getProfiles36(
+                        ids
+                    )
+                        .then(
+                            function (profiles) {
+
+                                var root =
+                                    document.getElementById(
+                                        'gg-root'
+                                    );
+
+
+                                if (!root) {
+                                    return;
+                                }
+
+
+                                profiles.forEach(
+                                    function (profile) {
+
+                                        /*
+                                         * Find the member by name,
+                                         * but also look through
+                                         * data-user-id attributes.
+                                         */
+
+                                        var row =
+                                            findMemberRow36(
+                                                root,
+                                                profile
+                                            );
+
+
+                                        if (
+                                            row
+                                        ) {
+
+                                            row.setAttribute(
+                                                'data-gc36-member-id',
+                                                profile.id
+                                            );
+
+
+                                            addChatToRow36(
+                                                row,
+                                                profile.id
+                                            );
+                                        }
+                                    }
+                                );
+                            }
+                        );
+                }
+            );
+    }
+
+
+    /* ============================================================
+       PATCH CATEGORY CHAT BUTTONS
+       ============================================================ */
+
+    function patchCategoryChats36() {
+
+        var client =
+            SB36();
+
+
+        var categoryId =
+            currentCategoryId36();
+
+
+        if (
+            !client ||
+            !categoryId
+        ) {
+
+            return;
+        }
+
+
+        client
+            .from(
+                'church_group_category_members'
+            )
+            .select(
+                'user_id'
+            )
+            .eq(
+                'category_id',
+                categoryId
+            )
+            .then(
+                function (membershipResult) {
+
+                    if (
+                        membershipResult.error
+                    ) {
+
+                        console.error(
+                            'APP36 category members:',
+                            membershipResult.error
+                        );
+
+                        return;
+                    }
+
+
+                    var ids =
+                        (
+                            membershipResult.data ||
+                            []
+                        )
+                            .map(
+                                function (member) {
+                                    return member.user_id;
+                                }
+                            )
+                            .filter(Boolean);
+
+
+                    if (
+                        !ids.length
+                    ) {
+                        return;
+                    }
+
+
+                    getProfiles36(
+                        ids
+                    )
+                        .then(
+                            function (profiles) {
+
+                                var root =
+                                    document.getElementById(
+                                        'h32c-members'
+                                    );
+
+
+                                if (!root) {
+                                    return;
+                                }
+
+
+                                profiles.forEach(
+                                    function (profile) {
+
+                                        var row =
+                                            findMemberRow36(
+                                                root,
+                                                profile
+                                            );
+
+
+                                        if (
+                                            row
+                                        ) {
+
+                                            row.setAttribute(
+                                                'data-gc36-member-id',
+                                                profile.id
+                                            );
+
+
+                                            addChatToRow36(
+                                                row,
+                                                profile.id
+                                            );
+                                        }
+                                    }
+                                );
+                            }
+                        );
+                }
+            );
+    }
+
+
+    /* ============================================================
+       FIND MEMBER ROW
+       ============================================================ */
+
+    function findMemberRow36(
+        container,
+        profile
+    ) {
+
+        if (
+            !container ||
+            !profile
+        ) {
+
             return null;
         }
 
+
+        /*
+         * First: exact data user ID.
+         */
+
+        var byId =
+            container.querySelector(
+                '[data-user-id="' +
+                profile.id +
+                '"]'
+            );
+
+
+        if (byId) {
+
+            return (
+                byId.closest(
+                    '.card,.member-card,.list-item,li,tr'
+                ) ||
+                byId.parentElement ||
+                byId
+            );
+        }
+
+
+        var byMemberId =
+            container.querySelector(
+                '[data-member-id="' +
+                profile.id +
+                '"]'
+            );
+
+
+        if (byMemberId) {
+
+            return (
+                byMemberId.closest(
+                    '.card,.member-card,.list-item,li,tr'
+                ) ||
+                byMemberId.parentElement ||
+                byMemberId
+            );
+        }
+
+
+        /*
+         * Second: exact displayed name.
+         */
+
         var target =
-            normalize36(name);
+            norm36(
+                profile.name
+            );
+
+
+        if (!target) {
+            return null;
+        }
+
 
         var elements =
             container.querySelectorAll(
                 'div,li,tr,article,.card,.member-card,.list-item'
             );
 
-        var exact = [];
 
-        Array.prototype.forEach.call(
+        var candidate =
+            null;
+
+
+        Array.prototype.some.call(
             elements,
-            function (el) {
+            function (element) {
+
                 var text =
-                    normalize36(
-                        el.textContent || ''
+                    norm36(
+                        element.textContent ||
+                        ''
                     );
 
-                if (text === target) {
-                    exact.push(el);
+
+                if (
+                    text === target
+                ) {
+
+                    candidate =
+                        element;
+
+                    return true;
                 }
+
+
+                return false;
             }
         );
 
-        if (!exact.length) {
+
+        if (!candidate) {
+
+            /*
+             * Some member cards contain:
+             * name + role + buttons.
+             */
+
+            Array.prototype.some.call(
+                elements,
+                function (element) {
+
+                    var text =
+                        norm36(
+                            element.textContent ||
+                            ''
+                        );
+
+
+                    if (
+                        text.indexOf(
+                            target
+                        ) !== -1 &&
+                        text.length <
+                            target.length + 150
+                    ) {
+
+                        candidate =
+                            element;
+
+                        return true;
+                    }
+
+
+                    return false;
+                }
+            );
+        }
+
+
+        if (!candidate) {
             return null;
         }
 
+
         /*
-         * The smallest exact-name element is usually the name
-         * itself. Walk upward to the first useful member row.
+         * Walk up to the useful row.
          */
 
-        var nameNode =
-            exact[0];
-
         var row =
-            nameNode;
+            candidate;
+
 
         for (
             var i = 0;
-            i < 5 && row;
+            i < 5 &&
+            row;
             i++
         ) {
-            var buttons =
-                row.querySelectorAll(
-                    'button,a,[role="button"]'
-                );
 
             if (
-                buttons.length ||
-                row.classList.contains(
-                    'card'
-                ) ||
-                row.classList.contains(
-                    'member-card'
-                ) ||
-                row.classList.contains(
-                    'list-item'
-                ) ||
-                row.tagName.toLowerCase() ===
-                    'li' ||
-                row.tagName.toLowerCase() ===
-                    'tr'
+                row.querySelector &&
+                (
+                    row.querySelector(
+                        'button'
+                    ) ||
+                    row.querySelector(
+                        '[role="button"]'
+                    ) ||
+                    row.classList.contains(
+                        'card'
+                    ) ||
+                    row.classList.contains(
+                        'member-card'
+                    ) ||
+                    row.classList.contains(
+                        'list-item'
+                    )
+                )
             ) {
+
                 return row;
             }
+
 
             row =
                 row.parentElement;
         }
 
+
         return (
-            nameNode.parentElement ||
-            nameNode
+            candidate.parentElement ||
+            candidate
         );
     }
 
 
-    function profiles36() {
-        var c = db36();
+    /* ============================================================
+       CHAT EVENT DELEGATION
+       ============================================================ */
 
-        if (!c) {
-            return Promise.resolve([]);
+    function installChatDelegation36() {
+
+        if (
+            document.documentElement
+                .dataset
+                .gc36ChatDelegation
+        ) {
+
+            return;
         }
 
-        return c
-            .from('profiles')
-            .select(
-                'id,name,profile_pic,email,role'
-            )
-            .order('name')
-            .then(function (r) {
-                return r.error
-                    ? []
-                    : (r.data || []);
-            });
-    }
+
+        document.documentElement
+            .dataset
+            .gc36ChatDelegation =
+                '1';
 
 
-    function currentGroup36() {
-        return (
-            window._gg &&
-            (
-                window._gg.currentGroupId ||
-                (
-                    window._gg.group &&
-                    window._gg.group.id
-                )
-            )
-        ) ||
-        window._h29GroupId ||
-        window._h32GroupId ||
-        (
-            window._h32Group &&
-            window._h32Group.id
-        ) ||
-        null;
-    }
+        /*
+         * CAPTURE phase.
+         *
+         * This is important because Group member cards can
+         * themselves have click handlers.
+         */
+
+        document.addEventListener(
+            'click',
+            function (event) {
+
+                var target =
+                    event.target;
 
 
-    function currentCategory36() {
-        return (
-            window._h32Cat &&
-            window._h32Cat.id
-        ) || null;
-    }
+                if (!target) {
+                    return;
+                }
 
 
-    function patchGroupChats36() {
-        var c = db36();
-
-        var gid =
-            currentGroup36();
-
-        if (!c || !gid) return;
-
-        var container =
-            document.getElementById(
-                'gg-root'
-            );
-
-        if (!container) return;
-
-        c
-            .from(
-                'church_group_members'
-            )
-            .select('user_id')
-            .eq(
-                'group_id',
-                gid
-            )
-            .then(function (mr) {
-                if (mr.error) return;
-
-                var ids =
-                    (mr.data || [])
-                        .map(
-                            function (x) {
-                                return x.user_id;
-                            }
-                        );
-
-                if (!ids.length) return;
-
-                profiles36()
-                    .then(function (users) {
-                        users.forEach(
-                            function (u) {
-                                if (
-                                    !u ||
-                                    !ids.includes(
-                                        u.id
-                                    )
-                                ) {
-                                    return;
-                                }
-
-                                var row =
-                                    findRow36(
-                                        container,
-                                        u.name
-                                    );
-
-                                if (row) {
-                                    addChat36(
-                                        row,
-                                        u.id
-                                    );
-                                }
-                            }
-                        );
-                    });
-            });
-    }
+                var button =
+                    target.closest
+                        ? target.closest(
+                            '[data-gc36-chat="true"]'
+                        )
+                        : null;
 
 
-    function patchCategoryChats36() {
-        var c = db36();
-
-        var cid =
-            currentCategory36();
-
-        if (!c || !cid) return;
-
-        var container =
-            document.getElementById(
-                'h32c-members'
-            );
-
-        if (!container) return;
-
-        c
-            .from(
-                'church_group_category_members'
-            )
-            .select('user_id')
-            .eq(
-                'category_id',
-                cid
-            )
-            .then(function (mr) {
-                if (mr.error) return;
-
-                var ids =
-                    (mr.data || [])
-                        .map(
-                            function (x) {
-                                return x.user_id;
-                            }
-                        );
-
-                if (!ids.length) return;
-
-                profiles36()
-                    .then(function (users) {
-                        users.forEach(
-                            function (u) {
-                                if (
-                                    !u ||
-                                    !ids.includes(
-                                        u.id
-                                    )
-                                ) {
-                                    return;
-                                }
-
-                                var row =
-                                    findRow36(
-                                        container,
-                                        u.name
-                                    );
-
-                                if (row) {
-                                    addChat36(
-                                        row,
-                                        u.id
-                                    );
-                                }
-                            }
-                        );
-                    });
-            });
-    }
+                if (!button) {
+                    return;
+                }
 
 
-    function patchChats36() {
-        patchGroupChats36();
-        patchCategoryChats36();
+                var uid =
+                    button.getAttribute(
+                        'data-chat-user'
+                    );
+
+
+                if (!uid) {
+                    return;
+                }
+
+
+                event.preventDefault();
+
+                event.stopPropagation();
+
+                if (
+                    event.stopImmediatePropagation
+                ) {
+
+                    event.stopImmediatePropagation();
+                }
+
+
+                openExistingChat36(
+                    uid
+                );
+
+            },
+            true
+        );
+
+
+        /*
+         * Also handle touch/pointer interaction.
+         */
+
+        document.addEventListener(
+            'pointerup',
+            function (event) {
+
+                var target =
+                    event.target;
+
+
+                if (!target) {
+                    return;
+                }
+
+
+                var button =
+                    target.closest
+                        ? target.closest(
+                            '[data-gc36-chat="true"]'
+                        )
+                        : null;
+
+
+                if (!button) {
+                    return;
+                }
+
+
+                /*
+                 * Click normally follows pointerup,
+                 * so do not call chat twice here.
+                 *
+                 * This handler simply prevents the
+                 * parent member-card interaction.
+                 */
+
+                event.stopPropagation();
+
+            },
+            true
+        );
     }
 
 
     /* ============================================================
-       HOOK THE REAL EXISTING TABS
+       HOOK EXISTING GROUP/CATEGORY FUNCTIONS
        ============================================================ */
 
     function hookFunction36(
         name,
         after
     ) {
-        var fn =
+
+        var original =
             window[name];
 
+
         if (
-            typeof fn !== 'function' ||
-            fn.__gc36Wrapped
+            typeof original !==
+            'function'
         ) {
+
             return;
         }
 
-        function wrapped() {
-            var result =
-                fn.apply(
-                    this,
-                    arguments
+
+        if (
+            original.__gc36Wrapped
+        ) {
+
+            return;
+        }
+
+
+        function wrapped36() {
+
+            var result;
+
+
+            try {
+
+                result =
+                    original.apply(
+                        this,
+                        arguments
+                    );
+
+            } finally {
+
+                setTimeout(
+                    after,
+                    80
                 );
 
-            setTimeout(
-                after,
-                100
-            );
+                setTimeout(
+                    after,
+                    300
+                );
 
-            setTimeout(
-                after,
-                400
-            );
+                setTimeout(
+                    after,
+                    700
+                );
 
-            setTimeout(
-                after,
-                1000
-            );
+                setTimeout(
+                    after,
+                    1500
+                );
+            }
+
 
             return result;
         }
 
-        wrapped.__gc36Wrapped =
+
+        wrapped36.__gc36Wrapped =
             true;
 
+
         window[name] =
-            wrapped;
+            wrapped36;
     }
 
 
-    function hook36() {
-        /*
-         * Category renderer/tab.
-         */
+    function hookExistingFunctions36() {
 
         hookFunction36(
-            'h32CatMembers',
-            patchCategoryChats36
+            'ggOpenGroup',
+            patchGroupChats36
         );
 
-        hookFunction36(
-            'h32CatTab',
-            patchCategoryChats36
-        );
-
-        /*
-         * Actual Group tab used by app22.
-         */
 
         hookFunction36(
             'ggSwitchGroupTab',
             patchGroupChats36
         );
 
+
         hookFunction36(
-            'ggOpenGroup',
-            patchGroupChats36
+            'h32CatMembers',
+            patchCategoryChats36
         );
+
+
+        hookFunction36(
+            'h32CatTab',
+            patchCategoryChats36
+        );
+
 
         hookFunction36(
             'ggOpenCategory',
@@ -1286,34 +2475,70 @@
 
 
     /* ============================================================
-       OBSERVE DYNAMIC MEMBER RENDERING
+       MUTATION OBSERVER
        ============================================================ */
 
-    function observer36() {
-        if (!window.MutationObserver) {
+    function installObserver36() {
+
+        if (
+            !window.MutationObserver
+        ) {
+
             return;
         }
 
-        var timer = null;
 
-        var ob =
+        if (
+            document.documentElement
+                .dataset
+                .gc36Observer
+        ) {
+
+            return;
+        }
+
+
+        document.documentElement
+            .dataset
+            .gc36Observer =
+                '1';
+
+
+        var timer =
+            null;
+
+
+        var observer =
             new MutationObserver(
                 function () {
-                    clearTimeout(timer);
+
+                    clearTimeout(
+                        timer
+                    );
+
 
                     timer =
                         setTimeout(
                             function () {
-                                hook36();
-                                patchChats36();
+
+                                hookExistingFunctions36();
+
+                                patchGroupChats36();
+
+                                patchCategoryChats36();
+
                             },
-                            150
+                            180
                         );
                 }
             );
 
-        if (document.body) {
-            ob.observe(
+
+        if (
+            document.body
+        ) {
+
+            observer.observe(
                 document.body,
                 {
                     childList: true,
@@ -1325,51 +2550,56 @@
 
 
     /* ============================================================
+       REPEATED PATCH
+       ============================================================ */
+
+    function run36() {
+
+        installBible36();
+
+        installChatDelegation36();
+
+        hookExistingFunctions36();
+
+        patchGroupChats36();
+
+        patchCategoryChats36();
+    }
+
+
+    /* ============================================================
        START
        ============================================================ */
 
     function start36() {
-        /*
-         * Install Bible wrapper AFTER app19/app30 has loaded.
-         */
 
-        installBible36();
-
-        hook36();
-
-        patchChats36();
+        run36();
 
         setTimeout(
-            function () {
-                installBible36();
-                hook36();
-                patchChats36();
-            },
-            300
+            run36,
+            250
         );
 
         setTimeout(
-            function () {
-                installBible36();
-                hook36();
-                patchChats36();
-            },
-            1000
+            run36,
+            700
         );
 
         setTimeout(
-            function () {
-                installBible36();
-                hook36();
-                patchChats36();
-            },
-            2500
+            run36,
+            1500
         );
 
-        observer36();
+        setTimeout(
+            run36,
+            3000
+        );
+
+        installObserver36();
+
 
         console.log(
-            'GC APP36: active — English Bible preserved; Swahili + Group/Category Chat patched'
+            'GC APP36 FINAL: Bible + Group/Category Chat active'
         );
     }
 
@@ -1378,11 +2608,14 @@
         document.readyState ===
         'loading'
     ) {
+
         document.addEventListener(
             'DOMContentLoaded',
             start36
         );
+
     } else {
+
         start36();
     }
 
