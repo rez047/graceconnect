@@ -5273,3 +5273,727 @@
     }
 
 })();
+
+/* ============================================================
+   GRACECONNECT — FINAL CATEGORY + GROUP MEMBER CHAT PATCH
+   ------------------------------------------------------------
+   Uses ONLY the existing working chat system:
+
+       window.c26OpenChat(uid)
+             ↓
+       window.h27ChatWith(uid)
+
+   Does NOT create another inbox.
+   Does NOT replace existing member controls.
+   Adds ONE blue Chat button per member.
+   Works for:
+       - Groups
+       - Categories
+       - Ushirika
+       - Departments
+   ============================================================ */
+
+(function () {
+
+    'use strict';
+
+    /* --------------------------------------------------------
+       Prevent this patch from being installed twice
+       -------------------------------------------------------- */
+
+    if (
+        window.__GC_FINAL_MEMBER_CHAT_PATCH__
+    ) {
+        return;
+    }
+
+    window.__GC_FINAL_MEMBER_CHAT_PATCH__ = true;
+
+
+    /* ========================================================
+       HELPERS
+       ======================================================== */
+
+    function gcChatUidFromElement(el) {
+
+        if (!el) {
+            return null;
+        }
+
+        var keys = [
+            'userId',
+            'userid',
+            'uid',
+            'memberId',
+            'memberid'
+        ];
+
+        for (
+            var i = 0;
+            i < keys.length;
+            i++
+        ) {
+
+            var value =
+                el.getAttribute(
+                    'data-' + keys[i]
+                );
+
+            if (
+                value &&
+                String(value).trim()
+            ) {
+                return String(value).trim();
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           Check common dataset names
+           ---------------------------------------------------- */
+
+        if (
+            el.dataset
+        ) {
+
+            var datasetKeys = [
+                'userId',
+                'userid',
+                'uid',
+                'memberId',
+                'memberid'
+            ];
+
+            for (
+                var j = 0;
+                j < datasetKeys.length;
+                j++
+            ) {
+
+                if (
+                    el.dataset[
+                        datasetKeys[j]
+                    ]
+                ) {
+
+                    return String(
+                        el.dataset[
+                            datasetKeys[j]
+                        ]
+                    ).trim();
+                }
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           Check the element itself
+           ---------------------------------------------------- */
+
+        if (
+            el.id &&
+            /^user[-_]/i.test(el.id)
+        ) {
+
+            return el.id
+                .replace(
+                    /^user[-_]/i,
+                    ''
+                );
+        }
+
+
+        /* ----------------------------------------------------
+           Check onclick for existing user id
+           ---------------------------------------------------- */
+
+        var onclick =
+            el.getAttribute(
+                'onclick'
+            ) || '';
+
+        var match =
+            onclick.match(
+                /(?:c26OpenChat|h27ChatWith|chatWith|openChat)\s*\(\s*['"]?([^'",)\s]+)/
+            );
+
+        if (
+            match &&
+            match[1]
+        ) {
+            return match[1];
+        }
+
+
+        return null;
+    }
+
+
+    function gcFindUid(root) {
+
+        if (!root) {
+            return null;
+        }
+
+
+        /* Root itself */
+
+        var own =
+            gcChatUidFromElement(
+                root
+            );
+
+        if (own) {
+            return own;
+        }
+
+
+        /* ----------------------------------------------------
+           Look through descendants carrying a user id
+           ---------------------------------------------------- */
+
+        var selectors = [
+            '[data-user-id]',
+            '[data-userid]',
+            '[data-uid]',
+            '[data-member-id]',
+            '[data-memberid]',
+            '[id^="user-"]',
+            '[id^="user_"]'
+        ];
+
+
+        for (
+            var i = 0;
+            i < selectors.length;
+            i++
+        ) {
+
+            var found =
+                root.querySelector(
+                    selectors[i]
+                );
+
+            if (found) {
+
+                var uid =
+                    gcChatUidFromElement(
+                        found
+                    );
+
+                if (uid) {
+                    return uid;
+                }
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           Existing buttons sometimes already contain the uid
+           in onclick.
+           ---------------------------------------------------- */
+
+        var buttons =
+            root.querySelectorAll(
+                'button,[role="button"],a'
+            );
+
+        for (
+            var j = 0;
+            j < buttons.length;
+            j++
+        ) {
+
+            var candidate =
+                gcChatUidFromElement(
+                    buttons[j]
+                );
+
+            if (candidate) {
+                return candidate;
+            }
+        }
+
+
+        return null;
+    }
+
+
+    /* ========================================================
+       CREATE THE ONE CHAT BUTTON
+       ======================================================== */
+
+    function gcCreateChatButton(uid) {
+
+        if (!uid) {
+            return null;
+        }
+
+
+        var chatButton =
+            document.createElement(
+                'button'
+            );
+
+
+        chatButton.type =
+            'button';
+
+
+        chatButton.className =
+            'gc32-btn gc32-btn-primary';
+
+
+        chatButton.innerHTML =
+            '<i class="fas fa-comment-dots"></i> Chat';
+
+
+        chatButton.setAttribute(
+            'data-gc-final-chat',
+            '1'
+        );
+
+
+        chatButton.setAttribute(
+            'data-chat-user-id',
+            String(uid)
+        );
+
+
+        /* ----------------------------------------------------
+           IMPORTANT:
+           Use the existing working chat implementation.
+           ---------------------------------------------------- */
+
+        chatButton.onclick =
+            function (event) {
+
+                if (event) {
+
+                    event.preventDefault();
+
+                    event.stopPropagation();
+
+                }
+
+
+                if (
+                    typeof window.c26OpenChat ===
+                    'function'
+                ) {
+
+                    window.c26OpenChat(
+                        String(uid)
+                    );
+
+                    return false;
+                }
+
+
+                /* ------------------------------------------------
+                   Safety fallback to the same underlying
+                   existing function.
+                   ------------------------------------------------ */
+
+                if (
+                    typeof window.h27ChatWith ===
+                    'function'
+                ) {
+
+                    window.h27ChatWith(
+                        String(uid)
+                    );
+
+                    return false;
+                }
+
+
+                alert(
+                    'Chat is not ready yet. Please refresh the page.'
+                );
+
+                return false;
+            };
+
+
+        return chatButton;
+    }
+
+
+    /* ========================================================
+       FIND A SAFE PLACE TO ADD THE BUTTON
+       ======================================================== */
+
+    function gcInsertChatButton(card, uid) {
+
+        if (
+            !card ||
+            !uid
+        ) {
+            return;
+        }
+
+
+        /* ----------------------------------------------------
+           Never add duplicates
+           ---------------------------------------------------- */
+
+        var existing =
+            card.querySelector(
+                '[data-gc-final-chat="1"]'
+            );
+
+
+        if (existing) {
+
+            existing.setAttribute(
+                'data-chat-user-id',
+                String(uid)
+            );
+
+            return;
+        }
+
+
+        /* ----------------------------------------------------
+           Also respect an already-working Chat button.
+           If a member card already has a blue Chat button
+           supplied by the existing system, don't duplicate it.
+           ---------------------------------------------------- */
+
+        var existingChatButtons =
+            card.querySelectorAll(
+                'button,a'
+            );
+
+
+        for (
+            var i = 0;
+            i < existingChatButtons.length;
+            i++
+        ) {
+
+            var text =
+                String(
+                    existingChatButtons[i]
+                        .textContent || ''
+                )
+                .replace(/\s+/g, ' ')
+                .trim()
+                .toLowerCase();
+
+
+            var onclick =
+                existingChatButtons[i]
+                    .getAttribute(
+                        'onclick'
+                    ) || '';
+
+
+            if (
+                text === 'chat' ||
+                text.indexOf('chat') === 0 ||
+                /c26OpenChat|h27ChatWith/.test(
+                    onclick
+                )
+            ) {
+
+                return;
+            }
+        }
+
+
+        /* ----------------------------------------------------
+           Create button
+           ---------------------------------------------------- */
+
+        var button =
+            gcCreateChatButton(
+                uid
+            );
+
+
+        if (!button) {
+            return;
+        }
+
+
+        /* ----------------------------------------------------
+           Preferred existing action containers
+           ---------------------------------------------------- */
+
+        var actionSelectors = [
+            '.gc32-actions',
+            '.gc-actions',
+            '.member-actions',
+            '.member-buttons',
+            '.actions',
+            '.actions-row',
+            '.btn-group',
+            '.buttons',
+            '[class*="actions"]',
+            '[class*="buttons"]'
+        ];
+
+
+        var target = null;
+
+
+        for (
+            var j = 0;
+            j < actionSelectors.length;
+            j++
+        ) {
+
+            target =
+                card.querySelector(
+                    actionSelectors[j]
+                );
+
+            if (target) {
+                break;
+            }
+        }
+
+
+        if (target) {
+
+            target.appendChild(
+                button
+            );
+
+            return;
+        }
+
+
+        /* ----------------------------------------------------
+           Otherwise append without disturbing existing
+           member controls.
+           ---------------------------------------------------- */
+
+        var wrapper =
+            document.createElement(
+                'div'
+            );
+
+        wrapper.className =
+            'gc-final-chat-wrapper';
+
+
+        wrapper.style.cssText =
+            'display:flex;' +
+            'gap:6px;' +
+            'flex-wrap:wrap;' +
+            'margin-top:8px;';
+
+
+        wrapper.appendChild(
+            button
+        );
+
+
+        card.appendChild(
+            wrapper
+        );
+    }
+
+
+    /* ========================================================
+       SCAN MEMBER CARDS
+       ======================================================== */
+
+    function gcScanMemberCards() {
+
+        /* ----------------------------------------------------
+           We intentionally don't depend on one fragile ID.
+           Category/group screens have changed their containers
+           during previous patches.
+           ---------------------------------------------------- */
+
+        var possibleCards =
+            document.querySelectorAll(
+                [
+                    '[data-user-id]',
+                    '[data-userid]',
+                    '[data-uid]',
+                    '[data-member-id]',
+                    '[data-memberid]',
+                    '.member-card',
+                    '.member-item',
+                    '.member-row',
+                    '.member',
+                    '.group-member',
+                    '.category-member',
+                    '[class*="member-card"]',
+                    '[class*="member-item"]',
+                    '[class*="member-row"]'
+                ].join(',')
+            );
+
+
+        for (
+            var i = 0;
+            i < possibleCards.length;
+            i++
+        ) {
+
+            var card =
+                possibleCards[i];
+
+
+            /* -----------------------------------------------
+               Don't touch obvious unrelated elements
+               ----------------------------------------------- */
+
+            if (
+                card.closest &&
+                card.closest(
+                    '#chatModal,' +
+                    '#chatPanel,' +
+                    '.chat-panel,' +
+                    '.chat-modal'
+                )
+            ) {
+                continue;
+            }
+
+
+            var uid =
+                gcFindUid(
+                    card
+                );
+
+
+            if (!uid) {
+                continue;
+            }
+
+
+            gcInsertChatButton(
+                card,
+                uid
+            );
+        }
+    }
+
+
+    /* ========================================================
+       TARGETED SCAN OF CURRENT PAGE
+       ======================================================== */
+
+    function gcRunMemberChatPatch() {
+
+        try {
+
+            gcScanMemberCards();
+
+        } catch (e) {
+
+            console.warn(
+                'GraceConnect member chat patch:',
+                e
+            );
+        }
+    }
+
+
+    /* ========================================================
+       MUTATION OBSERVER
+       ======================================================== */
+
+    var gcObserver =
+        new MutationObserver(
+            function () {
+
+                clearTimeout(
+                    window.__gcMemberChatTimer
+                );
+
+
+                window.__gcMemberChatTimer =
+                    setTimeout(
+                        gcRunMemberChatPatch,
+                        80
+                    );
+            }
+        );
+
+
+    function gcStartObserver() {
+
+        if (
+            !document.body
+        ) {
+            return;
+        }
+
+
+        gcObserver.observe(
+            document.body,
+            {
+                childList: true,
+                subtree: true
+            }
+        );
+
+
+        gcRunMemberChatPatch();
+    }
+
+
+    /* ========================================================
+       INITIAL LOAD
+       ======================================================== */
+
+    if (
+        document.readyState ===
+        'loading'
+    ) {
+
+        document.addEventListener(
+            'DOMContentLoaded',
+            function () {
+
+                gcStartObserver();
+
+            },
+            {
+                once: true
+            }
+        );
+
+    } else {
+
+        gcStartObserver();
+
+    }
+
+
+    /* ========================================================
+       ALSO RESCAN WHEN THE APP SWITCHES SECTIONS
+       ======================================================== */
+
+    document.addEventListener(
+        'click',
+        function () {
+
+            setTimeout(
+                gcRunMemberChatPatch,
+                150
+            );
+
+        },
+        true
+    );
+
+
+    /* ========================================================
+       PUBLIC MANUAL RESCAN
+       Useful if another module renders members later.
+       ======================================================== */
+
+    window.gcRefreshMemberChatButtons =
+        gcRunMemberChatPatch;
+
+
+})();
