@@ -224,6 +224,8 @@
   }
 /* ============================================================
      M-PESA DARAJA (STK Push) — Give Now flow
+     No visible phone field: uses profile phone automatically;
+     one-time native prompt only if profile has no valid number.
      ============================================================ */
   var origConfirm40 = window.confirmGiving;
   function normPhone40(p) {
@@ -232,39 +234,48 @@
     if (p.charAt(0) === '0') p = '254' + p.slice(1);
     return p;
   }
-  function injectMpesaPhone40() {
-    var modal = document.getElementById('giveModal');
-    if (!modal || document.getElementById('gc40MpesaPhone')) return;
-    var amount = document.getElementById('giveAmount');
-    if (!amount || !amount.closest('.form-group')) return;
-    var g = document.createElement('div');
-    g.className = 'form-group';
-    g.innerHTML = '<label class="form-label">M-Pesa Number</label><input class="form-input" id="gc40MpesaPhone" placeholder="07XX XXX XXX" value="' + ((window.profile && window.profile.phone) || '') + '">';
-    amount.closest('.form-group').parentNode.insertBefore(g, amount.closest('.form-group').nextSibling);
+  function removeMpesaPhone40() {
+    var el = document.getElementById('gc40MpesaPhone');
+    if (el) {
+      var wrap = el.closest ? el.closest('.form-group') : (el.parentElement || null);
+      if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      else if (el.parentNode) el.parentNode.removeChild(el);
+    }
   }
+  removeMpesaPhone40();
   if (typeof window._gcGive === 'function' && !window._gcGive._gc40mpesa) {
     var origGive40 = window._gcGive;
     window._gcGive = function (id, title) {
       var r = origGive40.apply(this, arguments);
-      setTimeout(injectMpesaPhone40, 250);
-      setTimeout(injectMpesaPhone40, 800);
+      setTimeout(removeMpesaPhone40, 250);
+      setTimeout(removeMpesaPhone40, 800);
       return r;
     };
     window._gcGive._gc40mpesa = true;
   }
   window.confirmGiving = function () {
     var amount = parseFloat((document.getElementById('giveAmount') || {}).value || 0);
-    var phone = normPhone40(((document.getElementById('gc40MpesaPhone') || {}).value) || (window.profile && window.profile.phone));
     var cid = window._gcCurrentCauseId;
     if (!amount) return alert('Amount required');
-    if (!/^254\d{9}$/.test(phone)) return alert('Enter a valid Safaricom number e.g. 0712345678');
     if (!cid) return alert('No cause selected');
+    var phone = normPhone40(window.profile && window.profile.phone);
+    if (!/^254\d{9}$/.test(phone)) {
+      var p = prompt('Enter the M-Pesa number to receive the payment prompt (e.g. 0712345678):');
+      if (p === null) return;
+      phone = normPhone40(p);
+      if (!/^254\d{9}$/.test(phone)) return alert('Invalid Safaricom number');
+      try {
+        if (window.sb && window.user) {
+          window.sb.from('profiles').update({ phone: String(p).trim() }).eq('id', window.user.id).then(function () { if (window.profile) window.profile.phone = String(p).trim(); });
+        }
+      } catch (e) {}
+    }
     fetch('/api/mpesa-stk', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ phone: phone, amount: amount, causeId: cid, userId: window.user ? window.user.id : null })
     }).then(function (r) {
-      if (r.status === 404 && origConfirm40) return origConfirm40();   /* api not deployed yet → old manual flow */
+      if (r.status === 404 && origConfirm40) return origConfirm40();
       return r.json().then(function (j) {
         if (!r.ok || !j.checkoutRequestID) { alert('M-Pesa error: ' + (j.error || 'STK push failed')); return; }
         if (window.closeModalDirect) window.closeModalDirect();
