@@ -4738,18 +4738,12 @@
                     '</div>' +
 
                     /*
-                     /*
+/*
                      * ONE CHAT BUTTON ONLY.
                      */
                     (
                         !self
-                            ? '<button class="btn btn-primary btn-sm"' +
-                              ' style="white-space:nowrap;margin-left:auto"' +
-                              ' onclick="h32CategoryChat(\'' +
-                              m.user_id +
-                              '\')">' +
-                              '<i class="fas fa-comment-dots"></i> Chat' +
-                              '</button>'
+                            ? '<button class="btn btn-primary btn-sm" style="white-space:nowrap;margin-left:auto;" onclick="window.h32CategoryChat(\'' + m.user_id + '\')"><i class="fas fa-comment-dots"></i> Chat</button>'
                             : ''
                     ) +
 
