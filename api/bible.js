@@ -1,20 +1,24 @@
 // api/bible.js
 // GraceConnect Bible API
-// Full Bible API handler
+// English + Swahili Bible support
 //
 // English:
 //   bible-api.com
 //
 // Swahili:
-//   Primary  -> GetBible V2 / Biblia Takatifu
-//   Fallback -> MEGA.Bible
+//   GetBible V2
+//   MEGA.Bible fallback
 //
 // Supports:
-//   ?translation=kjv&book=John&chapter=3
-//   ?translation=swahili&book=John&chapter=3
-//   ?translation=swahili&book=Yohana&chapter=3
-//   ?translation=kjv&book=John&chapter=3&verse=16
-//   ?translation=swahili&book=Yohana&chapter=3&startVerse=16&endVerse=18
+//   John 3
+//   John 3:16
+//   John 3:16-18
+//   Yohana 3
+//   Yohana 3:16
+//   Mwanzo 1
+//   Zaburi 23
+//   Warumi 8
+//   Ufunuo 21
 
 const BOOKS = [
   "Genesis",
@@ -85,9 +89,6 @@ const BOOKS = [
   "Revelation"
 ];
 
-/*
- * MEGA.Bible book identifiers
- */
 const MEGA_BOOKS = [
   "gen",
   "exo",
@@ -159,19 +160,6 @@ const MEGA_BOOKS = [
 
 /*
  * Common Swahili Bible book names.
- *
- * This allows searches such as:
- *
- * Mwanzo 1
- * Kutoka 3
- * Zaburi 23
- * Isaya 53
- * Mathayo 5
- * Marko 1
- * Luka 15
- * Yohana 3
- * Warumi 8
- * Ufunuo 21
  */
 const SWAHILI_BOOKS = {
   "mwanzo": "Genesis",
@@ -214,12 +202,11 @@ const SWAHILI_BOOKS = {
   "nahumu": "Nahum",
   "habakuki": "Habakkuk",
   "sefania": "Zephaniah",
-  "hagaya": "Haggai",
+  "hagayi": "Haggai",
   "zekaria": "Zechariah",
   "malaki": "Malachi",
   "mathayo": "Matthew",
   "matayo": "Matthew",
-  "math": "Matthew",
   "marko": "Mark",
   "mariko": "Mark",
   "luka": "Luke",
@@ -251,11 +238,8 @@ const SWAHILI_BOOKS = {
   "yuda": "Jude",
   "ufunuo": "Revelation",
   "ufunuo wa yohana": "Revelation"
-];
+};
 
-/*
- * Convert a string into a normalized comparison value.
- */
 function normalize(value) {
   return String(value || "")
     .trim()
@@ -263,14 +247,6 @@ function normalize(value) {
     .replace(/\s+/g, " ");
 }
 
-/*
- * Safe JSON request.
- *
- * Returns null instead of throwing when:
- * - network fails
- * - API returns non-2xx
- * - API returns invalid JSON
- */
 async function safeJSON(url) {
   try {
     const response = await fetch(url, {
@@ -289,21 +265,13 @@ async function safeJSON(url) {
       return null;
     }
 
-    try {
-      return JSON.parse(text);
-    } catch (error) {
-      return null;
-    }
+    return JSON.parse(text);
 
   } catch (error) {
     return null;
   }
 }
 
-/*
- * Resolve English or Swahili book name to one of the
- * canonical 66 English Bible book names.
- */
 function resolveBookName(book) {
 
   const value = normalize(book);
@@ -312,38 +280,24 @@ function resolveBookName(book) {
     return null;
   }
 
-  /*
-   Numeric book number.
-   */
   if (/^\d+$/.test(value)) {
 
     const number = parseInt(value, 10);
 
-    if (
-      number >= 1 &&
-      number <= 66
-    ) {
+    if (number >= 1 && number <= 66) {
       return BOOKS[number - 1];
     }
 
     return null;
   }
 
-  /*
-   Exact English book name.
-   */
   for (let i = 0; i < BOOKS.length; i++) {
 
-    if (
-      normalize(BOOKS[i]) === value
-    ) {
+    if (normalize(BOOKS[i]) === value) {
       return BOOKS[i];
     }
   }
 
-  /*
-   Swahili book name.
-   */
   if (SWAHILI_BOOKS[value]) {
     return SWAHILI_BOOKS[value];
   }
@@ -351,9 +305,6 @@ function resolveBookName(book) {
   return null;
 }
 
-/*
- * Get canonical Bible book number.
- */
 function getBookNumber(book) {
 
   const resolved = resolveBookName(book);
@@ -362,30 +313,15 @@ function getBookNumber(book) {
     return 0;
   }
 
-  const index = BOOKS.indexOf(resolved);
-
-  return index + 1;
+  return BOOKS.indexOf(resolved) + 1;
 }
 
-/*
- * Convert different Bible API verse formats into:
- *
- * {
- *   verse: 1,
- *   text: "..."
- * }
- */
 function normalizeVerse(item) {
 
   if (!item) {
     return null;
   }
 
-  /*
-   GetBible commonly uses:
-   verse
-   text
-   */
   let number =
     item.verse != null
       ? item.verse
@@ -424,9 +360,6 @@ function normalizeVerse(item) {
   };
 }
 
-/*
- * Normalize a verse array.
- */
 function normalizeVerses(items) {
 
   if (!Array.isArray(items)) {
@@ -441,11 +374,7 @@ function normalizeVerses(items) {
 }
 
 /*
- * Extract verses from GetBible V2 responses.
- *
- * The API has used slightly different wrappers in different
- * versions, so this parser deliberately accepts all useful
- * chapter containers.
+ * GetBible V2 response parser.
  */
 function extractGetBibleVerses(data) {
 
@@ -453,7 +382,7 @@ function extractGetBibleVerses(data) {
     return [];
   }
 
-  let candidates = [];
+  const candidates = [];
 
   if (Array.isArray(data.verses)) {
     candidates.push(data.verses);
@@ -493,70 +422,11 @@ function extractGetBibleVerses(data) {
     }
   }
 
-  /*
-   Some API responses can be keyed by verse number.
-   Example:
-   {
-     "1": {...},
-     "2": {...}
-   }
-  */
-  const source =
-    data.chapter &&
-    !Array.isArray(data.chapter)
-      ? data.chapter
-      : data;
-
-  if (
-    source &&
-    typeof source === "object" &&
-    !Array.isArray(source)
-  ) {
-
-    const keys =
-      Object.keys(source);
-
-    const numbered = [];
-
-    for (let i = 0; i < keys.length; i++) {
-
-      if (!/^\d+$/.test(keys[i])) {
-        continue;
-      }
-
-      const item = source[keys[i]];
-
-      if (
-        item &&
-        typeof item === "object"
-      ) {
-
-        const verse =
-          normalizeVerse({
-            verse: keys[i],
-            text:
-              item.text ||
-              item.value ||
-              item.content ||
-              ""
-          });
-
-        if (verse) {
-          numbered.push(verse);
-        }
-      }
-    }
-
-    if (numbered.length) {
-      return numbered;
-    }
-  }
-
   return [];
 }
 
 /*
- * Extract verses from MEGA.Bible.
+ * MEGA.Bible parser.
  */
 function extractMegaVerses(data) {
 
@@ -606,10 +476,6 @@ function extractMegaVerses(data) {
         return false;
       }
 
-      /*
-       MEGA can contain headings, paragraphs, etc.
-       Ignore those when a type is available.
-       */
       if (
         item.type &&
         String(item.type).toLowerCase() !== "verse"
@@ -643,15 +509,6 @@ function extractMegaVerses(data) {
     });
 }
 
-/*
- * Apply optional verse filtering.
- *
- * Examples:
- *
- * verse=16
- *
- * startVerse=16&endVerse=18
- */
 function filterVerses(
   verses,
   verse,
@@ -659,7 +516,7 @@ function filterVerses(
   endVerse
 ) {
 
-  if (!verses || !verses.length) {
+  if (!verses.length) {
     return [];
   }
 
@@ -691,9 +548,6 @@ function filterVerses(
     }
   }
 
-  /*
-   No filtering requested.
-   */
   if (start == null && end == null) {
     return verses;
   }
@@ -714,19 +568,12 @@ function filterVerses(
 
   return verses.filter(function (item) {
 
-    const number =
-      Number(item.verse);
+    const n = Number(item.verse);
 
-    return (
-      number >= start &&
-      number <= end
-    );
+    return n >= start && n <= end;
   });
 }
 
-/*
- * Build final API response.
- */
 function makeResult(
   bookNumber,
   chapter,
@@ -753,9 +600,6 @@ function makeResult(
     " " +
     chapter;
 
-  /*
-   Add verse range to reference when filtering.
-   */
   let first = null;
   let last = null;
 
@@ -786,17 +630,13 @@ function makeResult(
 
   if (first != null) {
 
-    reference +=
-      ":" +
-      first;
+    reference += ":" + first;
 
     if (
       last != null &&
       last !== first
     ) {
-      reference +=
-        "-" +
-        last;
+      reference += "-" + last;
     }
   }
 
@@ -808,7 +648,7 @@ function makeResult(
 
 /*
  * ============================================================
- * SWAHILI — GETBIBLE V2 + MEGA.BIBLE FALLBACK
+ * SWAHILI
  * ============================================================
  */
 async function getSwahiliChapter(
@@ -824,9 +664,8 @@ async function getSwahiliChapter(
   }
 
   /*
-   ------------------------------------------------------------
-   SOURCE 1 — GetBible V2
-   ------------------------------------------------------------
+   * Primary Swahili source:
+   * GetBible V2.
    */
   const getBibleUrl =
     "https://api.getbible.net/v2/swahili/" +
@@ -859,9 +698,7 @@ async function getSwahiliChapter(
   }
 
   /*
-   ------------------------------------------------------------
-   SOURCE 2 — MEGA.Bible simplified JSON
-   ------------------------------------------------------------
+   * First MEGA fallback.
    */
   const simpleUrl =
     "https://mega.bible/sw/biblia-takatifu/" +
@@ -894,9 +731,7 @@ async function getSwahiliChapter(
   }
 
   /*
-   ------------------------------------------------------------
-   SOURCE 3 — MEGA.Bible normal JSON
-   ------------------------------------------------------------
+   * Second MEGA fallback.
    */
   const standardUrl =
     "https://mega.bible/sw/biblia-takatifu/" +
@@ -945,31 +780,14 @@ async function getEnglishChapter(
   const translationCode = {
 
     kjv: "kjv",
-
-    /*
-     bible-api.com does not provide a separate NKJV feed
-     through the current public endpoint, so retain the
-     existing GraceConnect fallback behavior.
-     */
     nkjv: "kjv",
-
     web: "web",
-
     niv: "web",
-
     asv: "asv",
-
     ylt: "ylt",
-
     darby: "darby",
-
     dra: "dra",
-
-    /*
-     Keep the existing mappings used by GraceConnect.
-     */
     esv: "web",
-
     nlt: "web"
 
   }[translation] || "kjv";
@@ -981,9 +799,6 @@ async function getEnglishChapter(
       chapter
     );
 
-  /*
-   First request the requested translation.
-   */
   let data =
     await safeJSON(
       "https://bible-api.com/" +
@@ -992,9 +807,6 @@ async function getEnglishChapter(
       translationCode
     );
 
-  /*
-   If the translated request fails, try the base endpoint.
-   */
   if (!data) {
 
     data =
@@ -1041,9 +853,6 @@ export default async function handler(
   const query =
     req.query || {};
 
-  /*
-   Translation.
-   */
   const translation =
     String(
       query.translation || "kjv"
@@ -1051,26 +860,17 @@ export default async function handler(
       .trim()
       .toLowerCase();
 
-  /*
-   Book.
-   */
   const requestedBook =
     String(
       query.book || ""
     ).trim();
 
-  /*
-   Chapter.
-   */
   const chapter =
     parseInt(
       query.chapter || "1",
       10
     );
 
-  /*
-   Optional verse parameters.
-   */
   const verse =
     query.verse != null
       ? parseInt(query.verse, 10)
@@ -1086,9 +886,6 @@ export default async function handler(
       ? parseInt(query.endVerse, 10)
       : null;
 
-  /*
-   Validate book/chapter.
-   */
   if (
     !requestedBook ||
     !Number.isFinite(chapter) ||
@@ -1101,9 +898,6 @@ export default async function handler(
     });
   }
 
-  /*
-   Resolve English or Swahili book name.
-   */
   const resolvedBook =
     resolveBookName(
       requestedBook
@@ -1119,9 +913,6 @@ export default async function handler(
     });
   }
 
-  /*
-   Get canonical number.
-   */
   const bookNumber =
     BOOKS.indexOf(
       resolvedBook
@@ -1138,18 +929,13 @@ export default async function handler(
     });
   }
 
-  /*
-   Cache for one week.
-   */
   res.setHeader(
     "Cache-Control",
     "public, s-maxage=604800, stale-while-revalidate=604800"
   );
 
   /*
-   ============================================================
-   SWAHILI
-   ============================================================
+   * SWAHILI
    */
   if (
     translation === "swahili" ||
@@ -1204,9 +990,7 @@ export default async function handler(
   }
 
   /*
-   ============================================================
-   ENGLISH / OTHER TRANSLATIONS
-   ============================================================
+   * ENGLISH / OTHER TRANSLATIONS
    */
   const result =
     await getEnglishChapter(
