@@ -1,12 +1,8 @@
 /* ============================================================
    GRACECONNECT — APP40.JS (additive, non-destructive)
-   Adds the SAME Reply-to-comment UI that Public Forum/Category
-   already have, to: USHIRIKA, DEPARTMENT and GROUPS threads.
-   - Ushirika/Dept comments: post_comments table
-   - Groups comments: community_comments table
-   - Nested replies via parent_comment_id (graceful fallback
-     if the column is missing on post_comments).
-   Touches nothing else.
+   1) Adds Reply-to-comment UI to Ushirika, Department, Groups
+   2) Defines missing ToggleReply/SubmitReply handlers so the
+      broken c26gx_/gggx_ Reply buttons also work.
    ============================================================ */
 (function () {
   'use strict';
@@ -39,7 +35,19 @@
     list.forEach(function (c) { if (c.parent_comment_id && map[c.parent_comment_id]) map[c.parent_comment_id]._k.push(c); else roots.push(c); });
     return roots;
   }
-  window.gc40Toggle = function (id) { var e = document.getElementById(id); if (e) e.style.display = e.style.display === 'none' ? 'block' : 'none'; };
+
+  /* ---------- universal toggle (also fixes broken handlers) ---------- */
+  window.gc40Toggle = function (id) {
+    var e = document.getElementById(id);
+    if (!e) return;
+    e.style.display = e.style.display === 'none' ? 'block' : 'none';
+    if (e.style.display === 'block') { var i = e.querySelector('input'); if (i) setTimeout(function () { i.focus(); }, 80); }
+  };
+  /* aliases for the broken names the live app calls */
+  window.c26gx_ToggleReply = window.gc40Toggle;
+  window.gggx_ToggleReply = window.gc40Toggle;
+  window.c26GroupToggleReply = window.gc40Toggle;
+  window.ggGroupToggleReply = window.gc40Toggle;
 
   /* ---------- one comment node with Reply button ---------- */
   function commentHtml40(c, depth, postId, kind, users) {
@@ -113,10 +121,10 @@
       }
       if (r.error) { alert(r.error.message); return; }
       input.value = '';
-      reload40(post, kind, parentId);
+      reload40(post, kind);
     });
   };
-  function reload40(postId, kind, parentId) {
+  function reload40(postId, kind) {
     if (kind === 'pc') {
       if (document.getElementById('ush-comments-' + postId)) renderPc40(postId, 'ush-comments-' + postId);
       if (document.getElementById('comments-' + postId)) renderPc40(postId, 'comments-' + postId);
@@ -127,20 +135,20 @@
     }
   }
 
-  /* ---------- take over the two legacy loaders so Reply appears ---------- */
-  window.loadPostComments = function (postId) { return renderPc40(postId, 'comments-' + postId); };      /* Department (+ old forum) */
-  window.loadUshPostComments = function (postId) { return renderPc40(postId, 'ush-comments-' + postId); }; /* Ushirika */
+  /* ---------- take over legacy loaders so Reply appears ---------- */
+  window.loadPostComments = function (postId) { return renderPc40(postId, 'comments-' + postId); };
+  window.loadUshPostComments = function (postId) { return renderPc40(postId, 'ush-comments-' + postId); };
 
-  /* ---------- Groups: attach a comment thread to each post card ---------- */
+  /* ---------- Groups: attach comment thread to each post card ---------- */
   function injectGroupComments40() {
     var box = document.getElementById('gg-tab-feed'); if (!box) return;
-    if (box.querySelector('input[id^="gggx_comment_"],input[id^="c26gx_comment_"]')) return; /* newer feed already has threads */
+    if (box.querySelector('input[id^="gggx_comment_"],input[id^="c26gx_comment_"]')) return;
     var gid = window._gg && window._gg.currentGroupId; if (!gid) return;
     var cards = box.querySelectorAll('.card'); if (!cards.length) return;
     var postCards = [];
     Array.prototype.forEach.call(cards, function (cd) {
-      if (cd.querySelector('textarea#ggPostText')) return;          /* composer card */
-      if (cd.hasAttribute('data-gc40-postcard')) return;             /* already done */
+      if (cd.querySelector('textarea#ggPostText')) return;
+      if (cd.hasAttribute('data-gc40-postcard')) return;
       postCards.push(cd);
     });
     if (!postCards.length) return;
@@ -158,10 +166,23 @@
     });
   }
 
+  /* ---------- catch clicks on any still-broken Reply onclick ---------- */
+  document.addEventListener('click', function (e) {
+    var btn = e.target.closest ? e.target.closest('button') : null;
+    if (!btn) return;
+    var oc = btn.getAttribute('onclick') || '';
+    var m = oc.match(/^(?:c26gx_ToggleReply|gggx_ToggleReply|c26GroupToggleReply|ggGroupToggleReply)\(\s*'([^']+)'\s*\)/);
+    if (m) {
+      e.preventDefault();
+      e.stopPropagation();
+      window.gc40Toggle(m[1]);
+    }
+  }, true);
+
   setInterval(injectGroupComments40, 1500);
   if (window.MutationObserver && document.body) {
     var t = null;
     new MutationObserver(function () { clearTimeout(t); t = setTimeout(injectGroupComments40, 300); }).observe(document.body, { childList: true, subtree: true });
   }
-  console.log('✝️ app40.js loaded — Reply buttons on Ushirika, Department & Groups comments');
+  console.log('✝️ app40.js loaded — Reply on Ushirika/Dept/Groups + broken ToggleReply fixed');
 })();
