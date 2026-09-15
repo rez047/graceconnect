@@ -200,20 +200,168 @@
     }).join('') || '<div style="color:var(--text-light);text-align:center">No posts yet.</div>';
   }
   async function h32CatMembers() {
-    var cat = window._h32Cat, box = document.getElementById('h32c-members'); if (!box) return;
+    var cat = window._h32Cat;
+    var box = document.getElementById('h32c-members');
+
+    if (!box || !cat) return;
+
     var gm = await groupManage(cat.group_id);
-    var m = await sb().from('church_group_category_members').select('*').eq('category_id', cat.id);
-    var us = await users(); var html = '';
+
+    var m = await sb()
+      .from('church_group_category_members')
+      .select('*')
+      .eq('category_id', cat.id);
+
+    var us = await users();
+    var html = '';
+
     (m.data || []).forEach(function (r) {
-      var u = us.find(function (x) { return x.id === r.user_id; });var self = me() && String(r.user_id) === String(me().id);
-      html += '<div class="card" style="margin-bottom:8px"><div style="display:flex;gap:10px;align-items:center">' + avatarHtml(u, 38)
-        + '<div style="flex:1"><b>' + esc((u && u.name) || 'Member') + '</b><div style="font-size:.72rem;color:var(--primary);font-weight:700">' + esc(r.role || 'Member') + '</div></div>'
-        + (!self ? '<button type=\"button\" class=\"btn btn-primary btn-sm\" style=\"white-space:nowrap;margin-left:auto\" onclick=\"c26OpenChat(\\'' + r.user_id + '\\'); return false;\"><i class=\"fas fa-comment-dots\"></i> Chat</button>' : '') + '</div>'
-        + (gm ? '<div style="display:flex;gap:8px;margin-top:8px"><select class="form-select" onchange="h32CatSetRole(\'' + r.user_id + '\',this.value)">' + ['Member', 'Teacher', 'Leader', 'Chairman'].map(function (o) { return '<option' + ((r.role || 'Member') === o ? ' selected' : '') + '>' + o + '</option>'; }).join('') + '</select><button class="btn btn-danger btn-sm" onclick="h32CatRemove(\'' + r.user_id + '\')"><i class="fas fa-trash"></i></button></div>' : '') + '</div>';
+
+      var u = us.find(function (x) {
+        return x.id === r.user_id;
+      });
+
+      var self =
+        me() &&
+        String(r.user_id) === String(me().id);
+
+      html +=
+        '<div class="card" style="margin-bottom:8px">' +
+          '<div style="display:flex;gap:10px;align-items:center">' +
+
+            avatarHtml(u, 38) +
+
+            '<div style="flex:1">' +
+              '<b>' +
+                esc((u && u.name) || 'Member') +
+              '</b>' +
+
+              '<div style="font-size:.72rem;color:var(--primary);font-weight:700">' +
+                esc(r.role || 'Member') +
+              '</div>' +
+
+            '</div>' +
+
+            (
+              !self
+              ?
+              '<button ' +
+                'type="button" ' +
+                'class="btn btn-primary btn-sm h32-category-chat" ' +
+                'data-chat-user="' + esc(r.user_id) + '" ' +
+                'style="white-space:nowrap;margin-left:auto">' +
+                  '<i class="fas fa-comment-dots"></i> Chat' +
+              '</button>'
+              :
+              ''
+            ) +
+
+          '</div>' +
+
+          (
+            gm
+            ?
+            '<div style="display:flex;gap:8px;margin-top:8px">' +
+
+              '<select class="form-select" ' +
+                'onchange="h32CatSetRole(\'' +
+                  r.user_id +
+                '\',this.value)">' +
+
+                ['Member', 'Teacher', 'Leader', 'Chairman']
+                  .map(function (o) {
+                    return (
+                      '<option' +
+                      (
+                        (r.role || 'Member') === o
+                        ? ' selected'
+                        : ''
+                      ) +
+                      '>' +
+                      o +
+                      '</option>'
+                    );
+                  })
+                  .join('') +
+
+              '</select>' +
+
+              '<button ' +
+                'class="btn btn-danger btn-sm" ' +
+                'onclick="h32CatRemove(\'' +
+                  r.user_id +
+                '\')">' +
+                  '<i class="fas fa-trash"></i>' +
+              '</button>' +
+
+            '</div>'
+            :
+            ''
+          ) +
+
+        '</div>';
     });
-    if (!(m.data || []).length) html += '<div class="card">No category members yet. Join the category first.</div>';
-    if (gm) html += '<button class="btn btn-warm btn-block" onclick="h32CatAddPick()"><i class="fas fa-user-plus"></i> Add Member (from group)</button>';
+
+    if (!(m.data || []).length) {
+      html +=
+        '<div class="card">' +
+          'No category members yet. Join the category first.' +
+        '</div>';
+    }
+
+    if (gm) {
+      html +=
+        '<button class="btn btn-warm btn-block" ' +
+          'onclick="h32CatAddPick()">' +
+          '<i class="fas fa-user-plus"></i> Add Member (from group)' +
+        '</button>';
+    }
+
     box.innerHTML = html;
+
+    /*
+     * CATEGORY CHAT
+     * Do NOT use inline onclick here.
+     * Bind the already-rendered buttons directly to
+     * the same proven chat engine used elsewhere.
+     */
+    box
+      .querySelectorAll('.h32-category-chat')
+      .forEach(function (button) {
+
+        var uid = button.getAttribute('data-chat-user');
+
+        button.onclick = function (event) {
+
+          if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+
+          if (!uid) {
+            alert('Unable to identify this member.');
+            return false;
+          }
+
+          if (
+            typeof window.c26OpenChat === 'function'
+          ) {
+            window.c26OpenChat(uid);
+            return false;
+          }
+
+          if (
+            typeof window.h27ChatWith === 'function'
+          ) {
+            window.h27ChatWith(uid);
+            return false;
+          }
+
+          alert('Chat is not available. Please refresh the page.');
+
+          return false;
+        };
+      });
   }
   window.h32CatAddPick = async function () {
     var cat = window._h32Cat;
