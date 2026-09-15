@@ -102,27 +102,291 @@
   }
 
   function patchCategory37() {
-    var cs = containers37(), added = 0, seen = 0;
-    cs.forEach(function (box) {
-      var cards = box.querySelectorAll('.card');
-      if (!cards.length) cards = box.children;
-      Array.prototype.forEach.call(cards, function (card) {
-        if (!card || card.nodeType !== 1) return;
-        if (card.tagName === 'BUTTON' || card.tagName === 'A') return;
-        seen++;
-        if (chatExists37(card)) return;
-        var txt = norm37(card.textContent);
-        if (!txt || txt === 'loading...' || txt.indexOf('loading') === 0 || txt.indexOf('no ') === 0) return;
-        if (txt.indexOf('add member') > -1) return;
-        var b = makeChatBtn37();
-        var uid = resolveUid37(card, profCache);
-        if (uid) b.setAttribute('data-uid', uid);
-        card.appendChild(b);
-        added++;
-      });
+    var box = document.getElementById('h32c-members');
+
+    if (!box) return;
+
+    /*
+     * Category members are rendered differently from Group members.
+     * Their cards do NOT contain c26OpenChat()/h27ChatWith().
+     *
+     * Therefore:
+     * 1. Read the actual category membership rows.
+     * 2. Use their user_id as the authoritative ID.
+     * 3. Match those IDs to the rendered member cards by the
+     *    member's displayed profile name.
+     * 4. Add the same Chat button/pipeline used elsewhere.
+     */
+
+    var cat = window._h32Cat;
+
+    if (!cat || !cat.id) return;
+
+    var c = db37();
+
+    if (!c) return;
+
+    /*
+     * Prevent multiple simultaneous queries caused by the
+     * MutationObserver + interval.
+     */
+    if (box.getAttribute('data-gc37-loading') === '1') return;
+
+    box.setAttribute('data-gc37-loading', '1');
+
+    Promise.all([
+        c
+            .from('church_group_category_members')
+            .select('user_id,role')
+            .eq('category_id', cat.id),
+
+        c
+            .from('profiles')
+            .select('id,name,profile_pic,email,role')
+    ])
+    .then(function (results) {
+
+        var memberships = results[0] || {};
+        var profiles = results[1] || {};
+
+        if (memberships.error || profiles.error) {
+            return;
+        }
+
+        var members = memberships.data || [];
+        var profs = profiles.data || [];
+
+        if (!members.length || !profs.length) return;
+
+        /*
+         * Build user_id -> profile lookup.
+         */
+        var profileMap = {};
+
+        profs.forEach(function (p) {
+            if (p && p.id) {
+                profileMap[String(p.id)] = p;
+            }
+        });
+
+        /*
+         * The category renderer creates the member cards directly
+         * inside #h32c-members.
+         *
+         * We deliberately do NOT use ".card" because that can also
+         * catch unrelated nested cards.
+         */
+        var rows = [];
+
+        Array.prototype.forEach.call(box.children, function (el) {
+
+            if (!el || el.nodeType !== 1) return;
+
+            /*
+             * Ignore containers that are clearly not member rows.
+             */
+            var text = norm37(el.textContent || '');
+
+            if (!text) return;
+
+            rows.push(el);
+        });
+
+        if (!rows.length) return;
+
+        /*
+         * Find a member row by the actual profile name.
+         * We search the rendered DOM rather than reconstructing
+         * the Category member card.
+         */
+        members.forEach(function (m) {
+
+            if (!m || !m.user_id) return;
+
+            var uid = String(m.user_id);
+            var profile = profileMap[uid];
+
+            if (!profile || !profile.name) return;
+
+            /*
+             * If this member already has the button, leave it alone.
+             */
+            var existing = box.querySelector(
+                '[data-gc37-chat-user="' +
+                CSS.escape(uid) +
+                '"]'
+            );
+
+            if (existing) return;
+
+            var target = null;
+            var wanted = norm37(profile.name);
+
+            /*
+             * First try direct member rows.
+             */
+            for (var i = 0; i < rows.length; i++) {
+
+                var row = rows[i];
+
+                /*
+                 * Do not reuse a row already assigned to another
+                 * Category member.
+                 */
+                if (row.getAttribute('data-gc37-member-id')) {
+                    continue;
+                }
+
+                var rowText = norm37(row.textContent || '');
+
+                if (
+                    rowText &&
+                    rowText.indexOf(wanted) !== -1
+                ) {
+                    target = row;
+                    break;
+                }
+            }
+
+            /*
+             * If the renderer has wrapped the actual member card,
+             * search descendants for the exact displayed name and
+             * climb to the nearest useful container.
+             */
+            if (!target) {
+
+                var walker = document.createTreeWalker(
+                    box,
+                    NodeFilter.SHOW_TEXT,
+                    null,
+                    false
+                );
+
+                var node;
+
+                while ((node = walker.nextNode())) {
+
+                    var nt = norm37(node.nodeValue || '');
+
+                    if (
+                        nt &&
+                        nt.indexOf(wanted) !== -1
+                    ) {
+
+                        var parent = node.parentElement;
+
+                        if (!parent) continue;
+
+                        /*
+                         * Prefer an existing card/container.
+                         */
+                        target =
+                            parent.closest('.card') ||
+                            parent.closest(
+                                '[style*="border-radius"]'
+                            ) ||
+                            parent.parentElement;
+
+                        if (target) break;
+                    }
+                }
+            }
+
+            if (!target) return;
+
+            target.setAttribute(
+                'data-gc37-member-id',
+                uid
+            );
+
+            /*
+             * Check again because the target may already contain
+             * another Chat implementation.
+             */
+            var buttons = target.querySelectorAll(
+                'button,a'
+            );
+
+            for (var j = 0; j < buttons.length; j++) {
+
+                var b = buttons[j];
+
+                var txt = norm37(
+                    b.textContent || ''
+                );
+
+                if (
+                    txt === 'chat' ||
+                    txt === 'inbox' ||
+                    b.getAttribute('data-gc36-chat') === '1'
+                ) {
+                    b.setAttribute(
+                        'data-gc37-chat-user',
+                        uid
+                    );
+                    return;
+                }
+            }
+
+            /*
+             * Create the missing button.
+             */
+            var chatButton = makeChatBtn37(uid);
+
+            chatButton.setAttribute(
+                'data-gc37-chat-user',
+                uid
+            );
+
+            chatButton.style.marginTop = '8px';
+
+            /*
+             * Category cards have their role/remove controls in a
+             * flex row when the viewer is a manager. Put Chat into
+             * that row when available; otherwise append it safely.
+             */
+            var actionRow =
+                target.querySelector(
+                    '.d-flex,' +
+                    '.btn-group,' +
+                    '.actions,' +
+                    '[style*="display:flex"]'
+                );
+
+            if (actionRow) {
+
+                chatButton.style.marginTop = '0';
+                chatButton.style.marginLeft = '8px';
+
+                actionRow.appendChild(
+                    chatButton
+                );
+
+            } else {
+
+                target.appendChild(
+                    chatButton
+                );
+            }
+        });
+
+    })
+    .catch(function (err) {
+
+        console.warn(
+            'GC37 Category Chat patch:',
+            err
+        );
+
+    })
+    .finally(function () {
+
+        box.removeAttribute(
+            'data-gc37-loading'
+        );
+
     });
-    if (cs.length) console.log('[gc37] category containers:' + cs.length + ' cards:' + seen + ' chatButtonsAdded:' + added);
-  }
+}
 
   /* ═══════════ 2) SERVANTS OF GOD → CHAT BUBBLE (unchanged, working) ═══════════ */
   function servantRows37(box) {
