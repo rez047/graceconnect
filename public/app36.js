@@ -1,42 +1,34 @@
 /* ============================================================
    GRACECONNECT — APP36.JS
-   FINAL TARGETED PATCH
+   TARGETED FINAL PATCH
 
-   KEEP:
-   - Existing Group Chat logic
-   - Existing Swahili New Testament behavior
-   - Existing English/KJV/etc. Bible loader
-
-   FIX:
-   - Category -> Members -> Chat
-   - Swahili Old Testament loading
-
-   DOES NOT create a new chat system.
-   Uses the existing c26OpenChat / h27ChatWith engine.
+   IMPORTANT:
+   - Does NOT replace the existing English Bible loader.
+     app19.js remains responsible for English/KJV/etc.
+   - Intercepts ONLY Swahili Bible requests.
+   - Uses MEGA.Bible's complete Swahili Biblia Takatifu first,
+     then GraceConnect /api/bible as fallback.
+   - Adds exactly one Chat button to actual GROUP and CATEGORY
+     member rows using the existing Supabase membership tables.
    ============================================================ */
 
 (function () {
     'use strict';
 
-    console.log('GC APP36: final targeted patch loading');
+    console.log('GC APP36: targeted patch loading');
 
     /* ============================================================
-       SUPABASE
+       HELPERS
        ============================================================ */
 
     function db36() {
         try {
             if (typeof window.sb === 'function') {
                 var c = window.sb();
-                if (c && typeof c.from === 'function') {
-                    return c;
-                }
+                if (c && typeof c.from === 'function') return c;
             }
 
-            if (
-                window.sb &&
-                typeof window.sb.from === 'function'
-            ) {
+            if (window.sb && typeof window.sb.from === 'function') {
                 return window.sb;
             }
 
@@ -51,11 +43,8 @@
         return null;
     }
 
-
     function esc36(v) {
-        if (typeof window.esc === 'function') {
-            return window.esc(v);
-        }
+        if (typeof window.esc === 'function') return window.esc(v);
 
         return String(v == null ? '' : v).replace(
             /[&<>"']/g,
@@ -71,6 +60,9 @@
         );
     }
 
+    function me36() {
+        return window.user || null;
+    }
 
     function normalize36(v) {
         return String(v || '')
@@ -81,13 +73,10 @@
 
 
     /* ============================================================
-       BIBLE BOOK MAP
+       SWAHILI BOOK MAP
        ============================================================ */
 
     var SW36 = {
-
-        /* OLD TESTAMENT */
-
         'mwanzo': ['Genesis', 'gen'],
         'kutoka': ['Exodus', 'exo'],
         'walawi': ['Leviticus', 'lev'],
@@ -132,8 +121,6 @@
         'zekaria': ['Zechariah', 'zec'],
         'malaki': ['Malachi', 'mal'],
 
-        /* NEW TESTAMENT */
-
         'mathayo': ['Matthew', 'mat'],
         'matayo': ['Matthew', 'mat'],
         'marko': ['Mark', 'mrk'],
@@ -169,9 +156,7 @@
         'ufunuo wa yohana': ['Revelation', 'rev']
     };
 
-
     var EN36 = {
-
         'genesis': ['Genesis', 'gen'],
         'exodus': ['Exodus', 'exo'],
         'leviticus': ['Leviticus', 'lev'],
@@ -212,7 +197,6 @@
         'haggai': ['Haggai', 'hag'],
         'zechariah': ['Zechariah', 'zec'],
         'malachi': ['Malachi', 'mal'],
-
         'matthew': ['Matthew', 'mat'],
         'mark': ['Mark', 'mrk'],
         'luke': ['Luke', 'luk'],
@@ -244,433 +228,76 @@
 
 
     /* ============================================================
-       BIBLE REFERENCE PARSER
+       BIBLE REFERENCE
        ============================================================ */
 
     function parse36(ref) {
+        var m = String(ref || '').trim().match(
+            /^(.+?)\s+(\d+)(?:\s*:\s*(\d+)(?:\s*-\s*(\d+))?)?$/
+        );
 
-        var m = String(ref || '')
-            .trim()
-            .match(
-                /^(.+?)\s+(\d+)(?:\s*:\s*(\d+)(?:\s*-\s*(\d+))?)?$/
-            );
-
-        if (!m) {
-            return null;
-        }
+        if (!m) return null;
 
         var name = normalize36(m[1]);
+        var book = SW36[name] || EN36[name];
 
-        var book =
-            SW36[name] ||
-            EN36[name];
-
-        if (!book) {
-            return null;
-        }
+        if (!book) return null;
 
         return {
             book: book[0],
             slug: book[1],
             chapter: parseInt(m[2], 10),
-            start: m[3]
-                ? parseInt(m[3], 10)
-                : null,
+            start: m[3] ? parseInt(m[3], 10) : null,
             end: m[4]
                 ? parseInt(m[4], 10)
-                : (
-                    m[3]
-                        ? parseInt(m[3], 10)
-                        : null
-                )
+                : (m[3] ? parseInt(m[3], 10) : null)
         };
     }
 
 
-    /* ============================================================
-       ROBUST MEGA.BIBLE VERSE COLLECTOR
-       
-       THIS IS THE IMPORTANT OLD TESTAMENT FIX.
+    function collectVerses36(value, out, seen) {
+        if (!value || typeof value !== 'object') return;
 
-       Handles:
-       1. [{verse:1,text:"..." }]
-       2. {verse:1,text:"..."}
-       3. {"1":"verse text","2":"verse text"}
-       4. {"1":{text:"..."}}
-       5. strings containing:
-            1 verse text
-            2 verse text
-       6. nested data / chapter / verses objects
-       ============================================================ */
+        if (!seen) seen = [];
 
-    function collectVerses36(value, out, seen, inheritedVerse) {
-
-        if (value == null) {
-            return;
-        }
-
-        if (!out) {
-            out = [];
-        }
-
-        if (!seen) {
-            seen = [];
-        }
-
-        /* ----------------------------
-           STRING
-           ---------------------------- */
-
-        if (typeof value === 'string') {
-
-            var raw = value.trim();
-
-            if (!raw) {
-                return;
-            }
-
-            /*
-             * If the parent numeric key supplied the verse number,
-             * the entire string is the verse text.
-             */
-            if (
-                inheritedVerse != null &&
-                /^\d+$/.test(String(inheritedVerse))
-            ) {
-                out.push({
-                    verse: parseInt(
-                        inheritedVerse,
-                        10
-                    ),
-                    text: raw.replace(
-                        /\s+/g,
-                        ' '
-                    ).trim()
-                });
-
-                return;
-            }
-
-            /*
-             * Otherwise parse strings such as:
-             *
-             * 1 In the beginning...
-             * 2 And the earth...
-             *
-             * Also accepts:
-             * 1. text
-             * 1) text
-             * 1 - text
-             */
-            var lines =
-                raw.split(/\r?\n+/);
-
-            var parsedAny = false;
-
-            lines.forEach(function (line) {
-
-                var s =
-                    String(line || '')
-                        .trim();
-
-                if (!s) {
-                    return;
-                }
-
-                var m =
-                    s.match(
-                        /^(\d+)[\s.)\-:]+(.+)$/
-                    );
-
-                if (m) {
-
-                    var num =
-                        parseInt(
-                            m[1],
-                            10
-                        );
-
-                    var txt =
-                        m[2]
-                            .replace(
-                                /\s+/g,
-                                ' '
-                            )
-                            .trim();
-
-                    if (num > 0 && txt) {
-
-                        out.push({
-                            verse: num,
-                            text: txt
-                        });
-
-                        parsedAny = true;
-                    }
-                }
-            });
-
-            /*
-             * Some sources may return a single verse as:
-             * "1 In the beginning..."
-             */
-            if (
-                !parsedAny &&
-                /^\d+[\s.)\-:]+.+/.test(raw)
-            ) {
-
-                var one =
-                    raw.match(
-                        /^(\d+)[\s.)\-:]+(.+)$/
-                    );
-
-                if (one) {
-
-                    out.push({
-                        verse: parseInt(
-                            one[1],
-                            10
-                        ),
-                        text: one[2]
-                            .replace(
-                                /\s+/g,
-                                ' '
-                            )
-                            .trim()
-                    });
-                }
-            }
-
-            return;
-        }
-
-
-        /* ----------------------------
-           ARRAY
-           ---------------------------- */
-
-        if (Array.isArray(value)) {
-
-            value.forEach(function (item) {
-
-                collectVerses36(
-                    item,
-                    out,
-                    seen,
-                    null
-                );
-
-            });
-
-            return;
-        }
-
-
-        /* ----------------------------
-           OBJECT
-           ---------------------------- */
-
-        if (typeof value !== 'object') {
-            return;
-        }
-
-
-        if (seen.indexOf(value) !== -1) {
-            return;
-        }
-
+        if (seen.indexOf(value) !== -1) return;
         seen.push(value);
 
-
-        /*
-         * Explicit verse number.
-         */
+        if (Array.isArray(value)) {
+            value.forEach(function (x) {
+                collectVerses36(x, out, seen);
+            });
+            return;
+        }
 
         var n =
-            value.verse != null
-                ? value.verse
-                : value.number != null
-                    ? value.number
-                    : value.verseNumber != null
-                        ? value.verseNumber
-                        : value.n != null
-                            ? value.n
-                            : null;
+            value.verse != null ? value.verse :
+            value.number != null ? value.number :
+            value.verseNumber != null ? value.verseNumber :
+            null;
 
-
-        /*
-         * Explicit verse text.
-         */
-
-        var text = '';
-
-        if (typeof value.text === 'string') {
-            text = value.text;
-        }
-        else if (typeof value.value === 'string') {
-            text = value.value;
-        }
-        else if (typeof value.verseText === 'string') {
-            text = value.verseText;
-        }
-        else if (typeof value.content === 'string') {
-            text = value.content;
-        }
-
+        var text =
+            value.text ||
+            value.value ||
+            (
+                typeof value.content === 'string'
+                    ? value.content
+                    : ''
+            );
 
         if (
             n != null &&
             text &&
-            /^\d+$/.test(
-                String(n)
-            )
+            /^\d+$/.test(String(n))
         ) {
-
             out.push({
-                verse: parseInt(
-                    n,
-                    10
-                ),
-                text: String(text)
-                    .replace(
-                        /\s+/g,
-                        ' '
-                    )
-                    .trim()
+                verse: parseInt(n, 10),
+                text: String(text).replace(/\s+/g, ' ').trim()
             });
         }
 
-
-        /*
-         * IMPORTANT:
-         *
-         * MEGA OT data may contain:
-         *
-         * {
-         *   "1": "verse...",
-         *   "2": "verse..."
-         * }
-         *
-         * The old collector completely ignored those strings.
-         *
-         * We explicitly recognize numeric keys.
-         */
-
         Object.keys(value).forEach(function (key) {
-
-            var child =
-                value[key];
-
-            /*
-             * Numeric object key = verse number.
-             */
-            if (
-                /^\d+$/.test(key)
-            ) {
-
-                var verseNumber =
-                    parseInt(
-                        key,
-                        10
-                    );
-
-                /*
-                 * Direct string:
-                 * "1": "In the beginning..."
-                 */
-                if (
-                    typeof child === 'string'
-                ) {
-
-                    var directText =
-                        child
-                            .replace(
-                                /\s+/g,
-                                ' '
-                            )
-                            .trim();
-
-                    if (
-                        verseNumber > 0 &&
-                        directText
-                    ) {
-
-                        out.push({
-                            verse: verseNumber,
-                            text: directText
-                        });
-                    }
-
-                    return;
-                }
-
-
-                /*
-                 * Numeric key containing an object:
-                 *
-                 * "1": {
-                 *    text: "..."
-                 * }
-                 */
-                if (
-                    child &&
-                    typeof child === 'object'
-                ) {
-
-                    var childN =
-                        child.verse != null
-                            ? child.verse
-                            : child.number != null
-                                ? child.number
-                                : child.verseNumber != null
-                                    ? child.verseNumber
-                                    : null;
-
-                    var childText =
-                        typeof child.text === 'string'
-                            ? child.text
-                            : typeof child.value === 'string'
-                                ? child.value
-                                : typeof child.content === 'string'
-                                    ? child.content
-                                    : typeof child.verseText === 'string'
-                                        ? child.verseText
-                                        : '';
-
-                    if (
-                        !childN &&
-                        childText &&
-                        verseNumber > 0
-                    ) {
-
-                        out.push({
-                            verse: verseNumber,
-                            text: childText
-                                .replace(
-                                    /\s+/g,
-                                    ' '
-                                )
-                                .trim()
-                        });
-                    }
-
-                    collectVerses36(
-                        child,
-                        out,
-                        seen,
-                        verseNumber
-                    );
-
-                    return;
-                }
-            }
-
-
-            /*
-             * Normal nested Bible structures.
-             *
-             * Do not recurse into obvious metadata.
-             */
+            var child = value[key];
 
             if (
                 child &&
@@ -679,85 +306,27 @@
                 key !== 'references' &&
                 key !== 'topics' &&
                 key !== 'people' &&
-                key !== 'events' &&
-                key !== 'metadata'
+                key !== 'events'
             ) {
-
-                collectVerses36(
-                    child,
-                    out,
-                    seen,
-                    null
-                );
+                collectVerses36(child, out, seen);
             }
-
-
-            /*
-             * String values under normal keys can themselves
-             * contain numbered verses.
-             */
-
-            if (
-                typeof child === 'string' &&
-                (
-                    key === 'text' ||
-                    key === 'content' ||
-                    key === 'value' ||
-                    key === 'verses'
-                )
-            ) {
-
-                collectVerses36(
-                    child,
-                    out,
-                    seen,
-                    null
-                );
-            }
-
         });
     }
 
 
     function uniqueVerses36(list) {
-
         var map = {};
 
-        (list || []).forEach(function (v) {
-
+        list.forEach(function (v) {
             if (
-                !v ||
-                !v.verse ||
-                !v.text
+                v &&
+                v.verse > 0 &&
+                v.text &&
+                !map[v.verse]
             ) {
-                return;
-            }
-
-            var num =
-                parseInt(
-                    v.verse,
-                    10
-                );
-
-            if (
-                num > 0 &&
-                !map[num]
-            ) {
-
-                map[num] = {
-                    verse: num,
-                    text: String(
-                        v.text
-                    )
-                        .replace(
-                            /\s+/g,
-                            ' '
-                        )
-                        .trim()
-                };
+                map[v.verse] = v;
             }
         });
-
 
         return Object.keys(map)
             .map(function (k) {
@@ -769,28 +338,16 @@
     }
 
 
-    /* ============================================================
-       JSON FETCH
-       ============================================================ */
-
     function fetchJSON36(url) {
-
-        return fetch(
-            url,
-            {
-                method: 'GET',
-                mode: 'cors',
-                headers: {
-                    'Accept': 'application/json'
-                }
+        return fetch(url, {
+            method: 'GET',
+            mode: 'cors',
+            headers: {
+                'Accept': 'application/json'
             }
-        )
-        .then(function (r) {
-
+        }).then(function (r) {
             if (!r.ok) {
-                throw new Error(
-                    'HTTP ' + r.status
-                );
+                throw new Error('HTTP ' + r.status);
             }
 
             return r.json();
@@ -799,18 +356,15 @@
 
 
     /* ============================================================
-       SWAHILI BIBLE LOADER
-       ONLY SWAHILI IS OVERRIDDEN.
+       SWAHILI LOADER — ONLY SWAHILI IS OVERRIDDEN
        ============================================================ */
 
     function loadSwahili36(parsed) {
-
         var key =
             'gc36_sw_' +
             parsed.slug +
             '_' +
             parsed.chapter;
-
 
         var mega =
             'https://mega.bible/sw/biblia-takatifu/' +
@@ -819,217 +373,130 @@
             parsed.chapter +
             '.json';
 
-
         /*
-         * MEGA first.
+         * MEGA.Bible is tried first because it contains the complete
+         * Swahili Old + New Testament.
          */
 
-        return fetchJSON36(
-            mega
-        )
-
-        .then(function (data) {
-
-            var found = [];
-
-            collectVerses36(
-                data,
-                found,
-                []
-            );
-
-            var verses =
-                uniqueVerses36(
-                    found
-                );
-
-
-            if (!verses.length) {
-
-                throw new Error(
-                    'MEGA returned no verses'
-                );
-            }
-
-
-            try {
-
-                localStorage.setItem(
-                    key,
-                    JSON.stringify(
-                        verses
-                    )
-                );
-
-            } catch (e) {}
-
-
-            return verses;
-        })
-
-
-        /*
-         * Existing GraceConnect API fallback.
-         */
-
-        .catch(function () {
-
-            return fetchJSON36(
-                '/api/bible?translation=swahili' +
-                '&book=' +
-                encodeURIComponent(
-                    parsed.book
-                ) +
-                '&chapter=' +
-                encodeURIComponent(
-                    parsed.chapter
-                )
-            )
-
+        return fetchJSON36(mega)
             .then(function (data) {
-
                 var found = [];
 
                 collectVerses36(
                     data,
-                    found,
-                    []
+                    found
                 );
 
                 var verses =
-                    uniqueVerses36(
-                        found
-                    );
-
+                    uniqueVerses36(found);
 
                 if (!verses.length) {
-
                     throw new Error(
-                        'No Swahili verses'
+                        'No verses from MEGA'
                     );
                 }
 
-
                 try {
-
                     localStorage.setItem(
                         key,
-                        JSON.stringify(
-                            verses
-                        )
+                        JSON.stringify(verses)
                     );
-
                 } catch (e) {}
 
-
                 return verses;
-            });
-        })
+            })
 
+            .catch(function () {
+                /*
+                 * Server fallback preserves compatibility with the
+                 * existing GraceConnect Bible API.
+                 */
 
-        /*
-         * Last resort = cached chapter.
-         */
+                return fetchJSON36(
+                    '/api/bible?translation=swahili' +
+                    '&book=' +
+                    encodeURIComponent(parsed.book) +
+                    '&chapter=' +
+                    encodeURIComponent(parsed.chapter)
+                )
+                    .then(function (data) {
+                        var found = [];
 
-        .catch(function (err) {
+                        collectVerses36(
+                            data,
+                            found
+                        );
 
-            var cached = null;
+                        var verses =
+                            uniqueVerses36(found);
 
-            try {
+                        if (!verses.length) {
+                            throw new Error(
+                                'No Swahili verses'
+                            );
+                        }
 
-                cached =
-                    JSON.parse(
-                        localStorage.getItem(
-                            key
-                        ) || 'null'
+                        return verses;
+                    });
+            })
+
+            .catch(function (err) {
+                var cached = null;
+
+                try {
+                    cached = JSON.parse(
+                        localStorage.getItem(key) || 'null'
                     );
+                } catch (e) {}
 
-            } catch (e) {}
+                if (
+                    Array.isArray(cached) &&
+                    cached.length
+                ) {
+                    return cached;
+                }
 
-
-            if (
-                Array.isArray(cached) &&
-                cached.length
-            ) {
-
-                return cached;
-            }
-
-
-            throw err;
-        });
+                throw err;
+            });
     }
 
-
-    /* ============================================================
-       PAINT SWAHILI
-       ============================================================ */
 
     function paintSwahili36(
         parsed,
         verses,
         offline
     ) {
-
         var out =
-            document.getElementById(
-                'readerOut'
-            );
+            document.getElementById('readerOut');
 
-        if (!out) {
-            return;
-        }
+        if (!out) return;
 
+        var shown = verses;
 
-        var shown =
-            verses || [];
-
-
-        if (
-            parsed.start != null
-        ) {
-
-            shown =
-                shown.filter(
-                    function (v) {
-
-                        return (
-                            v.verse >=
-                                parsed.start &&
-                            v.verse <=
-                                (
-                                    parsed.end == null
-                                        ? parsed.start
-                                        : parsed.end
-                                )
-                        );
-                    }
+        if (parsed.start != null) {
+            shown = verses.filter(function (v) {
+                return (
+                    v.verse >= parsed.start &&
+                    v.verse <= (
+                        parsed.end == null
+                            ? parsed.start
+                            : parsed.end
+                    )
                 );
+            });
         }
-
 
         if (!shown.length) {
-
             throw new Error(
                 'Requested verse not found'
             );
         }
 
-
-        window._bibleVerses =
-            shown;
-
-        window._selectedVerses =
-            [];
-
+        window._bibleVerses = shown;
+        window._selectedVerses = [];
 
         var html =
-            '<div style="' +
-            'font-weight:800;' +
-            'color:#92400E;' +
-            'margin-bottom:8px' +
-            '">' +
-
+            '<div style="font-weight:800;color:#92400E;margin-bottom:8px">' +
             esc36(
                 parsed.book +
                 ' ' +
@@ -1041,68 +508,41 @@
                           (
                             parsed.end != null &&
                             parsed.end !== parsed.start
-                                ? '-' +
-                                  parsed.end
+                                ? '-' + parsed.end
                                 : ''
                           )
                         : ''
                 )
             ) +
-
             (
                 offline
                     ? ' <span class="chip chip-green">offline</span>'
                     : ''
             ) +
-
             '</div>';
 
-
         shown.forEach(function (v) {
-
             html +=
                 '<p ' +
-                'data-v="' +
-                v.verse +
-                '"' +
-
-                ' onclick="toggleVerseHighlight(this,' +
+                'data-v="' + v.verse + '"' +
+                'onclick="toggleVerseHighlight(this,' +
                 v.verse +
                 ')"' +
-
-                ' style="' +
-                'padding:5px 6px;' +
-                'margin:0 0 2px;' +
-                'border-radius:7px;' +
-                'cursor:pointer' +
-                '">' +
-
+                'style="padding:5px 6px;margin:0 0 2px;border-radius:7px;cursor:pointer">' +
                 '<sup style="font-weight:800">' +
                 v.verse +
                 '</sup> ' +
-
-                esc36(
-                    v.text
-                ) +
-
+                esc36(v.text) +
                 '</p>';
         });
 
-
-        out.innerHTML =
-            html;
+        out.innerHTML = html;
     }
 
 
-    /* ============================================================
-       INSTALL SWAHILI WRAPPER
-       ============================================================ */
-
     function installBible36() {
-
         var original =
             window.loadBibleChapter;
-
 
         if (
             typeof original !== 'function' ||
@@ -1111,50 +551,37 @@
             return;
         }
 
-
         function wrappedBible() {
-
             var trans =
-                document.getElementById(
-                    'readerTrans'
-                );
-
+                document.getElementById('readerTrans');
 
             var ref =
-                document.getElementById(
-                    'readerRef'
-                );
-
+                document.getElementById('readerRef');
 
             var translation =
                 trans
-                    ? String(
-                        trans.value || ''
-                    )
+                    ? String(trans.value || '')
                     : '';
 
-
             /*
-             * VERY IMPORTANT:
+             * CRITICAL:
              *
-             * Everything except Swahili is sent
-             * directly to the original loader.
+             * Every non-Swahili translation goes straight to the
+             * original loader.
              *
-             * This protects existing English/KJV/etc.
+             * This preserves Mark 3 and all existing English Bible
+             * functionality.
              */
 
             if (
-                normalize36(
-                    translation
-                ) !== 'swahili'
+                normalize36(translation) !==
+                'swahili'
             ) {
-
                 return original.apply(
                     this,
                     arguments
                 );
             }
-
 
             var parsed =
                 parse36(
@@ -1163,35 +590,29 @@
                         : ''
                 );
 
-
             if (!parsed) {
-
                 var invalidOut =
                     document.getElementById(
                         'readerOut'
                     );
 
-
                 if (invalidOut) {
-
                     invalidOut.innerHTML =
                         '<div style="color:#991B1B">' +
-                        'Invalid Bible reference. Example: Mwanzo 1, Marko 3, Yohana 3:16.' +
+                        'Invalid Bible reference. Example: Mwanzo 1, ' +
+                        'Marko 3, Yohana 3:16.' +
                         '</div>';
                 }
 
                 return;
             }
 
-
             var out =
                 document.getElementById(
                     'readerOut'
                 );
 
-
             if (out) {
-
                 out.innerHTML =
                     '<div style="color:#64748B">' +
                     'Loading Swahili ' +
@@ -1203,60 +624,35 @@
                     '…</div>';
             }
 
-
-            loadSwahili36(
-                parsed
-            )
-
-            .then(function (verses) {
-
-                paintSwahili36(
-                    parsed,
-                    verses,
-                    false
-                );
-
-            })
-
-            .catch(function (err) {
-
-                console.error(
-                    'GC APP36 Swahili Bible error:',
-                    err
-                );
-
-
-                if (out) {
-
-                    out.innerHTML =
-                        '<div style="color:#991B1B">' +
-                        'Could not load ' +
-                        esc36(
-                            parsed.book +
-                            ' ' +
-                            parsed.chapter
-                        ) +
-                        '. ' +
-
-                        '<button ' +
-                        'type="button" ' +
-                        'class="btn btn-primary btn-sm" ' +
-                        'onclick="loadBibleChapter()"' +
-                        '>' +
-
-                        '<i class="fas fa-rotate-right"></i> Retry' +
-
-                        '</button>' +
-
-                        '</div>';
-                }
-            });
+            loadSwahili36(parsed)
+                .then(function (verses) {
+                    paintSwahili36(
+                        parsed,
+                        verses,
+                        false
+                    );
+                })
+                .catch(function () {
+                    if (out) {
+                        out.innerHTML =
+                            '<div style="color:#991B1B">' +
+                            'Could not load ' +
+                            esc36(
+                                parsed.book +
+                                ' ' +
+                                parsed.chapter
+                            ) +
+                            '. ' +
+                            '<button type="button" class="btn btn-primary btn-sm" ' +
+                            'onclick="loadBibleChapter()">' +
+                            '<i class="fas fa-rotate-right"></i> Retry' +
+                            '</button>' +
+                            '</div>';
+                    }
+                });
         }
 
-
-        wrappedBible.__gc36Wrapped =
-            true;
-
+        wrappedBible.__gc36Wrapped = true;
 
         window.loadBibleChapter =
             wrappedBible;
@@ -1264,62 +660,35 @@
 
 
     /* ============================================================
-       EXISTING CHAT ENGINE
+       CHAT
        ============================================================ */
 
     function openChat36(uid) {
-
-        if (!uid) {
-            return false;
-        }
-
-
-        /*
-         * THIS IS THE EXISTING WORKING CHAT PATH.
-         */
+        if (!uid) return false;
 
         if (
             typeof window.c26OpenChat ===
             'function'
         ) {
-
-            window.c26OpenChat(
-                uid
-            );
-
+            window.c26OpenChat(uid);
             return false;
         }
-
 
         if (
             typeof window.h27ChatWith ===
             'function'
         ) {
-
-            window.h27ChatWith(
-                uid
-            );
-
+            window.h27ChatWith(uid);
             return false;
         }
-
 
         if (
             typeof window.openChatWith ===
             'function'
         ) {
-
-            window.openChatWith(
-                uid
-            );
-
+            window.openChatWith(uid);
             return false;
         }
-
-
-        console.warn(
-            'GC APP36: existing chat engine not available'
-        );
 
         return false;
     }
@@ -1329,25 +698,16 @@
         openChat36;
 
 
-    /* ============================================================
-       CREATE THE SAME BLUE CHAT BUTTON
-       ============================================================ */
-
     function makeChat36(uid) {
-
         var b =
             document.createElement(
                 'button'
             );
 
-
-        b.type =
-            'button';
-
+        b.type = 'button';
 
         b.className =
             'gc32-btn gc32-btn-primary gc36-chat-button';
-
 
         b.style.cssText =
             'display:inline-flex;' +
@@ -1355,89 +715,58 @@
             'gap:6px;' +
             'white-space:nowrap;';
 
-
         b.innerHTML =
             '<i class="fas fa-comment-dots"></i> Chat';
-
 
         b.setAttribute(
             'data-gc36-chat',
             '1'
         );
 
-
         b.setAttribute(
             'data-chat-user',
             uid
         );
 
-
         b.onclick =
             function (event) {
-
                 if (event) {
-
                     event.preventDefault();
                     event.stopPropagation();
                 }
 
-
-                openChat36(
-                    uid
-                );
-
+                openChat36(uid);
 
                 return false;
             };
-
 
         return b;
     }
 
 
-    /* ============================================================
-       REMOVE DUPLICATE CHAT BUTTONS
-       ============================================================ */
-
     function removeExtraChat36(
         row,
         keep
     ) {
-
-        if (!row) {
-            return;
-        }
-
-
         var nodes =
             row.querySelectorAll(
                 'button,a,[role="button"]'
             );
 
-
         Array.prototype.forEach.call(
             nodes,
             function (node) {
-
-                if (
-                    node === keep
-                ) {
-                    return;
-                }
-
+                if (node === keep) return;
 
                 var text =
                     normalize36(
-                        node.textContent ||
-                        ''
+                        node.textContent || ''
                     );
-
 
                 var onclick =
                     node.getAttribute(
                         'onclick'
                     ) || '';
-
 
                 var isChat =
                     text === 'chat' ||
@@ -1446,9 +775,7 @@
                         onclick
                     );
 
-
                 if (isChat) {
-
                     node.remove();
                 }
             }
@@ -1456,77 +783,34 @@
     }
 
 
-    /* ============================================================
-       ADD / REUSE CHAT BUTTON
-       ============================================================ */
-
     function addChat36(
         row,
         uid
     ) {
-
-        if (
-            !row ||
-            !uid
-        ) {
-            return;
-        }
-
-
-        /*
-         * Already patched.
-         */
+        if (!row || !uid) return;
 
         var existing =
             row.querySelector(
                 '[data-gc36-chat="1"]'
             );
 
-
         if (existing) {
-
             existing.setAttribute(
                 'data-chat-user',
                 uid
             );
-
-
-            /*
-             * Keep the working button.
-             */
-
-            existing.onclick =
-                function (event) {
-
-                    if (event) {
-
-                        event.preventDefault();
-                        event.stopPropagation();
-                    }
-
-
-                    openChat36(
-                        uid
-                    );
-
-
-                    return false;
-                };
-
 
             removeExtraChat36(
                 row,
                 existing
             );
 
-
             return;
         }
 
-
         /*
-         * Reuse an existing Chat/Inbox button
-         * if another patch already generated one.
+         * If app35/app27 already created a Chat/Inbox control,
+         * reuse it rather than creating a second button.
          */
 
         var candidates =
@@ -1534,27 +818,20 @@
                 'button,a,[role="button"]'
             );
 
-
-        var old =
-            null;
-
+        var old = null;
 
         Array.prototype.some.call(
             candidates,
             function (node) {
-
                 var text =
                     normalize36(
-                        node.textContent ||
-                        ''
+                        node.textContent || ''
                     );
-
 
                 var onclick =
                     node.getAttribute(
                         'onclick'
                     ) || '';
-
 
                 if (
                     text === 'chat' ||
@@ -1563,83 +840,57 @@
                         onclick
                     )
                 ) {
-
-                    old =
-                        node;
-
+                    old = node;
                     return true;
                 }
-
 
                 return false;
             }
         );
 
-
         if (old) {
-
             old.innerHTML =
                 '<i class="fas fa-comment-dots"></i> Chat';
-
 
             old.classList.add(
                 'gc36-chat-button'
             );
-
 
             old.setAttribute(
                 'data-gc36-chat',
                 '1'
             );
 
-
             old.setAttribute(
                 'data-chat-user',
                 uid
             );
 
-
             old.onclick =
                 function (event) {
-
                     if (event) {
-
                         event.preventDefault();
                         event.stopPropagation();
                     }
 
-
-                    openChat36(
-                        uid
-                    );
-
+                    openChat36(uid);
 
                     return false;
                 };
-
 
             removeExtraChat36(
                 row,
                 old
             );
 
-
             return;
         }
 
-
-        /*
-         * Create exactly one button.
-         */
-
         var button =
-            makeChat36(
-                uid
-            );
-
+            makeChat36(uid);
 
         /*
-         * Prefer existing action containers.
+         * Append beside the existing controls.
          */
 
         var actions =
@@ -1651,505 +902,184 @@
                 '.gc35-actions'
             );
 
-
         if (actions) {
-
-            actions.appendChild(
-                button
-            );
-
+            actions.appendChild(button);
         } else {
-
-            row.appendChild(
-                button
-            );
+            row.appendChild(button);
         }
     }
 
 
-    /* ============================================================
-       MEMBER PROFILE DATA
-       ============================================================ */
+    /*
+     * Find a member row from the member's displayed name.
+     *
+     * This matches the existing DOM instead of assuming a fake
+     * #groupMembers element.
+     */
 
-    function profiles36() {
-
-        var c =
-            db36();
-
-
-        if (!c) {
-
-            return Promise.resolve(
-                []
-            );
+    function findRow36(
+        container,
+        name
+    ) {
+        if (!container || !name) {
+            return null;
         }
 
+        var target =
+            normalize36(name);
 
-        return c
-            .from(
-                'profiles'
-            )
-            .select(
-                'id,name,full_name,profile_pic,avatar_url,email,role'
-            )
-            .order(
-                'name'
-            )
+        var elements =
+            container.querySelectorAll(
+                'div,li,tr,article,.card,.member-card,.list-item'
+            );
 
+        var exact = [];
 
-            .then(function (r) {
-
-                if (r.error) {
-
-                    console.error(
-                        'GC APP36 profiles:',
-                        r.error
+        Array.prototype.forEach.call(
+            elements,
+            function (el) {
+                var text =
+                    normalize36(
+                        el.textContent || ''
                     );
 
-                    return [];
+                if (text === target) {
+                    exact.push(el);
                 }
+            }
+        );
+
+        if (!exact.length) {
+            return null;
+        }
+
+        /*
+         * The smallest exact-name element is usually the name
+         * itself. Walk upward to the first useful member row.
+         */
+
+        var nameNode =
+            exact[0];
+
+        var row =
+            nameNode;
+
+        for (
+            var i = 0;
+            i < 5 && row;
+            i++
+        ) {
+            var buttons =
+                row.querySelectorAll(
+                    'button,a,[role="button"]'
+                );
+
+            if (
+                buttons.length ||
+                row.classList.contains(
+                    'card'
+                ) ||
+                row.classList.contains(
+                    'member-card'
+                ) ||
+                row.classList.contains(
+                    'list-item'
+                ) ||
+                row.tagName.toLowerCase() ===
+                    'li' ||
+                row.tagName.toLowerCase() ===
+                    'tr'
+            ) {
+                return row;
+            }
+
+            row =
+                row.parentElement;
+        }
+
+        return (
+            nameNode.parentElement ||
+            nameNode
+        );
+    }
 
 
-                return r.data ||
-                    [];
+    function profiles36() {
+        var c = db36();
+
+        if (!c) {
+            return Promise.resolve([]);
+        }
+
+        return c
+            .from('profiles')
+            .select(
+                'id,name,profile_pic,email,role'
+            )
+            .order('name')
+            .then(function (r) {
+                return r.error
+                    ? []
+                    : (r.data || []);
             });
     }
 
 
-    /* ============================================================
-       GROUP STATE
-       
-       KEEPING THE WORKING GROUP APPROACH.
-       ============================================================ */
-
     function currentGroup36() {
-
         return (
-
             window._gg &&
-
             (
                 window._gg.currentGroupId ||
-
                 (
                     window._gg.group &&
                     window._gg.group.id
                 )
             )
-
         ) ||
-
         window._h29GroupId ||
-
         window._h32GroupId ||
-
         (
             window._h32Group &&
             window._h32Group.id
         ) ||
-
         null;
     }
 
 
-    /* ============================================================
-       CATEGORY STATE
-       ============================================================ */
-
     function currentCategory36() {
-
-        /*
-         * Actual Category state.
-         */
-
-        if (
+        return (
             window._h32Cat &&
             window._h32Cat.id
-        ) {
-
-            return window._h32Cat.id;
-        }
-
-
-        /*
-         * Compatibility fallback if the category
-         * navigation stores its ID elsewhere.
-         */
-
-        if (
-            window._gg &&
-            window._gg.currentCategoryId
-        ) {
-
-            return window._gg.currentCategoryId;
-        }
-
-
-        if (
-            window._h32CategoryId
-        ) {
-
-            return window._h32CategoryId;
-        }
-
-
-        return null;
+        ) || null;
     }
 
-
-    /* ============================================================
-       FIND THE ACTUAL MEMBER ROW
-       
-       THIS IS THE CATEGORY FIX.
-
-       Previous code required:
-           row.textContent === member name
-
-       But Category cards contain:
-           name
-           role
-           buttons
-           other text
-
-       Therefore that test never found the card.
-
-       We now look for the actual name element first.
-       ============================================================ */
-
-    function findMemberRow36(
-        container,
-        user
-    ) {
-
-        if (
-            !container ||
-            !user
-        ) {
-
-            return null;
-        }
-
-
-        var uid =
-            String(
-                user.id ||
-                ''
-            );
-
-
-        var name =
-            normalize36(
-                user.name ||
-                user.full_name ||
-                ''
-            );
-
-
-        /*
-         * BEST CASE:
-         * Renderer already placed the user ID
-         * on the card.
-         */
-
-        if (uid) {
-
-            var byUid =
-                container.querySelector(
-                    '[data-user-id="' +
-                    CSS.escape
-                        ? CSS.escape(uid)
-                        : uid +
-                    '"]'
-                );
-
-
-            if (byUid) {
-
-                return (
-                    byUid.closest(
-                        '.card,.member-card,.list-item,li,tr,article'
-                    ) ||
-                    byUid
-                );
-            }
-        }
-
-
-        /*
-         * Alternate data attribute.
-         */
-
-        if (uid) {
-
-            var byMemberUid =
-                container.querySelector(
-                    '[data-member-id="' +
-                    uid +
-                    '"]'
-                );
-
-
-            if (byMemberUid) {
-
-                return (
-                    byMemberUid.closest(
-                        '.card,.member-card,.list-item,li,tr,article'
-                    ) ||
-                    byMemberUid
-                );
-            }
-        }
-
-
-        if (!name) {
-
-            return null;
-        }
-
-
-        /*
-         * Search actual name-bearing elements.
-         *
-         * Category member renderer normally puts the
-         * member name inside a small text element,
-         * not as the complete card text.
-         */
-
-        var nameNodes =
-            container.querySelectorAll(
-                'b,strong,.member-name,.user-name,' +
-                '.profile-name,.name,[data-name]'
-            );
-
-
-        var found =
-            null;
-
-
-        Array.prototype.some.call(
-            nameNodes,
-            function (node) {
-
-                var nodeName =
-                    normalize36(
-                        node.textContent ||
-                        node.getAttribute(
-                            'data-name'
-                        ) ||
-                        ''
-                    );
-
-
-                if (
-                    nodeName === name
-                ) {
-
-                    found =
-                        node;
-
-                    return true;
-                }
-
-
-                return false;
-            }
-        );
-
-
-        if (found) {
-
-            /*
-             * Walk up to the actual member card.
-             */
-
-            var row =
-                found;
-
-
-            for (
-                var i = 0;
-                i < 7 && row;
-                i++
-            ) {
-
-                if (
-                    row.matches &&
-                    row.matches(
-                        '.card,.member-card,.list-item,li,tr,article'
-                    )
-                ) {
-
-                    return row;
-                }
-
-
-                row =
-                    row.parentElement;
-            }
-
-
-            /*
-             * If no named class exists, use the
-             * first useful parent containing buttons.
-             */
-
-            row =
-                found.parentElement;
-
-
-            for (
-                var j = 0;
-                j < 5 && row;
-                j++
-            ) {
-
-                if (
-                    row.querySelector &&
-                    row.querySelector(
-                        'button,a,[role="button"]'
-                    )
-                ) {
-
-                    return row;
-                }
-
-
-                row =
-                    row.parentElement;
-            }
-
-
-            return (
-                found.parentElement ||
-                found
-            );
-        }
-
-
-        /*
-         * Final fallback:
-         *
-         * Search cards and inspect only their
-         * name-bearing children.
-         */
-
-        var cards =
-            container.querySelectorAll(
-                '.card,.member-card,.list-item,li,tr,article'
-            );
-
-
-        for (
-            var k = 0;
-            k < cards.length;
-            k++
-        ) {
-
-            var card =
-                cards[k];
-
-
-            var possibleNames =
-                card.querySelectorAll(
-                    'b,strong,.member-name,.user-name,' +
-                    '.profile-name,.name,[data-name]'
-                );
-
-
-            for (
-                var q = 0;
-                q < possibleNames.length;
-                q++
-            ) {
-
-                var candidate =
-                    normalize36(
-                        possibleNames[q]
-                            .textContent ||
-                        possibleNames[q]
-                            .getAttribute(
-                                'data-name'
-                            ) ||
-                        ''
-                    );
-
-
-                if (
-                    candidate === name
-                ) {
-
-                    return card;
-                }
-            }
-        }
-
-
-        return null;
-    }
-
-
-    /* ============================================================
-       GROUP CHAT PATCH
-       
-       THIS IS KEPT CLOSE TO THE WORKING VERSION.
-       ============================================================ */
 
     function patchGroupChats36() {
-
-        var c =
-            db36();
-
+        var c = db36();
 
         var gid =
             currentGroup36();
 
-
-        if (
-            !c ||
-            !gid
-        ) {
-
-            return;
-        }
-
+        if (!c || !gid) return;
 
         var container =
             document.getElementById(
                 'gg-root'
             );
 
-
-        if (!container) {
-
-            return;
-        }
-
+        if (!container) return;
 
         c
             .from(
                 'church_group_members'
             )
-            .select(
-                'user_id'
-            )
+            .select('user_id')
             .eq(
                 'group_id',
                 gid
             )
-
-
             .then(function (mr) {
-
-                if (mr.error) {
-
-                    console.error(
-                        'GC APP36 group members:',
-                        mr.error
-                    );
-
-                    return;
-                }
-
+                if (mr.error) return;
 
                 var ids =
                     (mr.data || [])
@@ -2159,116 +1089,66 @@
                             }
                         );
 
-
-                if (!ids.length) {
-
-                    return;
-                }
-
+                if (!ids.length) return;
 
                 profiles36()
-                    .then(
-                        function (users) {
-
-                            users.forEach(
-                                function (u) {
-
-                                    if (
-                                        !u ||
-                                        ids.indexOf(
-                                            u.id
-                                        ) === -1
-                                    ) {
-
-                                        return;
-                                    }
-
-
-                                    var row =
-                                        findMemberRow36(
-                                            container,
-                                            u
-                                        );
-
-
-                                    if (row) {
-
-                                        addChat36(
-                                            row,
-                                            u.id
-                                        );
-                                    }
+                    .then(function (users) {
+                        users.forEach(
+                            function (u) {
+                                if (
+                                    !u ||
+                                    !ids.includes(
+                                        u.id
+                                    )
+                                ) {
+                                    return;
                                 }
-                            );
-                        }
-                    );
+
+                                var row =
+                                    findRow36(
+                                        container,
+                                        u.name
+                                    );
+
+                                if (row) {
+                                    addChat36(
+                                        row,
+                                        u.id
+                                    );
+                                }
+                            }
+                        );
+                    });
             });
     }
 
 
-    /* ============================================================
-       CATEGORY CHAT PATCH
-       
-       SAME CHAT ENGINE.
-       ONLY THE MEMBER LOCATION IS DIFFERENT.
-       ============================================================ */
-
     function patchCategoryChats36() {
-
-        var c =
-            db36();
-
+        var c = db36();
 
         var cid =
             currentCategory36();
 
-
-        if (
-            !c ||
-            !cid
-        ) {
-
-            return;
-        }
-
+        if (!c || !cid) return;
 
         var container =
             document.getElementById(
                 'h32c-members'
             );
 
-
-        if (!container) {
-
-            return;
-        }
-
+        if (!container) return;
 
         c
             .from(
                 'church_group_category_members'
             )
-            .select(
-                'user_id'
-            )
+            .select('user_id')
             .eq(
                 'category_id',
                 cid
             )
-
-
             .then(function (mr) {
-
-                if (mr.error) {
-
-                    console.error(
-                        'GC APP36 category members:',
-                        mr.error
-                    );
-
-                    return;
-                }
-
+                if (mr.error) return;
 
                 var ids =
                     (mr.data || [])
@@ -2278,151 +1158,91 @@
                             }
                         );
 
-
-                if (!ids.length) {
-
-                    return;
-                }
-
+                if (!ids.length) return;
 
                 profiles36()
-                    .then(
-                        function (users) {
-
-                            users.forEach(
-                                function (u) {
-
-                                    if (
-                                        !u ||
-                                        ids.indexOf(
-                                            u.id
-                                        ) === -1
-                                    ) {
-
-                                        return;
-                                    }
-
-
-                                    var row =
-                                        findMemberRow36(
-                                            container,
-                                            u
-                                        );
-
-
-                                    if (row) {
-
-                                        addChat36(
-                                            row,
-                                            u.id
-                                        );
-                                    }
+                    .then(function (users) {
+                        users.forEach(
+                            function (u) {
+                                if (
+                                    !u ||
+                                    !ids.includes(
+                                        u.id
+                                    )
+                                ) {
+                                    return;
                                 }
-                            );
-                        }
-                    );
+
+                                var row =
+                                    findRow36(
+                                        container,
+                                        u.name
+                                    );
+
+                                if (row) {
+                                    addChat36(
+                                        row,
+                                        u.id
+                                    );
+                                }
+                            }
+                        );
+                    });
             });
     }
 
 
-    /* ============================================================
-       RUN BOTH
-       ============================================================ */
-
     function patchChats36() {
-
-        /*
-         * GROUP FIRST.
-         *
-         * Do not replace or remove this.
-         */
-
-        try {
-            patchGroupChats36();
-        } catch (e) {
-            console.error(
-                'GC APP36 group patch:',
-                e
-            );
-        }
-
-
-        /*
-         * CATEGORY SECOND.
-         */
-
-        try {
-            patchCategoryChats36();
-        } catch (e) {
-            console.error(
-                'GC APP36 category patch:',
-                e
-            );
-        }
+        patchGroupChats36();
+        patchCategoryChats36();
     }
 
 
     /* ============================================================
-       HOOK EXISTING FUNCTIONS
+       HOOK THE REAL EXISTING TABS
        ============================================================ */
 
     function hookFunction36(
         name,
         after
     ) {
-
         var fn =
             window[name];
-
 
         if (
             typeof fn !== 'function' ||
             fn.__gc36Wrapped
         ) {
-
             return;
         }
 
-
         function wrapped() {
-
             var result =
                 fn.apply(
                     this,
                     arguments
                 );
 
-
-            /*
-             * Category/Group render asynchronously,
-             * so patch several times after rendering.
-             */
-
             setTimeout(
                 after,
                 100
             );
-
 
             setTimeout(
                 after,
                 400
             );
 
-
             setTimeout(
                 after,
                 1000
             );
 
-
             return result;
         }
 
-
         wrapped.__gc36Wrapped =
             true;
-
 
         window[name] =
             wrapped;
@@ -2430,9 +1250,8 @@
 
 
     function hook36() {
-
         /*
-         * REAL CATEGORY RENDERER.
+         * Category renderer/tab.
          */
 
         hookFunction36(
@@ -2440,29 +1259,13 @@
             patchCategoryChats36
         );
 
-
-        /*
-         * CATEGORY TAB.
-         */
-
         hookFunction36(
             'h32CatTab',
             patchCategoryChats36
         );
 
-
         /*
-         * CATEGORY OPEN.
-         */
-
-        hookFunction36(
-            'ggOpenCategory',
-            patchCategoryChats36
-        );
-
-
-        /*
-         * WORKING GROUP FUNCTIONS.
+         * Actual Group tab used by app22.
          */
 
         hookFunction36(
@@ -2470,89 +1273,46 @@
             patchGroupChats36
         );
 
-
         hookFunction36(
             'ggOpenGroup',
             patchGroupChats36
         );
 
-
-        /*
-         * Additional Group renderer names used
-         * by older versions, but only hook them
-         * if they actually exist.
-         */
-
         hookFunction36(
-            'h29Tab',
-            patchGroupChats36
-        );
-
-
-        hookFunction36(
-            'h29GroupTab',
-            patchGroupChats36
-        );
-
-
-        hookFunction36(
-            'h29TabGroup',
-            patchGroupChats36
-        );
-
-
-        hookFunction36(
-            'ggGroupTab',
-            patchGroupChats36
+            'ggOpenCategory',
+            patchCategoryChats36
         );
     }
 
 
     /* ============================================================
-       MUTATION OBSERVER
+       OBSERVE DYNAMIC MEMBER RENDERING
        ============================================================ */
 
     function observer36() {
-
-        if (
-            !window.MutationObserver
-        ) {
-
+        if (!window.MutationObserver) {
             return;
         }
 
-
-        var timer =
-            null;
-
+        var timer = null;
 
         var ob =
             new MutationObserver(
                 function () {
-
-                    clearTimeout(
-                        timer
-                    );
-
+                    clearTimeout(timer);
 
                     timer =
                         setTimeout(
                             function () {
-
                                 hook36();
                                 patchChats36();
-
                             },
                             150
                         );
                 }
             );
 
-
-        if (
-            document.body
-        ) {
-
+        if (document.body) {
             ob.observe(
                 document.body,
                 {
@@ -2569,108 +1329,47 @@
        ============================================================ */
 
     function start36() {
-
         /*
-         * Bible wrapper.
+         * Install Bible wrapper AFTER app19/app30 has loaded.
          */
 
         installBible36();
 
-
-        /*
-         * Chat hooks.
-         */
-
         hook36();
-
-
-        /*
-         * Initial patch.
-         */
 
         patchChats36();
 
-
-        /*
-         * App may load its functions after app36,
-         * therefore retry installation.
-         */
-
         setTimeout(
             function () {
-
                 installBible36();
                 hook36();
                 patchChats36();
-
             },
             300
         );
 
-
         setTimeout(
             function () {
-
                 installBible36();
                 hook36();
                 patchChats36();
-
             },
             1000
         );
 
-
         setTimeout(
             function () {
-
                 installBible36();
                 hook36();
                 patchChats36();
-
             },
             2500
         );
 
-
-        /*
-         * Watch dynamically-rendered Category/Group members.
-         */
-
         observer36();
 
-
-        /*
-         * Periodic safety pass.
-         *
-         * This does NOT recreate buttons because
-         * addChat36 detects the existing data attribute.
-         */
-
-        if (
-            window.__gc36Interval
-        ) {
-
-            clearInterval(
-                window.__gc36Interval
-            );
-        }
-
-
-        window.__gc36Interval =
-            setInterval(
-                function () {
-
-                    installBible36();
-                    hook36();
-                    patchChats36();
-
-                },
-                1800
-            );
-
-
         console.log(
-            'GC APP36: active — working Group Chat preserved; Category Members Chat + Swahili OT fixed; NT untouched'
+            'GC APP36: active — English Bible preserved; Swahili + Group/Category Chat patched'
         );
     }
 
@@ -2679,14 +1378,11 @@
         document.readyState ===
         'loading'
     ) {
-
         document.addEventListener(
             'DOMContentLoaded',
             start36
         );
-
     } else {
-
         start36();
     }
 
