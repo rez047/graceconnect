@@ -1,277 +1,390 @@
 // api/bible.js
-// GraceConnect Bible chapter proxy
-// Swahili uses a complete-Bible source instead of GetBible's NT-only Swahili.
+// GraceConnect Bible API
+// Swahili uses MEGA.Bible Biblia Takatifu.
+// Other translations continue using bible-api.com.
 
 const BOOKS = [
-  "Genesis","Exodus","Leviticus","Numbers","Deuteronomy",
-  "Joshua","Judges","Ruth","1 Samuel","2 Samuel","1 Kings",
-  "2 Kings","1 Chronicles","2 Chronicles","Ezra","Nehemiah",
-  "Esther","Job","Psalm","Proverbs","Ecclesiastes",
-  "Song of Solomon","Isaiah","Jeremiah","Lamentations",
-  "Ezekiel","Daniel","Hosea","Joel","Amos","Obadiah",
-  "Jonah","Micah","Nahum","Habakkuk","Zephaniah","Haggai",
-  "Zechariah","Malachi","Matthew","Mark","Luke","John","Acts",
-  "Romans","1 Corinthians","2 Corinthians","Galatians","Ephesians",
-  "Philippians","Colossians","1 Thessalonians","2 Thessalonians",
-  "1 Timothy","2 Timothy","Titus","Philemon","Hebrews","James",
-  "1 Peter","2 Peter","1 John","2 John","3 John","Jude","Revelation"
+  "Genesis",
+  "Exodus",
+  "Leviticus",
+  "Numbers",
+  "Deuteronomy",
+  "Joshua",
+  "Judges",
+  "Ruth",
+  "1 Samuel",
+  "2 Samuel",
+  "1 Kings",
+  "2 Kings",
+  "1 Chronicles",
+  "2 Chronicles",
+  "Ezra",
+  "Nehemiah",
+  "Esther",
+  "Job",
+  "Psalm",
+  "Proverbs",
+  "Ecclesiastes",
+  "Song of Solomon",
+  "Isaiah",
+  "Jeremiah",
+  "Lamentations",
+  "Ezekiel",
+  "Daniel",
+  "Hosea",
+  "Joel",
+  "Amos",
+  "Obadiah",
+  "Jonah",
+  "Micah",
+  "Nahum",
+  "Habakkuk",
+  "Zephaniah",
+  "Haggai",
+  "Zechariah",
+  "Malachi",
+  "Matthew",
+  "Mark",
+  "Luke",
+  "John",
+  "Acts",
+  "Romans",
+  "1 Corinthians",
+  "2 Corinthians",
+  "Galatians",
+  "Ephesians",
+  "Philippians",
+  "Colossians",
+  "1 Thessalonians",
+  "2 Thessalonians",
+  "1 Timothy",
+  "2 Timothy",
+  "Titus",
+  "Philemon",
+  "Hebrews",
+  "James",
+  "1 Peter",
+  "2 Peter",
+  "1 John",
+  "2 John",
+  "3 John",
+  "Jude",
+  "Revelation"
+];
+
+const MEGA_BOOKS = [
+  "gen",
+  "exo",
+  "lev",
+  "num",
+  "deu",
+  "jos",
+  "jdg",
+  "rut",
+  "1sa",
+  "2sa",
+  "1ki",
+  "2ki",
+  "1ch",
+  "2ch",
+  "ezr",
+  "neh",
+  "est",
+  "job",
+  "psa",
+  "pro",
+  "ecc",
+  "sng",
+  "isa",
+  "jer",
+  "lam",
+  "eze",
+  "dan",
+  "hos",
+  "joe",
+  "amo",
+  "oba",
+  "jon",
+  "mic",
+  "nah",
+  "hab",
+  "zep",
+  "hag",
+  "zec",
+  "mal",
+  "mat",
+  "mrk",
+  "luk",
+  "jhn",
+  "act",
+  "rom",
+  "1co",
+  "2co",
+  "gal",
+  "eph",
+  "php",
+  "col",
+  "1th",
+  "2th",
+  "1ti",
+  "2ti",
+  "tit",
+  "phm",
+  "heb",
+  "jas",
+  "1pe",
+  "2pe",
+  "1jn",
+  "2jn",
+  "3jn",
+  "jud",
+  "rev"
 ];
 
 async function safeJSON(url) {
   try {
-    const r = await fetch(url, {
+    const response = await fetch(url, {
       headers: {
-        accept: "application/json"
+        Accept: "application/json"
       }
     });
 
-    if (!r.ok) return null;
-
-    const text = await r.text();
-    const clean = String(text || "").trim();
-
-    if (!clean) return null;
-
-    if (
-      clean[0] !== "{" &&
-      clean[0] !== "["
-    ) {
+    if (!response.ok) {
       return null;
     }
 
-    return JSON.parse(clean);
+    return await response.json();
 
-  } catch (e) {
+  } catch (error) {
     return null;
   }
 }
 
 function getBookNumber(book) {
 
-  let number = parseInt(book, 10);
+  const value = String(book || "").trim();
 
-  if (!isNaN(number)) {
-    return number;
+  const numeric = parseInt(value, 10);
+
+  if (!Number.isNaN(numeric)) {
+    return numeric;
   }
 
-  const index = BOOKS.findIndex(
-    b =>
-      b.toLowerCase() ===
-      String(book || "").trim().toLowerCase()
-  );
+  const index = BOOKS.findIndex(function (name) {
+    return name.toLowerCase() === value.toLowerCase();
+  });
 
   return index + 1;
 }
 
 
-/*
-============================================================
-SWAHILI
-============================================================
+/* ============================================================
+   SWAHILI — MEGA.BIBLE
+   ============================================================ */
 
-Prayer Pulse exposes multiple Bible translations and specifically
-lists Swahili among its supported languages.
+function extractSwahiliVerses(data) {
 
-We discover the actual Swahili translation code from its public
-metadata instead of hard-coding an unverified code.
-*/
-
-let swahiliTranslationPromise = null;
-
-async function getSwahiliTranslationCode() {
-
-  if (swahiliTranslationPromise) {
-    return swahiliTranslationPromise;
+  if (!data) {
+    return [];
   }
 
-  swahiliTranslationPromise = (async function () {
+  /*
+   MEGA.Bible simplified chapter format:
 
-    const data = await safeJSON(
-      "https://api.prayerpulse.io/bible/get-languages/"
-    );
+   data.chapter.content = [
+     {
+       type: "verse",
+       number: 1,
+       text: "..."
+     }
+   ]
 
-    if (!data) {
-      return null;
-    }
+   Keep the parser slightly tolerant so a format change does
+   not break the reader.
+  */
 
-    const languages =
-      Array.isArray(data)
-        ? data
-        : Array.isArray(data.data)
-          ? data.data
-          : [];
+  let content = null;
 
-    let swahili = null;
+  if (
+    data.chapter &&
+    Array.isArray(data.chapter.content)
+  ) {
+    content = data.chapter.content;
+  }
 
-    for (const language of languages) {
+  if (
+    !content &&
+    Array.isArray(data.content)
+  ) {
+    content = data.content;
+  }
 
-      const name = String(
-        language.language ||
-        language.name ||
-        ""
-      ).toLowerCase();
+  if (
+    !content &&
+    Array.isArray(data.verses)
+  ) {
+    content = data.verses;
+  }
+
+  if (!content) {
+    return [];
+  }
+
+  return content
+    .filter(function (item) {
+
+      if (!item) {
+        return false;
+      }
 
       if (
-        name.includes("swahili") ||
-        name.includes("kiswahili")
+        item.type &&
+        String(item.type).toLowerCase() !== "verse"
       ) {
-        swahili = language;
-        break;
+        return false;
       }
-    }
 
-    if (!swahili) {
-      return null;
-    }
+      return (
+        item.number != null ||
+        item.verse != null
+      );
 
-    const translations =
-      Array.isArray(swahili.translations)
-        ? swahili.translations
-        : [];
+    })
+    .map(function (item) {
 
-    if (!translations.length) {
-      return null;
-    }
+      return {
+        verse: Number(
+          item.number != null
+            ? item.number
+            : item.verse
+        ),
 
-    /*
-      Prefer a complete/full Swahili Bible.
-      Otherwise use the first available Swahili translation.
-    */
+        text: String(
+          item.text ||
+          item.value ||
+          ""
+        ).trim()
+      };
 
-    const preferred =
-      translations.find(t => {
+    })
+    .filter(function (item) {
 
-        const text = (
-          String(t.short_name || "") +
-          " " +
-          String(t.full_name || "")
-        ).toLowerCase();
+      return (
+        item.verse > 0 &&
+        item.text
+      );
 
-        return (
-          text.includes("swahili") ||
-          text.includes("kiswahili") ||
-          text.includes("union") ||
-          text.includes("neno")
-        );
-
-      }) || translations[0];
-
-    return (
-      preferred.short_name ||
-      preferred.code ||
-      preferred.id ||
-      null
-    );
-
-  })();
-
-  return swahiliTranslationPromise;
+    });
 }
 
 
-async function getSwahiliChapter(bookNumber, chapter) {
+async function getSwahiliChapter(
+  bookNumber,
+  chapter
+) {
 
-  const code =
-    await getSwahiliTranslationCode();
+  const megaBook =
+    MEGA_BOOKS[bookNumber - 1];
 
-  if (!code) {
+  if (!megaBook) {
     return null;
   }
 
-  const url =
-    "https://api.prayerpulse.io/bible/get-text/" +
-    encodeURIComponent(code) +
-    "/" +
-    bookNumber +
+
+  /*
+   First use the simplified endpoint.
+   MEGA.Bible documents this endpoint specifically for
+   plain chapter text.
+  */
+
+  const simpleUrl =
+    "https://mega.bible/sw/biblia-takatifu/" +
+    megaBook +
     "/" +
     chapter +
-    "/?clean=true";
+    ".simple.json";
 
-  const data = await safeJSON(url);
+
+  let data =
+    await safeJSON(simpleUrl);
+
+
+  /*
+   If simplified JSON is unavailable, try the normal
+   chapter JSON endpoint.
+  */
+
+  if (!data) {
+
+    const standardUrl =
+      "https://mega.bible/sw/biblia-takatifu/" +
+      megaBook +
+      "/" +
+      chapter +
+      ".json";
+
+    data =
+      await safeJSON(standardUrl);
+  }
+
 
   if (!data) {
     return null;
   }
 
-  const rows =
-    Array.isArray(data)
-      ? data
-      : Array.isArray(data.data)
-        ? data.data
-        : Array.isArray(data.verses)
-          ? data.verses
-          : [];
 
-  if (!rows.length) {
-    return null;
-  }
+  const verses =
+    extractSwahiliVerses(data);
 
-  const verses = rows
-    .map(function (v) {
-
-      return {
-        verse:
-          Number(
-            v.verse ||
-            v.verse_number ||
-            v.number ||
-            0
-          ),
-
-        text:
-          String(
-            v.text ||
-            v.value ||
-            ""
-          )
-      };
-
-    })
-    .filter(function (v) {
-      return v.verse > 0 && v.text;
-    });
 
   if (!verses.length) {
     return null;
   }
 
+
   return {
+
     reference:
       BOOKS[bookNumber - 1] +
       " " +
-      chapter +
-      " (Swahili)",
+      chapter,
 
     verses: verses
   };
 }
 
 
-/*
-============================================================
-MAIN HANDLER
-============================================================
-*/
+/* ============================================================
+   MAIN HANDLER
+   ============================================================ */
 
-export default async function handler(req, res) {
+export default async function handler(
+  req,
+  res
+) {
 
-  const q = req.query || {};
+  const query =
+    req.query || {};
+
 
   const translation =
     String(
-      q.translation || "kjv"
+      query.translation || "kjv"
     ).toLowerCase();
+
 
   const book =
     String(
-      q.book || ""
+      query.book || ""
     ).trim();
+
 
   const chapter =
     parseInt(
-      q.chapter || "1",
+      query.chapter || "1",
       10
     );
+
 
   if (!book || !chapter) {
 
@@ -281,8 +394,10 @@ export default async function handler(req, res) {
 
   }
 
+
   const bookNumber =
     getBookNumber(book);
+
 
   if (
     !bookNumber ||
@@ -291,10 +406,11 @@ export default async function handler(req, res) {
   ) {
 
     return res.status(400).json({
-      error: "Bad book"
+      error: "Invalid Bible book"
     });
 
   }
+
 
   res.setHeader(
     "Cache-Control",
@@ -302,11 +418,9 @@ export default async function handler(req, res) {
   );
 
 
-  /*
-  ============================================================
-  SWAHILI — COMPLETE BIBLE
-  ============================================================
-  */
+  /* ==========================================================
+     SWAHILI
+     ========================================================== */
 
   if (
     translation === "swahili" ||
@@ -314,39 +428,39 @@ export default async function handler(req, res) {
     translation === "swv"
   ) {
 
-    const data =
+    const result =
       await getSwahiliChapter(
         bookNumber,
         chapter
       );
 
-    if (data) {
 
-      return res
-        .status(200)
-        .json(data);
+    if (!result) {
+
+      return res.status(502).json({
+        error:
+          "Could not load Swahili Bible chapter"
+      });
 
     }
 
-    return res.status(502).json({
-      error:
-        "Swahili Bible source unavailable"
-    });
+
+    return res
+      .status(200)
+      .json(result);
   }
 
 
-  /*
-  ============================================================
-  OTHER TRANSLATIONS
-  ============================================================
-  */
+  /* ==========================================================
+     OTHER TRANSLATIONS
+     ========================================================== */
 
-  const code = {
+  const translationCode = {
 
     kjv: "kjv",
     nkjv: "kjv",
-    niv: "web",
     web: "web",
+    niv: "web",
     asv: "asv",
     ylt: "ylt",
     darby: "darby",
@@ -370,7 +484,7 @@ export default async function handler(req, res) {
       "https://bible-api.com/" +
       reference +
       "?translation=" +
-      code
+      translationCode
     );
 
 
@@ -399,11 +513,11 @@ export default async function handler(req, res) {
 
         verses:
           (data.verses || [])
-            .map(function (v) {
+            .map(function (verse) {
 
               return {
-                verse: v.verse,
-                text: v.text
+                verse: verse.verse,
+                text: verse.text
               };
 
             })
