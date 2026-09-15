@@ -4750,7 +4750,7 @@
                         !self
                             ? '<button class="btn btn-primary btn-sm"' +
                               ' style="white-space:nowrap"' +
-                              ' onclick="c26OpenChat(\'' +
+                              ' onclick="h32CategoryChat(\'' +
                               m.user_id +
                               '\')">' +
                               '<i class="fas fa-comment-dots"></i> Chat' +
