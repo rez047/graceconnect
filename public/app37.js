@@ -117,10 +117,10 @@
     return !!card.querySelector('b,[style*="font-weight:800"],[style*="font-weight:700"]') && card.textContent.length < 200;
   }
   function isMemberCard37(card, ctx) {
-    if (hasRoleSelect37(card)) return true;
-    if (/h32Cat(SetRole|Remove|CategoryChat)|ggChangeMemberRole|ggRemoveMember/.test(card.innerHTML)) return true;
-    if (ctx && looksPerson37(card) && !/no (category )?members|loading/i.test(card.textContent)) return true;
-    return false;
+    /* ONLY cards that carry the manage row (role select + trash button).
+       Plain category list cards (name + role only) are ignored. */
+    if (!hasRoleSelect37(card)) return false;
+    return /fa-trash|h32CatRemove|h32CatSetRole|ggRemoveMember|ggChangeMemberRole/.test(card.innerHTML);
   }
 
   /* ═══════════ 1) CATEGORY MEMBERS → CHAT (Groups-style injection) ═══════════ */
