@@ -1,11 +1,9 @@
 /* ============================================================
-   GRACECONNECT — APP37.JS
+   GRACECONNECT — APP37.JS (v2)
    ADDITIVE PATCH (non-destructive, DOM-level):
-   1) Category Members tab  → adds the missing Chat button
-   2) Servants of God list  → makes the chat bubble open chat
-   Uses the SAME chat pipeline already working in Groups:
-   c26OpenChat → h27ChatWith → openChatWith
-   Nothing else in the system is modified.
+   1) Category Members tab  → always shows the Chat button
+   2) Servants of God list  → chat bubble opens chat (working)
+   Same chat pipeline as Groups: c26OpenChat → h27ChatWith → openChatWith
    ============================================================ */
 (function () {
   'use strict';
@@ -18,14 +16,12 @@
     } catch (e) {}
     return null;
   }
-
   function norm37(s) { return String(s == null ? '' : s).toLowerCase().replace(/\s+/g, ' ').trim(); }
 
-  /* ---------- profiles cache (for name → id resolution) ---------- */
   var profCache = null, profTime = 0;
-  function profiles37() {
+  function profiles37(force) {
     var now = Date.now();
-    if (profCache && (now - profTime) < 60000) return Promise.resolve(profCache);
+    if (!force && profCache && (now - profTime) < 60000) return Promise.resolve(profCache);
     var c = db37();
     if (!c) return Promise.resolve(profCache || []);
     return c.from('profiles').select('id,name,email,role').then(function (r) {
@@ -34,7 +30,6 @@
     }).catch(function () { return profCache || []; });
   }
 
-  /* ---------- same opener chain as the working Group Chat button ---------- */
   function openChat37(uid) {
     if (!uid) return;
     if (typeof window.c26OpenChat === 'function') { window.c26OpenChat(uid); return; }
@@ -44,174 +39,92 @@
   }
   window.gc37OpenChat = openChat37;
 
-  /* ---------- helpers ---------- */
-  function uidFromHtml37(html) {
-    var m = String(html || '').match(/(?:c26OpenChat|h27ChatWith|openChatWith|gc36OpenChat|h32CategoryChat|h32CatSetRole|h32CatRemove)\(\s*'([^']+)'/);
-    return m ? m[1] : null;
-  }
-  function uidByName37(text, profiles) {
-    var t = norm37(text); if (!t) return null;
-    var best = null;
-    (profiles || []).forEach(function (p) {
-      var n = norm37(p.name);
-      if (n && t.indexOf(n) > -1) { if (!best || n.length > norm37(best.name).length) best = p; }
-    });
+  /* ---------- uid resolution (many fallbacks) ---------- */
+  function resolveUid37(card, profs) {
+    var html = String(card.innerHTML || '');
+    var m = html.match(/(?:c26OpenChat|h27ChatWith|openChatWith|gc36OpenChat|h32CategoryChat|h32CatSetRole|h32CatRemove|chatWith|startChat)\(\s*'([^']+)'/);
+    if (m) return m[1];
+    var u = html.match(/([0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12})/i);
+    if (u) return u[1];
+    var t = norm37(card.textContent), best = null;
+    (profs || []).forEach(function (p) { var n = norm37(p.name); if (n && t.indexOf(n) > -1) { if (!best || n.length > norm37(best.name).length) best = p; } });
+    if (best) return best.id;
+    (window.usersData || []).forEach(function (p) { var n = norm37(p.name); if (n && t.indexOf(n) > -1) { if (!best || n.length > norm37(best.name).length) best = p; } });
     return best ? best.id : null;
   }
-  function hasChat37(el) {
-    return !!el.querySelector('[data-gc37-chat],[data-gc36-chat],.gc36-chat-button');
-  }
-  function hasChatText37(el) {
+
+  function chatExists37(el) {
+    if (el.querySelector('[data-gc37-chat],[data-gc36-chat],.gc36-chat-button')) return true;
     var b = el.querySelectorAll('button,a');
-    for (var i = 0; i < b.length; i++) {
-      var tx = norm37(b[i].textContent);
-      if (tx === 'chat' || tx === 'inbox') return true;
-    }
+    for (var i = 0; i < b.length; i++) { var tx = norm37(b[i].textContent); if (tx === 'chat' || tx === 'inbox') return true; }
     return false;
   }
-  function makeChatBtn37(uid) {
+
+  function makeChatBtn37() {
     var b = document.createElement('button');
     b.type = 'button';
     b.className = 'btn btn-primary btn-sm';
     b.setAttribute('data-gc37-chat', '1');
-    b.style.cssText = 'white-space:nowrap;margin-top:8px;';
+    b.style.cssText = 'display:inline-flex;align-items:center;gap:6px;white-space:nowrap;margin-top:8px;';
     b.innerHTML = '<i class="fas fa-comment-dots"></i> Chat';
-    b.onclick = function (e) { if (e) { e.preventDefault(); e.stopPropagation(); } openChat37(uid); return false; };
+    b.onclick = function (e) {
+      if (e) { e.preventDefault(); e.stopPropagation(); }
+      var uid = b.getAttribute('data-uid');
+      if (!uid) {
+        var card = b.closest ? (b.closest('.card') || b.parentElement) : b.parentElement;
+        uid = card ? resolveUid37(card, profCache) : null;
+        if (uid) { b.setAttribute('data-uid', uid); openChat37(uid); return false; }
+        profiles37(true).then(function (pr) {
+          var id = card ? resolveUid37(card, pr) : null;
+          if (id) { b.setAttribute('data-uid', id); openChat37(id); }
+          else alert('Could not open chat for this member.');
+        });
+        return false;
+      }
+      openChat37(uid);
+      return false;
+    };
     return b;
   }
 
-  /* ═══════════ 1) CATEGORY MEMBERS TAB → ADD CHAT BUTTON ═══════════ */
+  /* ═══════════ 1) CATEGORY MEMBERS → CHAT BUTTON (hardened) ═══════════ */
+  function containers37() {
+    var list = [];
+    var el = document.getElementById('h32c-members');
+    if (el) list.push(el);
+    var root = document.getElementById('gg-root') || document;
+    var divs = root.querySelectorAll('div[id]');
+    Array.prototype.forEach.call(divs, function (d) {
+      var idl = (d.id || '').toLowerCase();
+      if (idl.indexOf('member') > -1 && idl.indexOf('gg-tab-members') === -1 && list.indexOf(d) === -1) list.push(d);
+    });
+    return list;
+  }
+
   function patchCategory37() {
-    var box = document.getElementById('h32c-members');
-    var cat = window._h32Cat;
+    var cs = containers37(), added = 0, seen = 0;
+    cs.forEach(function (box) {
+      var cards = box.querySelectorAll('.card');
+      if (!cards.length) cards = box.children;
+      Array.prototype.forEach.call(cards, function (card) {
+        if (!card || card.nodeType !== 1) return;
+        if (card.tagName === 'BUTTON' || card.tagName === 'A') return;
+        seen++;
+        if (chatExists37(card)) return;
+        var txt = norm37(card.textContent);
+        if (!txt || txt === 'loading...' || txt.indexOf('loading') === 0 || txt.indexOf('no ') === 0) return;
+        if (txt.indexOf('add member') > -1) return;
+        var b = makeChatBtn37();
+        var uid = resolveUid37(card, profCache);
+        if (uid) b.setAttribute('data-uid', uid);
+        card.appendChild(b);
+        added++;
+      });
+    });
+    if (cs.length) console.log('[gc37] category containers:' + cs.length + ' cards:' + seen + ' chatButtonsAdded:' + added);
+  }
 
-    if (!box || !cat || !cat.id) {
-        return;
-    }
-
-    var db = db37();
-
-    if (!db) {
-        return;
-    }
-
-    /*
-     * IMPORTANT:
-     * Category members come from the CATEGORY membership table.
-     * Do not try to recover the UID from the rendered HTML.
-     */
-    db
-        .from('church_group_category_members')
-        .select('user_id')
-        .eq('category_id', cat.id)
-        .then(function (result) {
-
-            if (result.error || !result.data) {
-                return;
-            }
-
-            var members = result.data;
-
-            /*
-             * The category renderer creates one .card per member.
-             * Match each card to the real profile name, then use
-             * the user_id obtained directly from the membership row.
-             */
-            profiles37().then(function (profiles) {
-
-                var cards = box.querySelectorAll('.card');
-
-                Array.prototype.forEach.call(
-                    cards,
-                    function (card) {
-
-                        if (
-                            hasChat37(card) ||
-                            hasChatText37(card)
-                        ) {
-                            return;
-                        }
-
-                        var text =
-                            norm37(card.textContent || '');
-
-                        if (!text) {
-                            return;
-                        }
-
-                        var uid = null;
-
-                        /*
-                         * Find the profile represented by this
-                         * rendered category member.
-                         */
-                        for (
-                            var i = 0;
-                            i < members.length;
-                            i++
-                        ) {
-
-                            var memberId =
-                                String(
-                                    members[i].user_id
-                                );
-
-                            var profile =
-                                profiles.find(
-                                    function (p) {
-                                        return String(p.id) ===
-                                            memberId;
-                                    }
-                                );
-
-                            if (!profile) {
-                                continue;
-                            }
-
-                            var name =
-                                norm37(profile.name);
-
-                            if (
-                                name &&
-                                text.indexOf(name) !== -1
-                            ) {
-                                uid = memberId;
-                                break;
-                            }
-                        }
-
-                        if (!uid) {
-                            return;
-                        }
-
-                        /*
-                         * Match the layout used by the existing
-                         * category member card.
-                         */
-                        var row =
-                            card.querySelector(
-                                'div[style*="display:flex"]'
-                            );
-
-                        var button =
-                            makeChatBtn37(uid);
-
-                        button.style.marginTop = '0';
-                        button.style.marginLeft = 'auto';
-
-                        if (row) {
-                            row.appendChild(button);
-                        } else {
-                            card.appendChild(button);
-                        }
-                    }
-                );
-            });
-        })
-        .catch(function () {});
-}
-
-  /* ═══════════ 2) SERVANTS OF GOD → MAKE CHAT BUBBLE WORK ═══════════ */
+  /* ═══════════ 2) SERVANTS OF GOD → CHAT BUBBLE (unchanged, working) ═══════════ */
   function servantRows37(box) {
     var r = box.querySelectorAll('.official-card');
     if (r.length) return r;
@@ -226,29 +139,24 @@
       var rows = servantRows37(box);
       Array.prototype.forEach.call(rows, function (row) {
         if (!row || row.nodeType !== 1) return;
-        var uid = row.getAttribute('data-gc37-uid') || uidFromHtml37(row.innerHTML) || uidByName37(row.textContent, profs);
+        var uid = row.getAttribute('data-gc37-uid') || resolveUid37(row, profs);
         if (!uid) return;
         row.setAttribute('data-gc37-uid', uid);
-
-        /* find the existing teal bubble (btn-chat / comment icon) */
         var bubble = null, cands = row.querySelectorAll('button,a');
         for (var i = 0; i < cands.length; i++) {
           var el = cands[i];
           if (el.classList.contains('btn-chat') || /fa-comment/.test(el.innerHTML) || el.hasAttribute('data-gc37-chat')) { bubble = el; break; }
         }
-
         if (bubble) {
-          if (bubble.getAttribute('data-gc37-bound')) return;    // already wired
+          if (bubble.getAttribute('data-gc37-bound')) return;
           bubble.setAttribute('data-gc37-bound', '1');
-          bubble.removeAttribute('onclick');                     // drop dead handler
+          bubble.removeAttribute('onclick');
           bubble.onclick = function (e) { if (e) { e.preventDefault(); e.stopPropagation(); } openChat37(uid); return false; };
         } else {
           if (row.querySelector('[data-gc37-chat]')) return;
           var b = document.createElement('button');
-          b.type = 'button';
-          b.className = 'btn btn-chat btn-sm';
-          b.setAttribute('data-gc37-chat', '1');
-          b.setAttribute('data-gc37-bound', '1');
+          b.type = 'button'; b.className = 'btn btn-chat btn-sm';
+          b.setAttribute('data-gc37-chat', '1'); b.setAttribute('data-gc37-bound', '1');
           b.style.cssText = 'margin-left:auto;';
           b.innerHTML = '<i class="fas fa-comment-dots"></i>';
           b.onclick = function (e) { if (e) { e.preventDefault(); e.stopPropagation(); } openChat37(uid); return false; };
@@ -258,18 +166,18 @@
     });
   }
 
-  /* ---------- run: observer + interval + hooks (idempotent) ---------- */
+  /* ---------- run ---------- */
   function patchAll37() { patchCategory37(); patchServants37(); }
   var t37 = null;
   function queue37() { clearTimeout(t37); t37 = setTimeout(patchAll37, 250); }
 
+  profiles37();                       /* warm the cache immediately */
   if (window.MutationObserver && document.body) {
     new MutationObserver(queue37).observe(document.body, { childList: true, subtree: true });
   }
-  setInterval(patchAll37, 1500);
-
+  setInterval(patchAll37, 1200);
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', patchAll37);
   else patchAll37();
 
-  console.log('✝️ app37.js loaded — Category Chat button + Servants of God chat wired');
+  console.log('✝️ app37.js v2 loaded — category Chat button hardened + servants chat');
 })();
