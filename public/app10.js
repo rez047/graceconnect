@@ -547,7 +547,7 @@ window.renderDeptMembers=function(){
   if(!d){d=document.createElement('div');d.id='dyn-dept-members';c.appendChild(d);}
   if(!deptMembersData.length){d.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No members yet.</div>';return;}
   var h='';deptMembersData.forEach(function(m){var p=m.profiles||{};
-    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+m.user_id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+m.user_id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button>':'')+'</div>';
   });
   d.innerHTML=h;
 };
@@ -557,7 +557,7 @@ window.renderDeptLeaders=function(){
   if(!d){d=document.createElement('div');d.id='dyn-dept-leaders';c.appendChild(d);}
   var L=(deptMembersData||[]).filter(function(m){var r=String(m.role||'').toLowerCase();return r!=='member';});
   d.innerHTML=L.length?L.map(function(m){var p=m.profiles||{};
-    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+    return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+m.user_id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+m.user_id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button>':'')+'</div>';
   }).join(''):'<div style="text-align:center;padding:20px;color:var(--text-lighter)">No leaders yet.</div>';
 };
 
@@ -646,7 +646,7 @@ function loadUshMembers9(ushId){
     var box=document.getElementById('ushMembers9');if(!box)return;
     if(!window._ushMembers9.length){box.innerHTML='<div style="text-align:center;padding:20px;color:var(--text-lighter)">No members yet.</div>';return;}
     box.innerHTML=window._ushMembers9.map(function(m){var p=m.profiles||{};
-      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role||'member')+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+      return '<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role||'member')+'</span></div>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+m.user_id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+m.user_id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button>':'')+'</div>';
     }).join('');
     var lb=document.getElementById('ushLeaders9');
     if(lb)renderUshLeaders9();
@@ -658,10 +658,10 @@ function renderUshLeaders9(){
   var leadMembers=(window._ushMembers9||[]).filter(function(m){return String(m.role||'').toLowerCase()!=='member';});
   var html='';
   officials.forEach(function(o){var p=o.profiles||{};
-    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div class="official-name">'+esc(p.name)+'</div><div class="official-role">'+esc(o.title)+'</div></div>'+(o.user_id&&o.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+o.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div class="official-name">'+esc(p.name)+'</div><div class="official-role">'+esc(o.title)+'</div></div>'+(o.user_id&&o.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+o.user_id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+o.user_id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button>':'')+'</div>';
   });
   leadMembers.forEach(function(m){var p=m.profiles||{};
-    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="openChatWith(\''+m.user_id+'\')"><i class="fas fa-inbox"></i> Inbox</button>':'')+'</div>';
+    html+='<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)"><div class="official-avatar" style="background:var(--gradient-warm)">'+ini(p.name)+'</div><div style="flex:1"><div style="font-weight:700">'+esc(p.name)+'</div></div><span class="dept-role-badge '+slug9(m.role)+'">'+esc(m.role)+'</span>'+(m.user_id&&m.user_id!==user.id?'<button class="btn btn-sm btn-chat" onclick="if(window.c26OpenChat){window.c26OpenChat(\''+m.user_id+'\')}else if(window.h27ChatWith){window.h27ChatWith(\''+m.user_id+'\')}else{alert(\'Chat not available\')}"><i class="fas fa-comment-dots"></i> Chat</button>':'')+'</div>';
   });
   box.innerHTML=html||'<div style="text-align:center;padding:20px;color:var(--text-lighter)">No leadership yet.</div>';
 }
