@@ -10,6 +10,13 @@ async function supa(path, opts) {
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   try {
+    if (!process.env.MPESA_CONSUMER_KEY || !process.env.MPESA_CONSUMER_SECRET)
+      return res.status(400).json({ error: 'MPESA_CONSUMER_KEY/SECRET not set in Vercel' });
+    if (!process.env.MPESA_PASSKEY || process.env.MPESA_PASSKEY === 'undefined')
+      return res.status(400).json({ error: 'MPESA_PASSKEY not set in Vercel' });
+    if (!process.env.MPESA_SHORTCODE)
+      return res.status(400).json({ error: 'MPESA_SHORTCODE not set in Vercel' });
+
     const { phone, amount, causeId, userId } = req.body || {};
     const amt = Number(amount);
     if (!amt || amt < 1) return res.status(400).json({ error: 'Invalid amount' });
@@ -21,7 +28,8 @@ export default async function handler(req, res) {
     const auth = Buffer.from(process.env.MPESA_CONSUMER_KEY + ':' + process.env.MPESA_CONSUMER_SECRET).toString('base64');
     const tr = await fetch(base() + '/oauth/v1/generate?grant_type=client_credentials', { headers: { Authorization: 'Basic ' + auth } });
     const tj = await tr.json();
-    if (!tj.access_token) return res.status(500).json({ error: 'Daraja auth failed' });
+    if (!tj.access_token)
+      return res.status(500).json({ error: 'Daraja auth failed: ' + (tj.errorMessage || tj.errorDescription || 'check consumer key/secret') });
 
     const ts = new Date().toISOString().replace(/[^0-9]/g, '').slice(0, 14);
     const password = Buffer.from(process.env.MPESA_SHORTCODE + process.env.MPESA_PASSKEY + ts).toString('base64');
@@ -40,12 +48,13 @@ export default async function handler(req, res) {
         PartyB: process.env.MPESA_SHORTCODE,
         PhoneNumber: p,
         CallBackURL: callbackURL,
-        AccountReference: String(causeId || 'GraceConnect').slice(0, 12),
+        AccountReference: String(process.env.MPESA_ACCOUNT_REF || causeId || 'GraceConnect').slice(0, 12),
         TransactionDesc: 'Giving - GraceConnect'
       })
     });
     const d = await r.json();
-    if (!d.CheckoutRequestID) return res.status(400).json({ error: d.errorMessage || d.errorDescription || 'STK push failed' });
+    if (!d.CheckoutRequestID)
+      return res.status(400).json({ error: (d.ErrorMessage || d.errorMessage || d.errorDescription || 'STK push failed') + (d.ErrorCode || d.errorCode ? ' [' + (d.ErrorCode || d.errorCode) + ']' : '') });
 
     await supa('mpesa_transactions', { method: 'POST', body: JSON.stringify([{ checkout_request_id: d.CheckoutRequestID, cause_id: causeId || null, user_id: userId || null, phone: p, amount: amt, status: 'pending' }]) });
     res.json({ checkoutRequestID: d.CheckoutRequestID, message: d.CustomerMessage || 'Check your phone for the M-Pesa prompt.' });
