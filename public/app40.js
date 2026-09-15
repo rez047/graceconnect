@@ -1,188 +1,70 @@
 /* ============================================================
-   GRACECONNECT — APP40.JS (additive, non-destructive)
-   1) Adds Reply-to-comment UI to Ushirika, Department, Groups
-   2) Defines missing ToggleReply/SubmitReply handlers so the
-      broken c26gx_/gggx_ Reply buttons also work.
+   GRACECONNECT — APP40.JS
+   FIX: Ushirika / Department / Groups Reply buttons call
+   c26gx_* / gggx_* but the real functions are named
+   c26Group* / ggGroup*. This file bridges the two names so
+   the EXISTING working handlers run. Nothing else touched.
    ============================================================ */
 (function () {
   'use strict';
 
-  function db() {
-    try {
-      if (typeof window.sb === 'function') { var a = window.sb(); if (a && a.from) return a; }
-      if (window.sb && window.sb.from) return window.sb;
-      if (window.supabaseClient && window.supabaseClient.from) return window.supabaseClient;
-    } catch (e) {}
-    return null;
+  /* ---------- 1) direct aliases for the toggle (most-clicked) ---------- */
+  function toggleBox(id) {
+    var el = document.getElementById(id);
+    if (!el) return;
+    el.style.display = (el.style.display === 'none') ? 'block' : 'none';
+    if (el.style.display === 'block') { var i = el.querySelector('input'); if (i) setTimeout(function () { i.focus(); }, 80); }
   }
-  function me() { return window.user || null; }
-  function esc40(s) { return window.esc ? window.esc(s) : String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
-  function ini40(n) { return window.ini ? window.ini(n) : '?'; }
-  function ago40(ts) { return window.ago ? window.ago(ts) : ''; }
-  function users40() {
-    if (window.usersData && window.usersData.length) return Promise.resolve(window.usersData);
-    var c = db(); if (!c) return Promise.resolve([]);
-    return c.from('profiles').select('id,name,profile_pic,role').order('name').then(function (r) { window.usersData = r.data || []; return window.usersData; });
-  }
-  function avatar40(u, s) {
-    s = s || 24;
-    if (u && u.profile_pic) return '<img src="' + u.profile_pic + '" style="width:' + s + 'px;height:' + s + 'px;border-radius:50%;object-fit:cover">';
-    return '<div class="post-avatar" style="width:' + s + 'px;height:' + s + 'px;font-size:.65rem">' + ini40(u && u.name) + '</div>';
-  }
-  function tree40(list) {
-    var map = {}, roots = [];
-    list.forEach(function (c) { c._k = []; map[c.id] = c; });
-    list.forEach(function (c) { if (c.parent_comment_id && map[c.parent_comment_id]) map[c.parent_comment_id]._k.push(c); else roots.push(c); });
-    return roots;
-  }
+  window.c26gx_ToggleReply = function (id) { toggleBox('c26gx_reply_' + id); };
+  window.gggx_ToggleReply  = function (id) { toggleBox('gggx_reply_' + id); };
+  /* also cover the correctly-named ones in case a build lacks them */
+  if (typeof window.c26GroupToggleReply !== 'function') window.c26GroupToggleReply = window.c26gx_ToggleReply;
+  if (typeof window.ggGroupToggleReply  !== 'function') window.ggGroupToggleReply  = window.gggx_ToggleReply;
 
-  /* ---------- universal toggle (also fixes broken handlers) ---------- */
-  window.gc40Toggle = function (id) {
-    var e = document.getElementById(id);
-    if (!e) return;
-    e.style.display = e.style.display === 'none' ? 'block' : 'none';
-    if (e.style.display === 'block') { var i = e.querySelector('input'); if (i) setTimeout(function () { i.focus(); }, 80); }
-  };
-  /* aliases for the broken names the live app calls */
-  window.c26gx_ToggleReply = window.gc40Toggle;
-  window.gggx_ToggleReply = window.gc40Toggle;
-  window.c26GroupToggleReply = window.gc40Toggle;
-  window.ggGroupToggleReply = window.gc40Toggle;
-
-  /* ---------- one comment node with Reply button ---------- */
-  function commentHtml40(c, depth, postId, kind, users) {
-    var u = users.find(function (x) { return x.id === c.user_id; });
-    var name = (u && u.name) || 'Member';
-    var content = kind === 'pc' ? (c.content || '') : (c.text || '');
-    return '<div class="comment-item" style="margin-left:' + Math.min(depth, 4) * 16 + 'px;margin-top:6px">'
-      + '<div class="comment-header">' + avatar40(u) + '<span class="comment-name" style="margin-left:6px">' + esc40(name) + (c.is_anonymous ? ' <span class="anon-badge">Anonymous</span>' : '') + '</span><span class="comment-time">' + ago40(c.created_at) + '</span></div>'
-      + '<div class="comment-text">' + esc40(content) + '</div>'
-      + '<button style="border:none;background:none;color:var(--primary);font-size:.72rem;font-weight:800;margin-top:2px" onclick="gc40Toggle(\'gc40r-' + c.id + '\')"><i class="fas fa-reply"></i> Reply</button>'
-      + '<div id="gc40r-' + c.id + '" style="display:none;margin-top:6px"><div style="display:flex;gap:6px;align-items:center">'
-      + '<input class="form-input" id="gc40rt-' + c.id + '" placeholder="Reply to ' + esc40(name) + '..." style="flex:1;margin:0" data-gc40-name="' + esc40(name) + '" data-gc40-post="' + postId + '" data-gc40-kind="' + kind + '">'
-      + '<button class="btn btn-sm btn-primary" onclick="gc40Submit(\'' + c.id + '\')"><i class="fas fa-paper-plane"></i></button>'
-      + '</div></div>'
-      + (c._k || []).map(function (k) { return commentHtml40(k, depth + 1, postId, kind, users); }).join('')
-      + '</div>';
-  }
-
-  /* ---------- render post_comments thread (ushirika / dept) ---------- */
-  function renderPc40(postId, containerId) {
-    var box = document.getElementById(containerId); if (!box) return Promise.resolve();
-    var c = db(); if (!c) return Promise.resolve();
-    return c.from('post_comments').select('*').eq('post_id', postId).order('created_at').then(function (r) {
-      var list = r.data || [];
-      return users40().then(function (us) {
-        var h = tree40(list).map(function (x) { return commentHtml40(x, 0, postId, 'pc', us); }).join('');
-        h += '<div style="display:flex;gap:6px;margin-top:8px"><input class="form-input" id="gc40nc-' + postId + '" data-gc40-post="' + postId + '" data-gc40-kind="pc" placeholder="Comment..." style="margin:0"><button class="btn btn-sm btn-primary" onclick="gc40Submit(null,\'' + postId + '\')"><i class="fas fa-paper-plane"></i></button></div>';
-        box.innerHTML = h;
-      });
-    }).catch(function () {});
-  }
-
-  /* ---------- render community_comments thread (groups) ---------- */
-  function renderCc40(postId, box) {
-    var c = db(); if (!c) return;
-    c.from('community_comments').select('*').eq('post_id', postId).order('created_at').then(function (r) {
-      var list = r.data || [];
-      users40().then(function (us) {
-        var h = tree40(list).map(function (x) { return commentHtml40(x, 0, postId, 'cc', us); }).join('');
-        h += '<div style="display:flex;gap:6px;margin-top:8px"><input class="form-input" id="gc40nc-' + postId + '" data-gc40-post="' + postId + '" data-gc40-kind="cc" placeholder="Comment..." style="margin:0"><button class="btn btn-sm btn-primary" onclick="gc40Submit(null,\'' + postId + '\')"><i class="fas fa-paper-plane"></i></button></div>';
-        box.innerHTML = h;
-      });
-    });
-  }
-  window.gc40LoadGroup = function (postId) {
-    var box = document.getElementById('gc40gc-' + postId); if (!box || box.dataset.loaded) return;
-    box.dataset.loaded = '1';
-    renderCc40(postId, box);
-  };
-
-  /* ---------- submit (reply or top-level) ---------- */
-  window.gc40Submit = function (parentId, postId) {
-    var input = parentId ? document.getElementById('gc40rt-' + parentId) : document.getElementById('gc40nc-' + postId);
-    if (!input) return;
-    var t = input.value.trim(); if (!t) return;
-    var post = postId || input.getAttribute('data-gc40-post');
-    var kind = input.getAttribute('data-gc40-kind') || 'pc';
-    var targetName = input.getAttribute('data-gc40-name') || '';
-    var m = me(); if (!m) return alert('Log in first');
-    var c = db(); if (!c) return;
-    var table = kind === 'pc' ? 'post_comments' : 'community_comments';
-    var payload = kind === 'pc'
-      ? { post_id: post, user_id: m.id, content: t, parent_comment_id: parentId || null, is_anonymous: false }
-      : { post_id: post, user_id: m.id, text: t, parent_comment_id: parentId || null };
-    c.from(table).insert([payload]).then(function (r) {
-      if (r.error && /parent_comment_id/i.test(r.error.message)) {
-        var fb = kind === 'pc'
-          ? { post_id: post, user_id: m.id, content: '↪ @' + targetName + ': ' + t, is_anonymous: false }
-          : { post_id: post, user_id: m.id, text: '↪ @' + targetName + ': ' + t };
-        return c.from(table).insert([fb]);
-      }
-      if (r.error) { alert(r.error.message); return; }
-      input.value = '';
-      reload40(post, kind);
-    });
-  };
-  function reload40(postId, kind) {
-    if (kind === 'pc') {
-      if (document.getElementById('ush-comments-' + postId)) renderPc40(postId, 'ush-comments-' + postId);
-      if (document.getElementById('comments-' + postId)) renderPc40(postId, 'comments-' + postId);
-    } else {
-      var b = document.getElementById('gc40gc-' + postId);
-      if (b) { b.dataset.loaded = ''; b.innerHTML = ''; window.gc40LoadGroup(postId); }
-      else if (typeof window.ggSwitchGroupTab === 'function') window.ggSwitchGroupTab('feed');
+  /* ---------- 2) arg parser + paren scanner (safe, no eval) ---------- */
+  function parseArgs(s) {
+    var out = [], re = /'([^']*)'|"([^"]*)"|(null|true|false)|(-?\d+(?:\.\d+)?)/g, m;
+    while ((m = re.exec(s))) {
+      if (m[1] !== undefined) out.push(m[1]);
+      else if (m[2] !== undefined) out.push(m[2]);
+      else if (m[3] !== undefined) out.push(m[3] === 'null' ? null : (m[3] === 'true'));
+      else out.push(parseFloat(m[4]));
     }
+    return out;
+  }
+  function callSpan(oc, startIdx) {
+    var depth = 0, i = startIdx;
+    for (; i < oc.length; i++) {
+      if (oc[i] === '(') depth++;
+      else if (oc[i] === ')') { depth--; if (depth === 0) return oc.substring(startIdx + 1, i); }
+    }
+    return oc.substring(startIdx + 1);
   }
 
-  /* ---------- take over legacy loaders so Reply appears ---------- */
-  window.loadPostComments = function (postId) { return renderPc40(postId, 'comments-' + postId); };
-  window.loadUshPostComments = function (postId) { return renderPc40(postId, 'ush-comments-' + postId); };
-
-  /* ---------- Groups: attach comment thread to each post card ---------- */
-  function injectGroupComments40() {
-    var box = document.getElementById('gg-tab-feed'); if (!box) return;
-    if (box.querySelector('input[id^="gggx_comment_"],input[id^="c26gx_comment_"]')) return;
-    var gid = window._gg && window._gg.currentGroupId; if (!gid) return;
-    var cards = box.querySelectorAll('.card'); if (!cards.length) return;
-    var postCards = [];
-    Array.prototype.forEach.call(cards, function (cd) {
-      if (cd.querySelector('textarea#ggPostText')) return;
-      if (cd.hasAttribute('data-gc40-postcard')) return;
-      postCards.push(cd);
-    });
-    if (!postCards.length) return;
-    var c = db(); if (!c) return;
-    c.from('church_group_posts').select('*').eq('group_id', gid).order('created_at', { ascending: false }).limit(50).then(function (r) {
-      var posts = r.data || [];
-      postCards.forEach(function (cd, i) {
-        var p = posts[i]; if (!p) return;
-        cd.setAttribute('data-gc40-postcard', '1');
-        var sec = document.createElement('div');
-        sec.style.cssText = 'border-top:1px solid var(--border);margin-top:10px;padding-top:8px';
-        sec.innerHTML = '<button class="post-action" onclick="gc40Toggle(\'gc40gc-' + p.id + '\');gc40LoadGroup(\'' + p.id + '\')"><i class="far fa-comment"></i> Comments</button><div id="gc40gc-' + p.id + '" style="display:none"></div>';
-        cd.appendChild(sec);
-      });
-    });
-  }
-
-  /* ---------- catch clicks on any still-broken Reply onclick ---------- */
+  /* ---------- 3) router: any c26gx_X / gggx_X click → real c26GroupX / ggGroupX ---------- */
   document.addEventListener('click', function (e) {
-    var btn = e.target.closest ? e.target.closest('button') : null;
-    if (!btn) return;
-    var oc = btn.getAttribute('onclick') || '';
-    var m = oc.match(/^(?:c26gx_ToggleReply|gggx_ToggleReply|c26GroupToggleReply|ggGroupToggleReply)\(\s*'([^']+)'\s*\)/);
-    if (m) {
-      e.preventDefault();
-      e.stopPropagation();
-      window.gc40Toggle(m[1]);
+    var el = e.target && e.target.closest ? e.target.closest('[onclick]') : null;
+    if (!el) return;
+    var oc = el.getAttribute('onclick') || '';
+    var m = oc.match(/\b(c26gx|gggx)_([A-Za-z]+)\s*\(/);
+    if (!m) return;
+
+    var realName = (m[1] === 'c26gx' ? 'c26Group' : 'ggGroup') + m[2];
+    var openIdx = oc.indexOf(m[0]) + m[0].length - 1;
+    var args = parseArgs(callSpan(oc, openIdx));
+
+    if (typeof window[realName] === 'function') {
+      e.preventDefault(); e.stopPropagation();
+      try { window[realName].apply(null, args); } catch (err) { console.error(err); }
+      return;
+    }
+
+    /* fallback if even the real name is missing */
+    if (m[2] === 'ToggleReply') {
+      e.preventDefault(); e.stopPropagation();
+      toggleBox((m[1] === 'c26gx' ? 'c26gx_reply_' : 'gggx_reply_') + args[0]);
     }
   }, true);
 
-  setInterval(injectGroupComments40, 1500);
-  if (window.MutationObserver && document.body) {
-    var t = null;
-    new MutationObserver(function () { clearTimeout(t); t = setTimeout(injectGroupComments40, 300); }).observe(document.body, { childList: true, subtree: true });
-  }
-  console.log('✝️ app40.js loaded — Reply on Ushirika/Dept/Groups + broken ToggleReply fixed');
+  console.log('✝️ app40.js loaded — c26gx_/gggx_ reply names bridged to working handlers');
 })();
