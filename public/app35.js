@@ -4578,27 +4578,30 @@
 
 window.h32CategoryChat = function (uid) {
 
-    if (!uid) return;
-
-    /* Use the same Inbox system used by the other
-       member lists throughout GraceConnect. */
-    if (typeof window.openChatWith === 'function') {
-        window.openChatWith(uid);
-        return;
+    if (!uid) {
+        return false;
     }
 
-    /* Existing fallback */
+    /*
+     * CATEGORY CHAT
+     * Use the exact same working chat engine
+     * already used by Department/Ushirika.
+     */
     if (typeof window.c26OpenChat === 'function') {
         window.c26OpenChat(uid);
-        return;
+        return false;
     }
 
+    /*
+     * Direct fallback to the underlying chat engine.
+     */
     if (typeof window.h27ChatWith === 'function') {
         window.h27ChatWith(uid);
-        return;
+        return false;
     }
 
     alert('Chat is not available.');
+    return false;
 };
 
 
@@ -4754,7 +4757,7 @@ window.h32CategoryChat = function (uid) {
                               ' onclick="h32CategoryChat(\'' +
                               m.user_id +
                               '\')">' +
-                              '<i class="fas fa-inbox"></i> Inbox' +
+                              '<i class="fas fa-inbox"></i> Chat' +
                               '</button>'
                             : ''
                     ) +
@@ -4917,6 +4920,158 @@ window.h32CategoryChat = function (uid) {
         '✅ Final group functionality installed: ' +
         'Ushirika + Department + Groups + Category Members'
     );
+/* ============================================================
+   GRACECONNECT — GROUP MEMBER CHAT
+   Uses the SAME working c26OpenChat / h27ChatWith engine.
+   Does not replace or modify existing member controls.
+   ============================================================ */
 
+(function () {
+    'use strict';
+
+    function addGroupChatButtons() {
+
+        if (typeof window.c26OpenChat !== 'function') {
+            return;
+        }
+
+        /*
+         * Only operate on group/member containers.
+         * We deliberately do not touch Department/Ushirika.
+         */
+        var selectors = [
+            '#groupMembers',
+            '#group-members',
+            '#groupMemberList',
+            '#ggGroupMembers',
+            '[data-group-members]'
+        ];
+
+        selectors.forEach(function (selector) {
+
+            var containers =
+                document.querySelectorAll(selector);
+
+            Array.prototype.forEach.call(
+                containers,
+                function (container) {
+
+                    var members =
+                        container.querySelectorAll(
+                            '[data-user-id], [data-userid]'
+                        );
+
+                    Array.prototype.forEach.call(
+                        members,
+                        function (member) {
+
+                            if (
+                                member.querySelector(
+                                    '.gc35-group-chat-btn'
+                                )
+                            ) {
+                                return;
+                            }
+
+                            var uid =
+                                member.getAttribute(
+                                    'data-user-id'
+                                ) ||
+                                member.getAttribute(
+                                    'data-userid'
+                                );
+
+                            if (!uid) {
+                                return;
+                            }
+
+                            if (
+                                window.user &&
+                                window.user.id === uid
+                            ) {
+                                return;
+                            }
+
+                            var button =
+                                document.createElement(
+                                    'button'
+                                );
+
+                            button.type = 'button';
+
+                            button.className =
+                                'btn btn-primary btn-sm gc35-group-chat-btn';
+
+                            button.style.whiteSpace =
+                                'nowrap';
+
+                            button.innerHTML =
+                                '<i class="fas fa-comment-dots"></i> Chat';
+
+                            button.onclick =
+                                function (event) {
+
+                                    if (event) {
+                                        event.preventDefault();
+                                        event.stopPropagation();
+                                    }
+
+                                    window.c26OpenChat(uid);
+
+                                    return false;
+                                };
+
+                            member.appendChild(button);
+                        }
+                    );
+                }
+            );
+        });
+    }
+
+    /*
+     * Run after the group UI has rendered.
+     */
+    setTimeout(
+        addGroupChatButtons,
+        500
+    );
+
+    setTimeout(
+        addGroupChatButtons,
+        1500
+    );
+
+    setTimeout(
+        addGroupChatButtons,
+        3000
+    );
+
+    /*
+     * Watch for group/member lists that are dynamically
+     * rendered after opening a group.
+     */
+    if (
+        window.MutationObserver &&
+        document.body
+    ) {
+
+        var observer =
+            new MutationObserver(
+                function () {
+                    addGroupChatButtons();
+                }
+            );
+
+        observer.observe(
+            document.body,
+            {
+                childList: true,
+                subtree: true
+            }
+        );
+    }
+
+})();
 })();
 })();
