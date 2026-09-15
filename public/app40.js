@@ -335,5 +335,56 @@
   }
   purgePhoneFromRally40();
   setInterval(purgePhoneFromRally40, 800);
+/* ============================================================
+     CLEAN RALLY CAUSE: bypass old patch that demands a phone
+     ============================================================ */
+  window.createCause = function () {
+    if (!window.user || !window.sb) return alert('Log in');
+    var title = String((document.getElementById('causeTitle') || {}).value || '').trim();
+    var desc = String((document.getElementById('causeDesc') || {}).value || '');
+    var goal = parseFloat((document.getElementById('causeGoal') || {}).value);
+    if (isNaN(goal) || goal < 0) goal = 0;
+    if (!title) return alert('Title required');
+    window.sb.from('giving_causes').insert([{
+      title: title,
+      description: desc,
+      goal_amount: goal,
+      raised_amount: 0,
+      currency: 'KES',
+      status: 'active',
+      payment_method: 'mpesa_stk',
+      created_by: window.user.id
+    }]).then(function (r) {
+      if (r.error) return alert(r.error.message);
+      alert('✅ Launched!');
+      if (window.closeModalDirect) window.closeModalDirect();
+      var t = document.getElementById('causeTitle'); if (t) t.value = '';
+      var d = document.getElementById('causeDesc'); if (d) d.value = '';
+      var g = document.getElementById('causeGoal'); if (g) g.value = '';
+      if (window.loadCauses) window.loadCauses();
+    });
+  };
+
+  /* make sure the Launch button calls the clean function */
+  setInterval(function () {
+    var modal = document.getElementById('givingModal');
+    if (!modal) return;
+    modal.querySelectorAll('button').forEach(function (b) {
+      if (/launch/i.test(b.textContent || '')) {
+        var oc = (b.getAttribute('onclick') || '').trim();
+        if (oc !== 'createCause()') b.setAttribute('onclick', 'createCause()');
+      }
+    });
+  }, 1200);
+
+  /* swallow any leftover "Enter the M-Pesa number" alert from old patches */
+  if (!window.alert._gc40wrapped) {
+    var origAlert40 = window.alert;
+    window.alert = function (m) {
+      if (/enter the m-?pesa number/i.test(String(m || ''))) return;
+      return origAlert40.apply(this, arguments);
+    };
+    window.alert._gc40wrapped = true;
+  }
   console.log('✝️ app40.js loaded — reply fix + Reports tab leadership-only');
 })();
