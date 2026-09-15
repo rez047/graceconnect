@@ -382,10 +382,26 @@
             .then(function (data) {
                 var found = [];
 
-                collectVerses36(
-                    data,
-                    found
-                );
+                // FIX: Handle MEGA.Bible string array format for Swahili
+                if (data && Array.isArray(data.verses)) {
+                    data.verses.forEach(function (text, index) {
+                        if (typeof text === 'string') {
+                            found.push({
+                                verse: index + 1,
+                                text: text.replace(/\s+/g, ' ').trim()
+                            });
+                        } else if (text && typeof text === 'object') {
+                            var n = text.verse != null ? text.verse : text.number != null ? text.number : index + 1;
+                            var t = text.text || text.value || text.content || '';
+                            if (t) found.push({ verse: n, text: String(t).replace(/\s+/g, ' ').trim() });
+                        }
+                    });
+                } else {
+                    collectVerses36(
+                        data,
+                        found
+                    );
+                }
 
                 var verses =
                     uniqueVerses36(found);
