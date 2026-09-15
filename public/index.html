@@ -1056,7 +1056,7 @@
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
     <div class="modal-title">💝 Rally Cause <span class="admin-only">Admin</span></div>
-    <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="causeTitle"></div>
+    <div style="font-size:.75rem;color:var(--text-light);background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:8px 10px;margin-bottom:10px"><i class="fas fa-mobile-alt" style="color:var(--accent)"></i> Payments for this cause are received automatically via M-Pesa STK Push only.</div>     <div class="form-group"><label class="form-label">Title</label><input class="form-input" id="causeTitle"></div>
     <div class="form-group"><label class="form-label">Description</label><textarea class="form-textarea" id="causeDesc"></textarea></div>
     <div class="form-group"><label class="form-label">Goal (KES)</label><input class="form-input" id="causeGoal" type="number"></div>
     <button class="btn btn-warm btn-block" onclick="createCause()">Launch</button>
@@ -1068,7 +1068,7 @@
     <div class="modal-handle"></div>
     <div class="modal-title" id="giveCauseName">💝 Give Now</div>
     <div class="form-group"><label class="form-label">Amount (KES)</label><input class="form-input" id="giveAmount" type="number"></div>
-    <div class="form-group"><label class="form-label">Payment Method</label><div class="chip chip-green" style="padding:8px 12px;font-size:.8rem;display:inline-flex;gap:6px;align-items:center"><i class="fas fa-mobile-alt"></i> M-Pesa STK Push (automatic)</div><input type="hidden" id="giveMethod" value="mpesa"></div>
+    
     <button class="btn btn-accent btn-block" onclick="confirmGiving()"><i class="fas fa-check"></i> Confirm</button>
   </div>
 </div>
