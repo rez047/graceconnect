@@ -4576,33 +4576,23 @@
     var originalH32CatTab =
         window.h32CatTab;
 
-window.h32CategoryChat = function (uid) {
+    window.h32CategoryChat = function (uid) {
+        if (!uid) return false;
 
-    if (!uid) {
+        // Route directly to the working chat engine used by Department/Ushirika
+        if (typeof window.c26OpenChat === 'function') {
+            window.c26OpenChat(uid);
+            return false;
+        }
+
+        if (typeof window.h27ChatWith === 'function') {
+            window.h27ChatWith(uid);
+            return false;
+        }
+
+        alert('Chat is not available.');
         return false;
-    }
-
-    /*
-     * CATEGORY CHAT
-     * Use the exact same working chat engine
-     * already used by Department/Ushirika.
-     */
-    if (typeof window.c26OpenChat === 'function') {
-        window.c26OpenChat(uid);
-        return false;
-    }
-
-    /*
-     * Direct fallback to the underlying chat engine.
-     */
-    if (typeof window.h27ChatWith === 'function') {
-        window.h27ChatWith(uid);
-        return false;
-    }
-
-    alert('Chat is not available.');
-    return false;
-};
+    };
 
 
     async function LOAD_CATEGORY_MEMBERS() {
