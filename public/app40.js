@@ -224,8 +224,8 @@
   }
 /* ============================================================
      M-PESA DARAJA (STK Push) — Give Now flow
-     No visible phone field: uses profile phone automatically;
-     one-time native prompt only if profile has no valid number.
+     Phone box ONLY inside #giveModal (pre-filled from profile).
+     Never in Rally Cause. No native prompts, no alerts asking.
      ============================================================ */
   var origConfirm40 = window.confirmGiving;
   function normPhone40(p) {
@@ -234,21 +234,38 @@
     if (p.charAt(0) === '0') p = '254' + p.slice(1);
     return p;
   }
-  function removeMpesaPhone40() {
-    var el = document.getElementById('gc40MpesaPhone');
-    if (el) {
+  function ensurePhoneInGiveModal40() {
+    var modal = document.getElementById('giveModal');
+    if (!modal || !modal.classList.contains('show')) return;
+    if (modal.querySelector('[id="gc40MpesaPhone"]')) return;
+    var amount = document.getElementById('giveAmount');
+    if (!amount) return;
+    var ag = amount.closest ? amount.closest('.form-group') : null;
+    if (!ag) return;
+    var g = document.createElement('div');
+    g.className = 'form-group';
+    g.innerHTML = '<label class="form-label">M-Pesa Number</label>'
+      + '<input class="form-input" id="gc40MpesaPhone" placeholder="07XX XXX XXX" value="' + ((window.profile && window.profile.phone) || '') + '">';
+    ag.parentNode.insertBefore(g, ag.nextSibling);
+  }
+  function purgePhoneElsewhere40() {
+    document.querySelectorAll('[id="gc40MpesaPhone"]').forEach(function (el) {
+      var inGive = !!(el.closest && el.closest('#giveModal'));
+      if (inGive) return;
       var wrap = el.closest ? el.closest('.form-group') : (el.parentElement || null);
       if (wrap && wrap.parentNode) wrap.parentNode.removeChild(wrap);
       else if (el.parentNode) el.parentNode.removeChild(el);
-    }
+    });
   }
-  removeMpesaPhone40();
+  purgePhoneElsewhere40();
+  setInterval(purgePhoneElsewhere40, 800);
   if (typeof window._gcGive === 'function' && !window._gcGive._gc40mpesa) {
     var origGive40 = window._gcGive;
     window._gcGive = function (id, title) {
       var r = origGive40.apply(this, arguments);
-      setTimeout(removeMpesaPhone40, 250);
-      setTimeout(removeMpesaPhone40, 800);
+      setTimeout(ensurePhoneInGiveModal40, 200);
+      setTimeout(ensurePhoneInGiveModal40, 600);
+      setTimeout(purgePhoneElsewhere40, 300);
       return r;
     };
     window._gcGive._gc40mpesa = true;
@@ -258,17 +275,11 @@
     var cid = window._gcCurrentCauseId;
     if (!amount) return alert('Amount required');
     if (!cid) return alert('No cause selected');
-    var phone = normPhone40(window.profile && window.profile.phone);
+    var field = document.getElementById('gc40MpesaPhone');
+    var phone = normPhone40((field && field.value) || (window.profile && window.profile.phone));
     if (!/^254\d{9}$/.test(phone)) {
-      var p = prompt('Enter the M-Pesa number to receive the payment prompt (e.g. 0712345678):');
-      if (p === null) return;
-      phone = normPhone40(p);
-      if (!/^254\d{9}$/.test(phone)) return alert('Invalid Safaricom number');
-      try {
-        if (window.sb && window.user) {
-          window.sb.from('profiles').update({ phone: String(p).trim() }).eq('id', window.user.id).then(function () { if (window.profile) window.profile.phone = String(p).trim(); });
-        }
-      } catch (e) {}
+      if (field) { field.focus(); field.style.borderColor = '#EF4444'; }
+      return alert('Type the M-Pesa number in the M-Pesa Number box, then press Confirm.');
     }
     fetch('/api/mpesa-stk', {
       method: 'POST',
@@ -278,6 +289,11 @@
       if (r.status === 404 && origConfirm40) return origConfirm40();
       return r.json().then(function (j) {
         if (!r.ok || !j.checkoutRequestID) { alert('M-Pesa error: ' + (j.error || 'STK push failed')); return; }
+        try {
+          if (window.sb && window.user && field && field.value.trim()) {
+            window.sb.from('profiles').update({ phone: field.value.trim() }).eq('id', window.user.id).then(function () { if (window.profile) window.profile.phone = field.value.trim(); });
+          }
+        } catch (e) {}
         if (window.closeModalDirect) window.closeModalDirect();
         alert('📲 M-Pesa prompt sent to ' + phone + '. Enter your PIN to complete.');
         var cr = j.checkoutRequestID, tries = 0;
@@ -292,5 +308,32 @@
       });
     }).catch(function (e) { alert('M-Pesa not reachable: ' + e.message); });
   };
+   /* ---- Guard 1: no patch may pop a prompt() asking for a phone number ---- */
+  if (!window.prompt._gc40wrapped) {
+    var origPrompt40 = window.prompt;
+    window.prompt = function (msg, def) {
+      var m = String(msg || '');
+      if (/m-?pesa|phone|number|msisdn|07\d/i.test(m)) {
+        var auto = (window.profile && window.profile.phone) || def || '';
+        if (auto) return auto;          /* answer silently, never show dialog */
+      }
+      return origPrompt40.apply(this, arguments);
+    };
+    window.prompt._gc40wrapped = true;
+  }
+
+  /* ---- Guard 2: purge ANY phone / M-Pesa-number field from Rally Cause modal ---- */
+  function purgePhoneFromRally40() {
+    var modal = document.getElementById('givingModal');
+    if (!modal) return;
+    modal.querySelectorAll('.form-group').forEach(function (g) {
+      var t = (g.textContent || '').toLowerCase();
+      var inp = g.querySelector('input');
+      var ph = inp && String(inp.placeholder || '').toLowerCase();
+      if (/m-pesa number|mpesa number|phone/.test(t) || (ph && /07\d|phone/.test(ph))) g.remove();
+    });
+  }
+  purgePhoneFromRally40();
+  setInterval(purgePhoneFromRally40, 800);
   console.log('✝️ app40.js loaded — reply fix + Reports tab leadership-only');
 })();
