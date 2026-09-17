@@ -36,7 +36,7 @@ window.renderPublicLanding=function(){
     var mg=document.getElementById('ministriesGrid');
     if(mg){
       var mins=window._ministries||[];
-      mg.innerHTML=mins.length?mins.map(function(m){return '<div class="ministry-card" onclick="openMinistryStory(\''+m.id+'\')">'+(m.media_url?'<img src="'+m.media_url+'" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:10px">':'<div class="ministry-icon">'+(m.icon||'🏛️')+'</div>')+'<div class="ministry-name">'+esc(m.name)+'</div><div class="ministry-desc">'+esc((m.story||'').slice(0,80))+'...</div></div>';}).join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--text-lighter);padding:30px">No ministries yet.</div>';
+      mg.innerHTML=mins.length?mins.map(function(m){return '<div class="ministry-card" onclick="openMinistryStory(\''+m.id+'\')">'+(m.media_url?'<img src="'+m.media_url+'" style="width:100%;height:120px;object-fit:cover;border-radius:8px;margin-bottom:10px">':'<div class="ministry-icon">'+(m.icon||'🏛️')+'</div>')+'<div class="ministry-name">'+esc(m.name)+'</div><div class="ministry-desc">'+esc((m.story||'').slice(0,80))+'...</div></div>';}).join(''):'<div style="grid-column:1/-1;text-align:center;color:var(--text-lighter);padding:30px">Join a ministry</div>';
     }
     // Events preview: show upcoming + ongoing + completed to invite visitors
     var eg=document.getElementById('eventsPreviewGrid');
