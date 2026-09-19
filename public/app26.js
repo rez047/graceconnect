@@ -270,9 +270,10 @@
   }
 
   window.h27BackHome = function () {
-    if (window.c26OrigSwitch) window.c26OrigSwitch('home');
-    else if (window.switchSection) window.switchSection('home');
-  };
+    if (typeof window.switchSection === 'function') {
+        return window.switchSection('home');
+    }
+};
 
   window.h27OpenPage = function (page) {
     const sec = ensureH27Section();
