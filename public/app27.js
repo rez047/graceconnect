@@ -147,9 +147,10 @@
   }
 
   window.h28BackHome = function () {
-    if (window.c26OrigSwitch) window.c26OrigSwitch('home');
-    else if (window.switchSection) window.switchSection('home');
-  };
+    if (typeof window.switchSection === 'function') {
+        return window.switchSection('home');
+    }
+};
 
   function shell(title, icon, grad, body) {
     return '<button class="back-btn" onclick="h28BackHome()"><i class="fas fa-arrow-left"></i> Back</button>'
