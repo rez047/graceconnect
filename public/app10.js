@@ -68,7 +68,15 @@ window.addEventListener('popstate',function(e){
 try{history.replaceState({gc:gcCurrentView()},'');}catch(e){}
 function activateSection(sectionId,subPageId,navMatch){
   var secs=document.querySelectorAll('.section');for(var i=0;i<secs.length;i++)secs[i].classList.remove('active');
-  var sec=document.getElementById(sectionId);if(!sec)return;
+  var sec=document.getElementById(sectionId);
+
+  if (!sec) {
+      sec = document.getElementById('section-home');
+      sectionId = 'section-home';
+      subPageId = null;
+  }
+
+  if (!sec) return;
   sec.classList.add('active');
   var nvs=document.querySelectorAll('.nav-item');for(var j=0;j<nvs.length;j++)nvs[j].classList.remove('active');
   if(navMatch){var nv=document.querySelector('.nav-item[onclick*="'+navMatch+'"]');if(nv)nv.classList.add('active');}
