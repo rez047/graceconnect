@@ -335,6 +335,20 @@
   }
   purgePhoneFromRally40();
   setInterval(purgePhoneFromRally40, 800);
+
+/* ============================================================
+     FIX: Back buttons for Public Forum / Plans (h28BackHome was undefined)
+     ============================================================ */
+  window.h28BackHome = function () {
+    if (typeof window.switchSection === 'function') {
+      window.switchSection('home');
+    } else {
+      document.querySelectorAll('.section').forEach(function (s) { s.classList.remove('active'); });
+      var h = document.getElementById('section-home'); if (h) h.classList.add('active');
+      var hm = document.getElementById('home-main'); if (hm) hm.classList.add('active');
+      window.scrollTo({ top: 0 });
+    }
+  };
 /* ============================================================
      CLEAN RALLY CAUSE: bypass old patch that demands a phone
      ============================================================ */
