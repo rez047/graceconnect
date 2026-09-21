@@ -350,6 +350,95 @@
     }
   };
 /* ============================================================
+     BROWSER HISTORY: device back button navigates within app
+     ============================================================ */
+  if (!window._gcHistoryInit) {
+    window._gcHistoryInit = true;
+    var gcNavStack = [];
+    
+    /* Push state when navigating to sub-pages */
+    function gcPushNav(label) {
+      try {
+        var state = { gcNav: label, ts: Date.now() };
+        window.history.pushState(state, '', '#' + label);
+        gcNavStack.push(label);
+      } catch (e) {}
+    }
+    
+    /* Intercept section switches */
+    if (typeof window.switchSection === 'function') {
+      var origSwitch = window.switchSection;
+      window.switchSection = function (name) {
+        gcPushNav('section-' + name);
+        return origSwitch.apply(this, arguments);
+      };
+    }
+    
+    /* Intercept sub-page switches */
+    if (typeof window.showSubPage === 'function') {
+      var origShowSub = window.showSubPage;
+      window.showSubPage = function (id) {
+        gcPushNav(id);
+        return origShowSub.apply(this, arguments);
+      };
+    }
+    
+    /* Intercept full-page opens (Forum, Plans, Trivia, etc.) */
+    ['h28OpenForum', 'h28OpenPrayer', 'h27OpenPage', 'gcOpenTrivia', 'gcOpenBible', 'gcOpenCharacters', 'gcOpenDevotional', 'ggOpenCategory'].forEach(function (fn) {
+      if (typeof window[fn] === 'function') {
+        var orig = window[fn];
+        window[fn] = function () {
+          gcPushNav(fn);
+          return orig.apply(this, arguments);
+        };
+      }
+    });
+    
+    /* Intercept _gcOpenDept (department pages) */
+    if (typeof window._gcOpenDept === 'function') {
+      var origOpenDept = window._gcOpenDept;
+      window._gcOpenDept = function (id) {
+        gcPushNav('dept-' + id);
+        return origOpenDept.apply(this, arguments);
+      };
+    }
+    
+    /* Handle browser back button */
+    window.addEventListener('popstate', function (e) {
+      if (!e.state || !e.state.gcNav) return;
+      var nav = e.state.gcNav;
+      gcNavStack.pop();
+      
+      /* Map nav labels to app actions */
+      if (nav === 'section-home') {
+        if (window.switchSection) window.switchSection('home');
+      } else if (nav.indexOf('section-') === 0) {
+        var sec = nav.replace('section-', '');
+        if (window.switchSection) window.switchSection(sec);
+      } else if (nav.indexOf('dept-') === 0) {
+        /* Back to previous view from department */
+        if (window.switchSection) window.switchSection('home');
+        if (window.showSubPage) setTimeout(function() { window.showSubPage('home-main'); }, 50);
+      } else if (nav === 'h28OpenForum' || nav === 'h28OpenPrayer' || nav === 'h27OpenPage') {
+        if (window.h28BackHome) window.h28BackHome();
+        else if (window.h27BackHome) window.h27BackHome();
+        else if (window.switchSection) window.switchSection('home');
+      } else if (nav === 'gcOpenTrivia' || nav === 'gcOpenBible' || nav === 'gcOpenCharacters' || nav === 'gcOpenDevotional') {
+        if (window.gcBackHome) window.gcBackHome();
+        else if (window.switchSection) window.switchSection('home');
+      } else if (nav === 'ggOpenCategory') {
+        if (window.ggSwitchGroupTab) window.ggSwitchGroupTab('categories');
+        else if (window.h32CatTab) window.h32CatTab('forum');
+      } else {
+        /* Generic sub-page */
+        if (window.showSubPage) window.showSubPage(nav);
+      }
+    });
+    
+    /* Initialize with current state */
+    try { window.history.replaceState({ gcNav: 'home' }, '', window.location.pathname); } catch (e) {}
+  }
+/* ============================================================
      CLEAN RALLY CAUSE: bypass old patch that demands a phone
      ============================================================ */
   window.createCause = function () {
