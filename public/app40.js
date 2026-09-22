@@ -525,6 +525,10 @@
     if (pass.length < 6) return alert('Password must be at least 6 characters');
     var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'register', phone: ph, code: code, password: pass, name: name }) });
     var j = await r.json().catch(function () { return {}; });
+    if (!r.ok && /no code sent/i.test(j.error || '')) {
+      gc40SendOtp();
+      return alert('📨 A fresh code was just sent to ' + ph + '.\n\nEnter the NEW code (replace any old one), then press Create again.');
+    }
     if (!r.ok || !j.ok) return alert(j.error || 'Registration failed');
     var sr = await window.sb.auth.signInWithPassword({ email: j.email, password: pass });
     if (sr.error) return alert('Login failed: ' + sr.error.message);
@@ -554,6 +558,7 @@
         if (!code) {
           if (!phone) return alert('Enter your phone number (e.g. 0712345678), then press Create again.');
           if (rp) rp.value = phone.replace('254', '0');
+          var oc = document.getElementById('ob-phonecode'); if (oc) oc.value = '';
           gc40SendOtp();
           return alert('📨 We texted a 6-digit code to ' + phone + '.\n\nType it into the "6-digit SMS code" box, then press Create Account again.');
         }
