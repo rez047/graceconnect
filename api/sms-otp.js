@@ -24,6 +24,8 @@ async function sendSms(phone, msg) {
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
+  if (!SUPA || !SKEY) return res.status(500).json({ error: 'Server config missing: set SUPABASE_URL and SUPABASE_SERVICE_KEY in Vercel, then REDEPLOY.' });
+  
   const { action, phone, code, password, name } = req.body || {};
   const p = norm(phone);
   if (!/^254\d{9}$/.test(p)) return res.status(400).json({ error: 'Invalid phone number' });
@@ -32,7 +34,8 @@ export default async function handler(req, res) {
     const c = String(Math.floor(100000 + Math.random() * 900000));
     const exp = new Date(Date.now() + 10 * 60 * 1000).toISOString();
     await supa('sms_otps?phone=eq.' + encodeURIComponent(p), { method: 'DELETE' });
-    await supa('sms_otps', { method: 'POST', body: JSON.stringify([{ phone: p, code: c, expires_at: exp }]) });
+    const ins = await supa('sms_otps', { method: 'POST', body: JSON.stringify([{ phone: p, code: c, expires_at: exp }]) });
+    if (!Array.isArray(ins) || !ins.length) return res.status(500).json({ error: 'Code storage failed: ' + JSON.stringify(ins).slice(0, 180) });
     const ok = await sendSms(p, 'ElduConnect verification code: ' + c + ' (valid 10 minutes). Do not share it.');
     if (!ok) return res.status(500).json({ error: 'SMS could not be sent. Check Africa\'s Talking credentials.' });
     return res.json({ ok: true });
@@ -41,15 +44,14 @@ export default async function handler(req, res) {
   if (action === 'register') {
     if (!password || String(password).length < 6) return res.status(400).json({ error: 'Password must be at least 6 characters' });
     const rows = await supa('sms_otps?phone=eq.' + encodeURIComponent(p) + '&used=eq.false&order=created_at.desc&limit=1');
-    if (!Array.isArray(rows)) return res.status(500).json({ error: 'Code storage missing — run the sms_otps SQL in Supabase.' });
-      const otp = rows[0] || null;
+    if (!Array.isArray(rows)) return res.status(500).json({ error: 'Code storage error: ' + JSON.stringify(rows).slice(0, 180) });
+    const otp = rows[0] || null;
     if (!otp) return res.status(400).json({ error: 'No code sent. Tap Send Code first.' });
     if (new Date(otp.expires_at).getTime() < Date.now()) return res.status(400).json({ error: 'Code expired. Tap Send Code again.' });
     if (Number(otp.attempts || 0) >= 5) return res.status(400).json({ error: 'Too many tries. Request a new code.' });
     if (String(code || '').trim() !== String(otp.code)) {
-      await supa('sms_otps?phone=eq.' + encodeURIComponent(p), { method: 'DELETE' });
-        const ins = await supa('sms_otps', { method: 'POST', body: JSON.stringify([{ phone: p, code: c, expires_at: exp }]) });
-        if (!Array.isArray(ins) || !ins.length) return res.status(500).json({ error: 'Code storage failed — run the sms_otps SQL in Supabase, then retry.' });
+      await supa('sms_otps?id=eq.' + otp.id, { method: 'PATCH', body: JSON.stringify({ attempts: Number(otp.attempts || 0) + 1 }) });
+      return res.status(400).json({ error: 'Wrong code. Check the SMS and try again.' });
     }
     const email = p + '@' + DOMAIN;
     const existing = await supa('profiles?phone=eq.' + encodeURIComponent(p) + '&select=id');
