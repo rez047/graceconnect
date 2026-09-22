@@ -15,13 +15,29 @@ function norm(p) { p = String(p || '').replace(/\s+/g, ''); if (p.startsWith('+'
 const AT_BASE = process.env.AT_ENV === 'production' ? 'https://api.africastalking.com' : 'https://api.sandbox.africastalking.com';
 async function sendSms(phone, msg) {
   const body = new URLSearchParams();
-  body.set('username', AT_USER); body.set('to', phone); body.set('message', msg);
+  body.set('username', AT_USER || ''); body.set('to', phone); body.set('message', msg);
   if (process.env.AT_SENDER_ID) body.set('from', process.env.AT_SENDER_ID);
-  const r = await fetch(AT_BASE + '/version1/messaging', { method: 'POST', headers: { apiKey: AT_KEY, Accept: 'application/json' }, body });
-  const j = await r.json().catch(() => null);
+  
+  let status = 0, txt = '';
+  try {
+    const r = await fetch(AT_BASE + '/version1/messaging', { 
+      method: 'POST', 
+      headers: { apiKey: AT_KEY || '', Accept: 'application/json', 'Content-Type': 'application/x-www-form-urlencoded' }, 
+      body 
+    });
+    status = r.status;
+    txt = await r.text().catch(() => '');
+  } catch (e) {
+    return { ok: false, status: 0, body: 'FETCH ERROR: ' + (e && e.message) };
+  }
+  
+  let j = null;
+  try { j = JSON.parse(txt); } catch (e) { j = null; }
+  
   const rec = j && j.SMSMessageData && j.SMSMessageData.Recipients && j.SMSMessageData.Recipients[0];
   const ok = !!(rec && (rec.statusCode === 101 || rec.statusCode === 102));
-  return { ok, raw: j };
+  
+  return { ok, status: status, body: txt.slice(0, 300) };
 }
 
 export default async function handler(req, res) {
@@ -39,8 +55,9 @@ export default async function handler(req, res) {
     await supa('sms_otps?phone=eq.' + encodeURIComponent(p), { method: 'DELETE' });
     const ins = await supa('sms_otps', { method: 'POST', body: JSON.stringify([{ phone: p, code: c, expires_at: exp }]) });
     if (!Array.isArray(ins) || !ins.length) return res.status(500).json({ error: 'Code storage failed: ' + JSON.stringify(ins).slice(0, 180) });
+    
     const sms = await sendSms(p, 'ElduConnect verification code: ' + c + ' (valid 10 minutes). Do not share it.');
-    if (!sms.ok) return res.status(500).json({ error: 'SMS failed: ' + JSON.stringify(sms.raw).slice(0, 200) });
+    if (!sms.ok) return res.status(500).json({ error: 'SMS failed [' + sms.status + ']: ' + sms.body });
     return res.json({ ok: true });
   }
 
