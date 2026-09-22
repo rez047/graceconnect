@@ -511,38 +511,36 @@
   }
   setInterval(injectPhoneMode40, 1500);
 
-  window.gc40SendOtp = async function () {
+  window.gc40SendOtp = async function (quiet) {
     var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
-    if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number e.g. 0712345678');
-    
+    if (!/^254\d{9}$/.test(ph)) { alert('Enter a valid phone number e.g. 0712345678'); return false; }
+    if (typeof window.firebase === 'undefined' || !window.firebase.auth || !window.firebaseAuth) {
+      alert('Firebase not loaded. Hard-refresh the page and try again.');
+      return false;
+    }
     var b = document.getElementById('gc40SendCode');
     if (b) { b.disabled = true; b.textContent = 'Sending…'; }
-    
-    if (typeof firebase === 'undefined' || !firebase.auth) {
-      alert('Firebase not loaded. Please refresh the page.');
-      if (b) { b.disabled = false; b.textContent = 'Send Code'; }
-      return;
-    }
-    
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('gc40SendCode', {
-        size: 'invisible',
-        callback: function() {}
-      });
-    }
-    
     try {
-      var confirmationResult = await window.firebaseAuth.signInWithPhoneNumber('+' + ph, window.recaptchaVerifier);
-      window.confirmationResult = confirmationResult;
-      alert('📨 Verification code sent to ' + ph + '. Check your SMS.');
-    } catch (e) {
-      alert('Could not send code: ' + (e.message || 'try again'));
-      if (window.recaptchaVerifier) { 
-        window.recaptchaVerifier.clear(); 
-        window.recaptchaVerifier = null; 
+      if (!window.recaptchaVerifier) {
+        window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('gc40SendCode', { size: 'invisible' });
       }
+      window.confirmationResult = await window.firebaseAuth.signInWithPhoneNumber('+' + ph, window.recaptchaVerifier);
+      if (b) { b.disabled = false; b.textContent = 'Send Code'; }
+      if (!quiet) alert('📨 Verification code sent to ' + ph + '. Check your SMS.');
+      return true;
+    } catch (e) {
+      var ec = String((e && e.code) || ''), em = String((e && e.message) || 'try again');
+      if (/unauthorized-domain/i.test(ec + em)) em = 'Domain not authorized: in Firebase Console → Authentication → Settings → Authorized domains, add graceconnect-eight.vercel.app';
+      else if (/invalid-phone-number/i.test(ec)) em = 'Invalid phone number format.';
+      else if (/too-many-requests/i.test(ec)) em = 'Too many attempts — wait a few minutes and retry.';
+      else if (/quota-exceeded/i.test(ec)) em = 'Firebase SMS quota exceeded.';
+      else if (/recaptcha/i.test(ec + em)) em = 'reCAPTCHA glitch — refresh the page and retry.';
+      alert('Could not send code: ' + em);
+      try { if (window.recaptchaVerifier) window.recaptchaVerifier.clear(); } catch (e2) {}
+      window.recaptchaVerifier = null;
+      if (b) { b.disabled = false; b.textContent = 'Send Code'; }
+      return false;
     }
-    if (b) { b.disabled = false; b.textContent = 'Send Code'; }
   };
 
   async function gc40PhoneRegister() {
@@ -556,10 +554,15 @@
     if (!code) return alert('Enter the 6-digit code from SMS');
     if (pass.length < 6) return alert('Password must be at least 6 characters');
     
-    if (!window.confirmationResult) return alert('Send code first');
+    if (!window.confirmationResult) {
+      var sentNow = await window.gc40SendOtp(true);
+      if (!sentNow) return;
+      return alert('📨 A fresh code was just sent to ' + ph + '.\nEnter it, then press Create again.');
+    }
     
     try {
       var result = await window.confirmationResult.confirm(code);
+      try { window.firebaseAuth.signOut(); } catch (e3) {}
       var firebaseUser = result.user;
       var email = ph + '@' + window.GC_SMS_DOMAIN;
       
@@ -592,7 +595,7 @@
 
   if (typeof window.completeOnboarding === 'function' && !window.completeOnboarding._gc40pm2) {
     var co40 = window.completeOnboarding;
-    window.completeOnboarding = function () {
+    window.completeOnboarding = async function () {
       injectPhoneMode40();
       var ei = document.getElementById('ob-email');
       var rp = document.getElementById('ob-regphone');
@@ -611,7 +614,8 @@
           if (!phone) return alert('Enter your phone number (e.g. 0712345678), then press Create again.');
           if (rp) rp.value = phone.replace('254', '0');
           var oc = document.getElementById('ob-phonecode'); if (oc) oc.value = '';
-          gc40SendOtp();
+          var sentOk = await window.gc40SendOtp(true);
+          if (!sentOk) return;
           return alert('📨 We texted a 6-digit code to ' + phone + '.\n\nType it into the "6-digit SMS code" box, then press Create Account again.');
         }
         return gc40PhoneRegister();
