@@ -525,7 +525,8 @@
     if (pass.length < 6) return alert('Password must be at least 6 characters');
     var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'register', phone: ph, code: code, password: pass, name: name }) });
     var j = await r.json().catch(function () { return {}; });
-    if (!r.ok && /no code sent/i.test(j.error || '')) {
+    if (!r.ok && /(no code sent|code expired)/i.test(j.error || '')) {
+      var oc2 = document.getElementById('ob-phonecode'); if (oc2) oc2.value = '';
       gc40SendOtp();
       return alert('📨 A fresh code was just sent to ' + ph + '.\n\nEnter the NEW code (replace any old one), then press Create again.');
     }
