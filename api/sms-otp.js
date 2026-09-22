@@ -12,19 +12,22 @@ async function supa(path, opts) {
 }
 function norm(p) { p = String(p || '').replace(/\s+/g, ''); if (p.startsWith('+')) p = p.slice(1); if (p.startsWith('0')) p = '254' + p.slice(1); return p; }
 
+const AT_BASE = process.env.AT_ENV === 'production' ? 'https://api.africastalking.com' : 'https://api.sandbox.africastalking.com';
 async function sendSms(phone, msg) {
   const body = new URLSearchParams();
   body.set('username', AT_USER); body.set('to', phone); body.set('message', msg);
   if (process.env.AT_SENDER_ID) body.set('from', process.env.AT_SENDER_ID);
-  const r = await fetch('https://api.africastalking.com/version1/messaging', { method: 'POST', headers: { apiKey: AT_KEY, Accept: 'application/json' }, body });
+  const r = await fetch(AT_BASE + '/version1/messaging', { method: 'POST', headers: { apiKey: AT_KEY, Accept: 'application/json' }, body });
   const j = await r.json().catch(() => null);
   const rec = j && j.SMSMessageData && j.SMSMessageData.Recipients && j.SMSMessageData.Recipients[0];
-  return !!(rec && (rec.statusCode === 101 || rec.statusCode === 102));
+  const ok = !!(rec && (rec.statusCode === 101 || rec.statusCode === 102));
+  return { ok, raw: j };
 }
 
 export default async function handler(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ error: 'POST only' });
   if (!SUPA || !SKEY) return res.status(500).json({ error: 'Server config missing: set SUPABASE_URL and SUPABASE_SERVICE_KEY in Vercel, then REDEPLOY.' });
+  if (!AT_USER || !AT_KEY) return res.status(500).json({ error: 'SMS config missing: set AFRICASTALKING_USERNAME and AFRICASTALKING_API_KEY in Vercel, then REDEPLOY.' });
   
   const { action, phone, code, password, name } = req.body || {};
   const p = norm(phone);
@@ -36,8 +39,8 @@ export default async function handler(req, res) {
     await supa('sms_otps?phone=eq.' + encodeURIComponent(p), { method: 'DELETE' });
     const ins = await supa('sms_otps', { method: 'POST', body: JSON.stringify([{ phone: p, code: c, expires_at: exp }]) });
     if (!Array.isArray(ins) || !ins.length) return res.status(500).json({ error: 'Code storage failed: ' + JSON.stringify(ins).slice(0, 180) });
-    const ok = await sendSms(p, 'ElduConnect verification code: ' + c + ' (valid 10 minutes). Do not share it.');
-    if (!ok) return res.status(500).json({ error: 'SMS could not be sent. Check Africa\'s Talking credentials.' });
+    const sms = await sendSms(p, 'ElduConnect verification code: ' + c + ' (valid 10 minutes). Do not share it.');
+    if (!sms.ok) return res.status(500).json({ error: 'SMS failed: ' + JSON.stringify(sms.raw).slice(0, 200) });
     return res.json({ ok: true });
   }
 
