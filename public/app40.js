@@ -439,6 +439,117 @@
     try { window.history.replaceState({ gcNav: 'home' }, '', window.location.pathname); } catch (e) {}
   }
 /* ============================================================
+     LANDING: church photo background + welcome video + register message
+     ============================================================ */
+  (function () {
+    var st = document.createElement('style');
+    st.textContent = '.hero-section::before{background:linear-gradient(to bottom,rgba(15,23,42,.25),rgba(15,23,42,.62))!important}'
+      + '.gc-welcome-wrap{position:relative;z-index:2;max-width:680px;margin:20px auto 0;width:100%;padding:0 16px}'
+      + '.gc-welcome-msg{background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:10px 14px;font-size:.9rem;line-height:1.5;margin-bottom:12px}'
+      + '.gc-welcome-video video{width:100%;border-radius:16px;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.4);display:block}';
+    document.head.appendChild(st);
+  })();
+  function landingExtras40() {
+    var hero = document.getElementById('heroSection') || document.querySelector('.hero-section');
+    if (!hero || hero.querySelector('.gc-welcome-wrap')) return;
+    var wrap = document.createElement('div'); wrap.className = 'gc-welcome-wrap';
+    wrap.innerHTML = '<div class="gc-welcome-msg">👋 <b>Karibu!</b> New here? Register with your <b>email</b> — or with your <b>phone number</b> if you don\'t have email (we text you a 6-digit code).</div>'
+      + '<div class="gc-welcome-video"><video controls playsinline preload="metadata"><source src="' + (window.GC_WELCOME_VIDEO || '/welcome.mp4') + '" type="video/mp4"></video></div>';
+    var btns = hero.querySelector('.hero-buttons');
+    if (btns && btns.parentNode) btns.parentNode.insertBefore(wrap, btns.nextSibling); else hero.appendChild(wrap);
+    var v = wrap.querySelector('video');
+    v.addEventListener('error', function () { var b = wrap.querySelector('.gc-welcome-video'); if (b) b.style.display = 'none'; }, true);
+    var im = new Image();
+    im.onload = function () { if (!hero.style.backgroundImage) { hero.style.backgroundImage = 'url(/church-hero.jpg)'; hero.style.backgroundSize = 'cover'; hero.style.backgroundPosition = 'center'; } };
+    im.src = '/church-hero.jpg';
+    try {
+      var c = db40();
+      if (c) c.from('church_settings').select('welcome_video_url').limit(1).single().then(function (r) {
+        if (r.data && r.data.welcome_video_url) { var s = wrap.querySelector('source'); if (s) { s.src = r.data.welcome_video_url; v.load(); } }
+      }).catch(function () {});
+    } catch (e) {}
+  }
+  setInterval(landingExtras40, 2000);
+
+  /* ============================================================
+     PHONE REGISTRATION (SMS OTP) + phone login
+     ============================================================ */
+  window.GC_SMS_DOMAIN = 'sms.elduconnect.app';
+  window.gcPhoneMode = false;
+  function injectPhoneMode40() {
+    var ov = document.getElementById('onboardingOverlay');
+    var ei = document.getElementById('ob-email');
+    if (!ov || !ei || ov.dataset.gc40pm) return;
+    ov.dataset.gc40pm = '1';
+    var eg = ei.closest('.form-group'); if (!eg) return;
+    var pg = document.createElement('div'); pg.className = 'form-group'; pg.id = 'gc40PhoneReg'; pg.style.display = 'none';
+    pg.innerHTML = '<label class="form-label">Phone Number</label>'
+      + '<div style="display:flex;gap:6px"><input class="form-input" id="ob-regphone" placeholder="07XX XXX XXX" style="flex:1;margin:0">'
+      + '<button class="btn btn-warm btn-sm" type="button" id="gc40SendCode" onclick="gc40SendOtp()">Send Code</button></div>'
+      + '<input class="form-input" id="ob-phonecode" placeholder="6-digit SMS code" style="margin-top:6px">';
+    var tg = document.createElement('button'); tg.type = 'button'; tg.className = 'btn btn-secondary-alt btn-block'; tg.id = 'gc40PhoneToggle';
+    tg.style.cssText = 'margin:6px 0;font-size:.78rem';
+    tg.innerHTML = '📱 No email? Register with phone number instead';
+    tg.onclick = function () {
+      window.gcPhoneMode = !window.gcPhoneMode;
+      eg.style.display = window.gcPhoneMode ? 'none' : '';
+      pg.style.display = window.gcPhoneMode ? '' : 'none';
+      tg.innerHTML = window.gcPhoneMode ? '✉️ Have an email? Use email instead' : '📱 No email? Register with phone number instead';
+    };
+    eg.parentNode.insertBefore(tg, eg);
+    eg.parentNode.insertBefore(pg, eg.nextSibling);
+  }
+  setInterval(injectPhoneMode40, 1500);
+
+  window.gc40SendOtp = async function () {
+    var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
+    if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number e.g. 0712345678');
+    var b = document.getElementById('gc40SendCode'); if (b) { b.disabled = true; b.textContent = 'Sending…'; }
+    try {
+      var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', phone: ph }) });
+      var j = await r.json();
+      if (!r.ok || !j.ok) alert('Could not send code: ' + (j.error || 'try again'));
+      else alert('📨 Code sent to ' + ph + '. It expires in 10 minutes.');
+    } catch (e) { alert('SMS service unreachable: ' + e.message); }
+    if (b) { var s = 30; b.textContent = s + 's'; var iv = setInterval(function () { s--; if (s <= 0) { clearInterval(iv); b.disabled = false; b.textContent = 'Send Code'; } else b.textContent = s + 's'; }, 1000); }
+  };
+
+  async function gc40PhoneRegister() {
+    var name = String((document.getElementById('ob-name') || {}).value || '').trim();
+    var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
+    var code = String((document.getElementById('ob-phonecode') || {}).value || '').trim();
+    var pass = String((document.getElementById('ob-password') || {}).value || '');
+    if (!name) return alert('Name required');
+    if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number');
+    if (!code) return alert('Enter the 6-digit code from SMS');
+    if (pass.length < 6) return alert('Password must be at least 6 characters');
+    var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'register', phone: ph, code: code, password: pass, name: name }) });
+    var j = await r.json().catch(function () { return {}; });
+    if (!r.ok || !j.ok) return alert(j.error || 'Registration failed');
+    var sr = await window.sb.auth.signInWithPassword({ email: j.email, password: pass });
+    if (sr.error) return alert('Login failed: ' + sr.error.message);
+    var ov = document.getElementById('onboardingOverlay'); if (ov) ov.classList.remove('show');
+    localStorage.setItem('onboarded', 'true');
+    alert('🎉 Account created and verified!');
+    if (window.hidePublicLanding) window.hidePublicLanding();
+    if (window.refreshRole) return window.refreshRole().then(function () { if (window.loadAll) window.loadAll(); });
+  }
+  if (typeof window.completeOnboarding === 'function' && !window.completeOnboarding._gc40pm2) {
+    var co40 = window.completeOnboarding;
+    window.completeOnboarding = function () { if (window.gcPhoneMode) return gc40PhoneRegister(); return co40.apply(this, arguments); };
+    window.completeOnboarding._gc40pm2 = true;
+  }
+  if (typeof window.doLogin === 'function' && !window.doLogin._gc40ph) {
+    var dl40 = window.doLogin;
+    window.doLogin = function () {
+      var ei = document.getElementById('login-email');
+      if (ei) { var n = normPhone40(ei.value); if (/^254\d{9}$/.test(n)) ei.value = n + '@' + window.GC_SMS_DOMAIN; }
+      return dl40.apply(this, arguments);
+    };
+    window.doLogin._gc40ph = true;
+  }
+  setInterval(function () { var ei = document.getElementById('login-email'); if (ei && ei.placeholder !== 'Email or phone number') ei.placeholder = 'Email or phone number'; }, 2000);
+/* ============================================================
      CLEAN RALLY CAUSE: bypass old patch that demands a phone
      ============================================================ */
   window.createCause = function () {
