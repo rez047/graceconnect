@@ -568,25 +568,13 @@
         return alert('This phone number is already registered. Please log in.');
       }
       
-      var cr = await fetch(window.SUPA_URL + '/auth/v1/admin/users', {
+      var cr = await fetch('/api/create-phone-user', {
         method: 'POST',
-        headers: { 
-          apikey: window.SUPA_SERVICE_KEY, 
-          Authorization: 'Bearer ' + window.SUPA_SERVICE_KEY, 
-          'Content-Type': 'application/json' 
-        },
-        body: JSON.stringify({ 
-          email: email, 
-          password: pass, 
-          email_confirm: true, 
-          phone: ph, 
-          user_metadata: { name: name, phone: ph, auth_method: 'firebase_phone' } 
-        })
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: ph, name: name, password: pass })
       });
       var cu = await cr.json();
-      if (!cr.ok || !cu.id) return alert('Could not create account: ' + (cu.message || 'unknown'));
-      
-      await window.sb.from('profiles').update({ phone: ph, name: name }).eq('id', cu.id);
+      if (!cr.ok || !cu.ok) return alert('Could not create account: ' + (cu.error || 'unknown'));
       
       var sr = await window.sb.auth.signInWithPassword({ email: email, password: pass });
       if (sr.error) return alert('Login failed: ' + sr.error.message);
