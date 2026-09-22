@@ -1274,7 +1274,21 @@
     <button class="btn btn-secondary-alt btn-block" onclick="closeModalDirect()">Close</button>
   </div>
 </div>
-
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-auth-compat.js"></script>
+<script>
+  var firebaseConfig = {
+    apiKey: "AIzaSyCkTJhbYWLta1NOl3KsaJx6B30wUVsvX-Y",
+    authDomain: "eldu-valley-baptist-church.firebaseapp.com",
+    projectId: "eldu-valley-baptist-church",
+    storageBucket: "eldu-valley-baptist-church.firebasestorage.app",
+    messagingSenderId: "182780444116",
+    appId: "1:182780444116:web:641616156f4ce454df2a41",
+    measurementId: "G-3ER5V2BGTL"
+  };
+  if (!firebase.apps.length) firebase.initializeApp(firebaseConfig);
+  window.firebaseAuth = firebase.auth();
+</script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="app3.js"></script>
 <script src="app4.js"></script>
