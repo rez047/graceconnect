@@ -3,9 +3,19 @@
    1) Reply toggle + DOM-driven send for c26/gg comments.
    2) REPORTS TAB: visible to leadership ONLY (group + category).
       Members no longer see the Reports tab at all.
+   3) Firebase Phone Auth (replaces AT SMS - works on all carriers)
    ============================================================ */
 (function () {
   'use strict';
+
+  /* Expose Supabase service key for phone registration */
+  window.SUPA_URL = 'https://amnskvvpwobxfdgnuvdc.supabase.co';
+  window.SUPA_SERVICE_KEY = (function() {
+    try {
+      var m = document.cookie.match(/(?:^|;)\s*sb-service-key=([^;]+)/);
+      return m ? decodeURIComponent(m[1]) : '';
+    } catch (e) { return ''; }
+  })();
 
   function db40() {
     try {
@@ -472,7 +482,7 @@
   setInterval(landingExtras40, 2000);
 
   /* ============================================================
-     PHONE REGISTRATION (SMS OTP) + phone login
+     FIREBASE PHONE REGISTRATION (replaces AT SMS - works on all carriers)
      ============================================================ */
   window.GC_SMS_DOMAIN = 'sms.elduconnect.app';
   window.gcPhoneMode = false;
@@ -504,14 +514,35 @@
   window.gc40SendOtp = async function () {
     var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
     if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number e.g. 0712345678');
-    var b = document.getElementById('gc40SendCode'); if (b) { b.disabled = true; b.textContent = 'Sending…'; }
+    
+    var b = document.getElementById('gc40SendCode');
+    if (b) { b.disabled = true; b.textContent = 'Sending…'; }
+    
+    if (typeof firebase === 'undefined' || !firebase.auth) {
+      alert('Firebase not loaded. Please refresh the page.');
+      if (b) { b.disabled = false; b.textContent = 'Send Code'; }
+      return;
+    }
+    
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new firebase.auth.RecaptchaVerifier('gc40SendCode', {
+        size: 'invisible',
+        callback: function() {}
+      });
+    }
+    
     try {
-      var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', phone: ph }) });
-      var j = await r.json();
-      if (!r.ok || !j.ok) alert('Could not send code: ' + (j.error || 'try again'));
-      else alert('📨 Code sent to ' + ph + '. It expires in 10 minutes.');
-    } catch (e) { alert('SMS service unreachable: ' + e.message); }
-    if (b) { var s = 30; b.textContent = s + 's'; var iv = setInterval(function () { s--; if (s <= 0) { clearInterval(iv); b.disabled = false; b.textContent = 'Send Code'; } else b.textContent = s + 's'; }, 1000); }
+      var confirmationResult = await window.firebaseAuth.signInWithPhoneNumber('+' + ph, window.recaptchaVerifier);
+      window.confirmationResult = confirmationResult;
+      alert('📨 Verification code sent to ' + ph + '. Check your SMS.');
+    } catch (e) {
+      alert('Could not send code: ' + (e.message || 'try again'));
+      if (window.recaptchaVerifier) { 
+        window.recaptchaVerifier.clear(); 
+        window.recaptchaVerifier = null; 
+      }
+    }
+    if (b) { b.disabled = false; b.textContent = 'Send Code'; }
   };
 
   async function gc40PhoneRegister() {
@@ -519,26 +550,58 @@
     var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
     var code = String((document.getElementById('ob-phonecode') || {}).value || '').trim();
     var pass = String((document.getElementById('ob-password') || {}).value || '');
+    
     if (!name) return alert('Name required');
     if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number');
     if (!code) return alert('Enter the 6-digit code from SMS');
     if (pass.length < 6) return alert('Password must be at least 6 characters');
-    var r = await fetch('/api/sms-otp', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'register', phone: ph, code: code, password: pass, name: name }) });
-    var j = await r.json().catch(function () { return {}; });
-    if (!r.ok && /(no code sent|code expired)/i.test(j.error || '')) {
-      var oc2 = document.getElementById('ob-phonecode'); if (oc2) oc2.value = '';
-      gc40SendOtp();
-      return alert('📨 A fresh code was just sent to ' + ph + '.\n\nEnter the NEW code (replace any old one), then press Create again.');
+    
+    if (!window.confirmationResult) return alert('Send code first');
+    
+    try {
+      var result = await window.confirmationResult.confirm(code);
+      var firebaseUser = result.user;
+      var email = ph + '@' + window.GC_SMS_DOMAIN;
+      
+      var existing = await window.sb.from('profiles').select('id').eq('phone', ph);
+      if (existing.data && existing.data.length) {
+        return alert('This phone number is already registered. Please log in.');
+      }
+      
+      var cr = await fetch(window.SUPA_URL + '/auth/v1/admin/users', {
+        method: 'POST',
+        headers: { 
+          apikey: window.SUPA_SERVICE_KEY, 
+          Authorization: 'Bearer ' + window.SUPA_SERVICE_KEY, 
+          'Content-Type': 'application/json' 
+        },
+        body: JSON.stringify({ 
+          email: email, 
+          password: pass, 
+          email_confirm: true, 
+          phone: ph, 
+          user_metadata: { name: name, phone: ph, auth_method: 'firebase_phone' } 
+        })
+      });
+      var cu = await cr.json();
+      if (!cr.ok || !cu.id) return alert('Could not create account: ' + (cu.message || 'unknown'));
+      
+      await window.sb.from('profiles').update({ phone: ph, name: name }).eq('id', cu.id);
+      
+      var sr = await window.sb.auth.signInWithPassword({ email: email, password: pass });
+      if (sr.error) return alert('Login failed: ' + sr.error.message);
+      
+      var ov = document.getElementById('onboardingOverlay');
+      if (ov) ov.classList.remove('show');
+      localStorage.setItem('onboarded', 'true');
+      alert('🎉 Account created and verified!');
+      if (window.hidePublicLanding) window.hidePublicLanding();
+      if (window.refreshRole) return window.refreshRole().then(function () { if (window.loadAll) window.loadAll(); });
+    } catch (e) {
+      alert('Verification failed: ' + (e.message || 'wrong code'));
     }
-    if (!r.ok || !j.ok) return alert(j.error || 'Registration failed');
-    var sr = await window.sb.auth.signInWithPassword({ email: j.email, password: pass });
-    if (sr.error) return alert('Login failed: ' + sr.error.message);
-    var ov = document.getElementById('onboardingOverlay'); if (ov) ov.classList.remove('show');
-    localStorage.setItem('onboarded', 'true');
-    alert('🎉 Account created and verified!');
-    if (window.hidePublicLanding) window.hidePublicLanding();
-    if (window.refreshRole) return window.refreshRole().then(function () { if (window.loadAll) window.loadAll(); });
   }
+
   if (typeof window.completeOnboarding === 'function' && !window.completeOnboarding._gc40pm2) {
     var co40 = window.completeOnboarding;
     window.completeOnboarding = function () {
@@ -568,7 +631,7 @@
       return co40.apply(this, arguments);
     };
     window.completeOnboarding._gc40pm2 = true;
- }
+  }
   if (typeof window.doLogin === 'function' && !window.doLogin._gc40ph) {
     var dl40 = window.doLogin;
     window.doLogin = function () {
@@ -630,5 +693,5 @@
     };
     window.alert._gc40wrapped = true;
   }
-  console.log('✝️ app40.js loaded — reply fix + Reports tab leadership-only');
+  console.log('✝️ app40.js loaded — reply fix + Reports tab leadership-only + Firebase Phone Auth');
 })();
