@@ -454,7 +454,7 @@
     var hero = document.getElementById('heroSection') || document.querySelector('.hero-section');
     if (!hero || hero.querySelector('.gc-welcome-wrap')) return;
     var wrap = document.createElement('div'); wrap.className = 'gc-welcome-wrap';
-    wrap.innerHTML =
+    wrap.innerHTML = '<div class="gc-welcome-msg">👋 <b>Karibu!</b> </div>'
       + '<div class="gc-welcome-video"><video controls playsinline preload="metadata"><source src="' + (window.GC_WELCOME_VIDEO || '/welcome.mp4') + '" type="video/mp4"></video></div>';
     var btns = hero.querySelector('.hero-buttons');
     if (btns && btns.parentNode) btns.parentNode.insertBefore(wrap, btns.nextSibling); else hero.appendChild(wrap);
