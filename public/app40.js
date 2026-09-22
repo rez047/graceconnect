@@ -536,9 +536,33 @@
   }
   if (typeof window.completeOnboarding === 'function' && !window.completeOnboarding._gc40pm2) {
     var co40 = window.completeOnboarding;
-    window.completeOnboarding = function () { if (window.gcPhoneMode) return gc40PhoneRegister(); return co40.apply(this, arguments); };
+    window.completeOnboarding = function () {
+      injectPhoneMode40();
+      var ei = document.getElementById('ob-email');
+      var rp = document.getElementById('ob-regphone');
+      var ev = ei ? ei.value.trim() : '';
+      var rv = rp ? rp.value.trim() : '';
+      var nE = normPhone40(ev), nR = normPhone40(rv);
+      var phone = '';
+      if (/^254\d{9}$/.test(nR)) phone = nR;
+      else if (ev.indexOf('@') === -1 && /^254\d{9}$/.test(nE)) { phone = nE; if (rp && !rp.value) rp.value = ev; }
+      if (window.gcPhoneMode || phone) {
+        window.gcPhoneMode = true;
+        var pg = document.getElementById('gc40PhoneReg'); if (pg) pg.style.display = '';
+        var eg = ei ? ei.closest('.form-group') : null; if (eg) eg.style.display = 'none';
+        var code = String((document.getElementById('ob-phonecode') || {}).value || '').trim();
+        if (!code) {
+          if (!phone) return alert('Enter your phone number (e.g. 0712345678), then press Create again.');
+          if (rp) rp.value = phone.replace('254', '0');
+          gc40SendOtp();
+          return alert('📨 We texted a 6-digit code to ' + phone + '.\n\nType it into the "6-digit SMS code" box, then press Create Account again.');
+        }
+        return gc40PhoneRegister();
+      }
+      return co40.apply(this, arguments);
+    };
     window.completeOnboarding._gc40pm2 = true;
-  }
+ }
   if (typeof window.doLogin === 'function' && !window.doLogin._gc40ph) {
     var dl40 = window.doLogin;
     window.doLogin = function () {
