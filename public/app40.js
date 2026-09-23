@@ -4,7 +4,7 @@
    2) REPORTS TAB: visible to leadership ONLY (group + category).
    3) Phone registration WITHOUT SMS - instant, secure.
    4) Strong password validation with visual feedback.
-   5) LANDING: church photo background + welcome video.
+   5) LANDING: church photo background + welcome video (moved).
    ============================================================ */
 (function () {
   'use strict';
@@ -155,7 +155,6 @@
   }
 
   function gateReports40() {
-    /* Group page Reports tab */
     var gbtn = document.getElementById('gg-tabbtn-reports');
     if (gbtn && window._gg && window._gg.currentGroupId) {
       groupLead40(window._gg.currentGroupId).then(function (ok) {
@@ -166,7 +165,6 @@
         }
       });
     }
-    /* Category page Reports tab */
     var cbtn = document.getElementById('h32ct-reports');
     if (cbtn && window._h32Cat) {
       catLead40(window._h32Cat).then(function (ok) {
@@ -185,8 +183,7 @@
   }
 
   /* ============================================================
-     M-PESA EXCLUSIVE: neutralize the injected gcPayMethod
-     dropdown wherever it appears (Rally Cause + Give Now)
+     M-PESA EXCLUSIVE
      ============================================================ */
   window.gcPayMethodChange = function () { return false; };
 
@@ -225,8 +222,6 @@
 
   /* ============================================================
      M-PESA DARAJA (STK Push) — Give Now flow
-     Phone box ONLY inside #giveModal (pre-filled from profile).
-     Never in Rally Cause. No native prompts, no alerts asking.
      ============================================================ */
   var origConfirm40 = window.confirmGiving;
   function normPhone40(p) {
@@ -310,21 +305,19 @@
     }).catch(function (e) { alert('M-Pesa not reachable: ' + e.message); });
   };
 
-  /* ---- Guard 1: no patch may pop a prompt() asking for a phone number ---- */
   if (!window.prompt._gc40wrapped) {
     var origPrompt40 = window.prompt;
     window.prompt = function (msg, def) {
       var m = String(msg || '');
       if (/m-?pesa|phone|number|msisdn|07\d/i.test(m)) {
         var auto = (window.profile && window.profile.phone) || def || '';
-        if (auto) return auto;          /* answer silently, never show dialog */
+        if (auto) return auto;
       }
       return origPrompt40.apply(this, arguments);
     };
     window.prompt._gc40wrapped = true;
   }
 
-  /* ---- Guard 2: purge ANY phone / M-Pesa-number field from Rally Cause modal ---- */
   function purgePhoneFromRally40() {
     var modal = document.getElementById('givingModal');
     if (!modal) return;
@@ -339,7 +332,7 @@
   setInterval(purgePhoneFromRally40, 800);
 
   /* ============================================================
-     FIX: Back buttons for Public Forum / Plans
+     FIX: Back buttons
      ============================================================ */
   window.h28BackHome = function () {
     if (typeof window.switchSection === 'function') {
@@ -353,12 +346,11 @@
   };
 
   /* ============================================================
-     BROWSER HISTORY: device back button navigates within app
+     BROWSER HISTORY
      ============================================================ */
   if (!window._gcHistoryInit) {
     window._gcHistoryInit = true;
     var gcNavStack = [];
-
     function gcPushNav(label) {
       try {
         var state = { gcNav: label, ts: Date.now() };
@@ -366,7 +358,6 @@
         gcNavStack.push(label);
       } catch (e) {}
     }
-
     if (typeof window.switchSection === 'function') {
       var origSwitch = window.switchSection;
       window.switchSection = function (name) {
@@ -374,7 +365,6 @@
         return origSwitch.apply(this, arguments);
       };
     }
-
     if (typeof window.showSubPage === 'function') {
       var origShowSub = window.showSubPage;
       window.showSubPage = function (id) {
@@ -382,7 +372,6 @@
         return origShowSub.apply(this, arguments);
       };
     }
-
     ['h28OpenForum', 'h28OpenPrayer', 'h27OpenPage', 'gcOpenTrivia', 'gcOpenBible', 'gcOpenCharacters', 'gcOpenDevotional', 'ggOpenCategory'].forEach(function (fn) {
       if (typeof window[fn] === 'function') {
         var orig = window[fn];
@@ -392,7 +381,6 @@
         };
       }
     });
-
     if (typeof window._gcOpenDept === 'function') {
       var origOpenDept = window._gcOpenDept;
       window._gcOpenDept = function (id) {
@@ -400,7 +388,6 @@
         return origOpenDept.apply(this, arguments);
       };
     }
-
     window.addEventListener('popstate', function (e) {
       if (!e.state || !e.state.gcNav) return;
       var nav = e.state.gcNav;
@@ -427,28 +414,26 @@
         if (window.showSubPage) window.showSubPage(nav);
       }
     });
-
     try { window.history.replaceState({ gcNav: 'home' }, '', window.location.pathname); } catch (e) {}
   }
 
   /* ============================================================
      LANDING: church photo background + welcome video
+     (Video moved to sit just above "Join Us in Worship")
      ============================================================ */
   (function () {
     var st = document.createElement('style');
     st.textContent = '.hero-section::before{background:linear-gradient(to bottom,rgba(15,23,42,.25),rgba(15,23,42,.62))!important}'
-      + '.gc-welcome-wrap{position:relative;z-index:2;max-width:680px;margin:20px auto 0;width:100%;padding:0 16px}'
-      + '.gc-welcome-video{display:none;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.45)}'
+      + '.gc-welcome-wrap{max-width:800px;margin:40px auto;width:100%;padding:0 16px}'
+      + '.gc-welcome-video{display:none;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.15)}'
       + '.gc-welcome-video.ready{display:block}'
-      + '.gc-welcome-video video{width:100%;height:100%;object-fit:cover;display:block}';
+      + '.gc-welcome-video video{width:100%;height:100%;object-fit:cover;display:block;position:relative!important;inset:auto!important;z-index:auto!important;opacity:1!important}';
     document.head.appendChild(st);
   })();
 
   function landingExtras40() {
     var hero = document.getElementById('heroSection') || document.querySelector('.hero-section');
-    if (!hero) return;
-    /* JS fallback: church photo even if index.html CSS is missing */
-    if (!hero.style.backgroundImage) {
+    if (hero && !hero.style.backgroundImage) {
       var im = new Image();
       im.onload = function () {
         if (!hero.style.backgroundImage) {
@@ -459,18 +444,29 @@
       };
       im.src = '/church-hero.jpg';
     }
-    if (hero.querySelector('.gc-welcome-wrap')) return;
-    var wrap = document.createElement('div'); wrap.className = 'gc-welcome-wrap';
+
+    if (document.querySelector('.gc-welcome-wrap')) return;
+
+    /* Target the "Join Us in Worship" section */
+    var servicesSection = document.getElementById('services');
+    if (!servicesSection) return;
+
+    var wrap = document.createElement('div');
+    wrap.className = 'gc-welcome-wrap';
     wrap.innerHTML = '<div class="gc-welcome-video"><video controls playsinline preload="metadata" autoplay muted loop></video></div>';
-    var btns = hero.querySelector('.hero-buttons');
-    if (btns && btns.parentNode) btns.parentNode.insertBefore(wrap, btns.nextSibling); else hero.appendChild(wrap);
+
+    /* Insert the video right before the services section */
+    servicesSection.parentNode.insertBefore(wrap, servicesSection);
+
     var box = wrap.querySelector('.gc-welcome-video');
     var v = wrap.querySelector('video');
     v.addEventListener('loadedmetadata', function () { box.classList.add('ready'); });
     v.addEventListener('error', function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, true);
+
     var src = window.GC_WELCOME_VIDEO || '/welcome.mp4';
     v.src = src;
     v.load();
+
     try {
       var c = db40();
       if (c) c.from('church_settings').select('welcome_video_url').limit(1).single().then(function (r) {
@@ -478,11 +474,10 @@
       }).catch(function () {});
     } catch (e) {}
   }
-  setInterval(landingExtras40, 2000);   /* ← THE LINE THAT WAS MISSING */
+  setInterval(landingExtras40, 2000);
 
   /* ============================================================
      PHONE REGISTRATION - NO SMS, INSTANT ACCESS
-     With strong password validation
      ============================================================ */
   window.GC_SMS_DOMAIN = 'sms.elduconnect.app';
   window.gcPhoneMode = false;
@@ -510,7 +505,6 @@
   }
   setInterval(injectPhoneMode40, 1500);
 
-  /* Password strength validation */
   function validatePasswordStrength(password) {
     var hasMinLength = password.length >= 8;
     var hasNumber = /\d/.test(password);
@@ -617,7 +611,7 @@
   setInterval(function () { var ei = document.getElementById('login-email'); if (ei && ei.placeholder !== 'Email or phone number') ei.placeholder = 'Email or phone number'; }, 2000);
 
   /* ============================================================
-     CLEAN RALLY CAUSE: bypass old patch that demands a phone
+     CLEAN RALLY CAUSE
      ============================================================ */
   window.createCause = function () {
     if (!window.user || !window.sb) return alert('Log in');
@@ -657,7 +651,6 @@
     });
   }, 1200);
 
-  /* swallow any leftover "Enter the M-Pesa number" alert from old patches */
   if (!window.alert._gc40wrapped) {
     var origAlert40 = window.alert;
     window.alert = function (m) {
@@ -666,5 +659,5 @@
     };
     window.alert._gc40wrapped = true;
   }
-  console.log('✝️ app40.js loaded — instant phone registration + strong password validation + landing photo/video');
+  console.log('✝️ app40.js loaded — video moved, syntax repaired, phone registration active');
 })();
