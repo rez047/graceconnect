@@ -620,9 +620,12 @@ var grid = document.getElementById('ministriesGrid');
 if (!sec || !grid) return;
 var GHOST = /^(no ministries yet\.?|join a ministry\.?)$/i;
 
-/* ONLY actual ministry cards count as real ministries */
-var realCards = grid.querySelectorAll('.ministry-card');
-if (!realCards.length) return;
+/* ANY non-ghost child counts as real content (class-agnostic) */
+var real = 0;
+Array.prototype.forEach.call(grid.children, function (n) {
+  if (!GHOST.test((n.textContent || '').trim())) real++;
+});
+if (!real) return;
 
 /* Remove ONLY elements whose COMPLETE text is the ghost text */
 Array.prototype.forEach.call(sec.querySelectorAll('*'), function (n) {
