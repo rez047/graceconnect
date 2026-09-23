@@ -625,7 +625,6 @@ var real = 0;
 Array.prototype.forEach.call(grid.children, function (n) {
   if (!GHOST.test((n.textContent || '').trim())) real++;
 });
-if (!real) return;
 
 /* Remove ONLY elements whose COMPLETE text is the ghost text */
 Array.prototype.forEach.call(sec.querySelectorAll('*'), function (n) {
