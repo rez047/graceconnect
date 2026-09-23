@@ -2,8 +2,9 @@
    GRACECONNECT — APP40.JS
    1) Reply toggle + DOM-driven send for c26/gg comments.
    2) REPORTS TAB: visible to leadership ONLY (group + category).
-   3) Phone registration WITHOUT SMS - instant, secure
-   4) Strong password validation with visual feedback
+   3) Phone registration WITHOUT SMS - instant, secure.
+   4) Strong password validation with visual feedback.
+   5) LANDING: church photo background + welcome video.
    ============================================================ */
 (function () {
   'use strict';
@@ -182,6 +183,7 @@
     var gt = null;
     new MutationObserver(function () { clearTimeout(gt); gt = setTimeout(gateReports40, 300); }).observe(document.body, { childList: true, subtree: true });
   }
+
   /* ============================================================
      M-PESA EXCLUSIVE: neutralize the injected gcPayMethod
      dropdown wherever it appears (Rally Cause + Give Now)
@@ -189,8 +191,6 @@
   window.gcPayMethodChange = function () { return false; };
 
   function lockPayMethod40() {
-    /* hide + lock every gcPayMethod select (hidden keeps .value='mpesa'
-       so any old wrapper that reads it still gets mpesa, never crashes) */
     document.querySelectorAll('[id="gcPayMethod"]').forEach(function (sel) {
       try { sel.value = 'mpesa'; } catch (e) {}
       sel.onchange = null;
@@ -203,7 +203,6 @@
         wrap.style.display = 'none';
       }
     });
-    /* hide any other cash/bank method group in both giving modals */
     ['giveModal', 'givingModal'].forEach(function (id) {
       var modal = document.getElementById(id);
       if (!modal) return;
@@ -223,7 +222,8 @@
     };
     window.openModal._gc40lock = true;
   }
-/* ============================================================
+
+  /* ============================================================
      M-PESA DARAJA (STK Push) — Give Now flow
      Phone box ONLY inside #giveModal (pre-filled from profile).
      Never in Rally Cause. No native prompts, no alerts asking.
@@ -309,7 +309,8 @@
       });
     }).catch(function (e) { alert('M-Pesa not reachable: ' + e.message); });
   };
-   /* ---- Guard 1: no patch may pop a prompt() asking for a phone number ---- */
+
+  /* ---- Guard 1: no patch may pop a prompt() asking for a phone number ---- */
   if (!window.prompt._gc40wrapped) {
     var origPrompt40 = window.prompt;
     window.prompt = function (msg, def) {
@@ -337,8 +338,8 @@
   purgePhoneFromRally40();
   setInterval(purgePhoneFromRally40, 800);
 
-/* ============================================================
-     FIX: Back buttons for Public Forum / Plans (h28BackHome was undefined)
+  /* ============================================================
+     FIX: Back buttons for Public Forum / Plans
      ============================================================ */
   window.h28BackHome = function () {
     if (typeof window.switchSection === 'function') {
@@ -350,14 +351,14 @@
       window.scrollTo({ top: 0 });
     }
   };
-/* ============================================================
+
+  /* ============================================================
      BROWSER HISTORY: device back button navigates within app
      ============================================================ */
   if (!window._gcHistoryInit) {
     window._gcHistoryInit = true;
     var gcNavStack = [];
-    
-    /* Push state when navigating to sub-pages */
+
     function gcPushNav(label) {
       try {
         var state = { gcNav: label, ts: Date.now() };
@@ -365,8 +366,7 @@
         gcNavStack.push(label);
       } catch (e) {}
     }
-    
-    /* Intercept section switches */
+
     if (typeof window.switchSection === 'function') {
       var origSwitch = window.switchSection;
       window.switchSection = function (name) {
@@ -374,8 +374,7 @@
         return origSwitch.apply(this, arguments);
       };
     }
-    
-    /* Intercept sub-page switches */
+
     if (typeof window.showSubPage === 'function') {
       var origShowSub = window.showSubPage;
       window.showSubPage = function (id) {
@@ -383,8 +382,7 @@
         return origShowSub.apply(this, arguments);
       };
     }
-    
-    /* Intercept full-page opens (Forum, Plans, Trivia, etc.) */
+
     ['h28OpenForum', 'h28OpenPrayer', 'h27OpenPage', 'gcOpenTrivia', 'gcOpenBible', 'gcOpenCharacters', 'gcOpenDevotional', 'ggOpenCategory'].forEach(function (fn) {
       if (typeof window[fn] === 'function') {
         var orig = window[fn];
@@ -394,8 +392,7 @@
         };
       }
     });
-    
-    /* Intercept _gcOpenDept (department pages) */
+
     if (typeof window._gcOpenDept === 'function') {
       var origOpenDept = window._gcOpenDept;
       window._gcOpenDept = function (id) {
@@ -403,23 +400,19 @@
         return origOpenDept.apply(this, arguments);
       };
     }
-    
-    /* Handle browser back button */
+
     window.addEventListener('popstate', function (e) {
       if (!e.state || !e.state.gcNav) return;
       var nav = e.state.gcNav;
       gcNavStack.pop();
-      
-      /* Map nav labels to app actions */
       if (nav === 'section-home') {
         if (window.switchSection) window.switchSection('home');
       } else if (nav.indexOf('section-') === 0) {
         var sec = nav.replace('section-', '');
         if (window.switchSection) window.switchSection(sec);
       } else if (nav.indexOf('dept-') === 0) {
-        /* Back to previous view from department */
         if (window.switchSection) window.switchSection('home');
-        if (window.showSubPage) setTimeout(function() { window.showSubPage('home-main'); }, 50);
+        if (window.showSubPage) setTimeout(function () { window.showSubPage('home-main'); }, 50);
       } else if (nav === 'h28OpenForum' || nav === 'h28OpenPrayer' || nav === 'h27OpenPage') {
         if (window.h28BackHome) window.h28BackHome();
         else if (window.h27BackHome) window.h27BackHome();
@@ -431,16 +424,15 @@
         if (window.ggSwitchGroupTab) window.ggSwitchGroupTab('categories');
         else if (window.h32CatTab) window.h32CatTab('forum');
       } else {
-        /* Generic sub-page */
         if (window.showSubPage) window.showSubPage(nav);
       }
     });
-    
-    /* Initialize with current state */
+
     try { window.history.replaceState({ gcNav: 'home' }, '', window.location.pathname); } catch (e) {}
   }
-/* ============================================================
-     LANDING: church photo background + welcome video + register message
+
+  /* ============================================================
+     LANDING: church photo background + welcome video
      ============================================================ */
   (function () {
     var st = document.createElement('style');
@@ -451,9 +443,23 @@
       + '.gc-welcome-video video{width:100%;height:100%;object-fit:cover;display:block}';
     document.head.appendChild(st);
   })();
+
   function landingExtras40() {
     var hero = document.getElementById('heroSection') || document.querySelector('.hero-section');
-    if (!hero || hero.querySelector('.gc-welcome-wrap')) return;
+    if (!hero) return;
+    /* JS fallback: church photo even if index.html CSS is missing */
+    if (!hero.style.backgroundImage) {
+      var im = new Image();
+      im.onload = function () {
+        if (!hero.style.backgroundImage) {
+          hero.style.backgroundImage = 'url(/church-hero.jpg)';
+          hero.style.backgroundSize = 'cover';
+          hero.style.backgroundPosition = 'center';
+        }
+      };
+      im.src = '/church-hero.jpg';
+    }
+    if (hero.querySelector('.gc-welcome-wrap')) return;
     var wrap = document.createElement('div'); wrap.className = 'gc-welcome-wrap';
     wrap.innerHTML = '<div class="gc-welcome-video"><video controls playsinline preload="metadata" autoplay muted loop></video></div>';
     var btns = hero.querySelector('.hero-buttons');
@@ -472,7 +478,7 @@
       }).catch(function () {});
     } catch (e) {}
   }
-  
+  setInterval(landingExtras40, 2000);   /* ← THE LINE THAT WAS MISSING */
 
   /* ============================================================
      PHONE REGISTRATION - NO SMS, INSTANT ACCESS
@@ -480,7 +486,7 @@
      ============================================================ */
   window.GC_SMS_DOMAIN = 'sms.elduconnect.app';
   window.gcPhoneMode = false;
-  
+
   function injectPhoneMode40() {
     var ov = document.getElementById('onboardingOverlay');
     var ei = document.getElementById('ob-email');
@@ -520,7 +526,6 @@
   function showPasswordRequirements(passwordInput) {
     var password = passwordInput.value;
     var validation = validatePasswordStrength(password);
-    
     var reqDiv = document.getElementById('password-requirements');
     if (!reqDiv) {
       reqDiv = document.createElement('div');
@@ -528,8 +533,7 @@
       reqDiv.style.cssText = 'margin-top:8px;font-size:0.85rem;line-height:1.6';
       passwordInput.parentNode.appendChild(reqDiv);
     }
-    
-    reqDiv.innerHTML = 
+    reqDiv.innerHTML =
       '<div style="color:' + (validation.hasMinLength ? '#10b981' : '#ef4444') + '">' +
         (validation.hasMinLength ? '✓' : '✗') + ' At least 8 characters' +
       '</div>' +
@@ -539,18 +543,14 @@
       '<div style="color:' + (validation.hasSpecial ? '#10b981' : '#ef4444') + '">' +
         (validation.hasSpecial ? '✓' : '✗') + ' Contains a special character (!@#$%^&*...)' +
       '</div>';
-    
     return validation.isValid;
   }
 
-  /* Attach password validation to password input */
-  setInterval(function() {
+  setInterval(function () {
     var pwInput = document.getElementById('ob-password');
     if (pwInput && !pwInput.dataset.gc40pwValidated) {
       pwInput.dataset.gc40pwValidated = '1';
-      pwInput.addEventListener('input', function() {
-        showPasswordRequirements(this);
-      });
+      pwInput.addEventListener('input', function () { showPasswordRequirements(this); });
       showPasswordRequirements(pwInput);
     }
   }, 1500);
@@ -559,15 +559,12 @@
     var name = String((document.getElementById('ob-name') || {}).value || '').trim();
     var ph = normPhone40((document.getElementById('ob-regphone') || {}).value);
     var pass = String((document.getElementById('ob-password') || {}).value || '');
-    
     if (!name) return alert('Name required');
     if (!/^254\d{9}$/.test(ph)) return alert('Enter a valid phone number e.g. 0712345678');
-    
     var validation = validatePasswordStrength(pass);
     if (!validation.isValid) {
       return alert('Password must be at least 8 characters with a number and special character');
     }
-    
     var cr = await fetch('/api/create-phone-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -575,10 +572,8 @@
     });
     var cu = await cr.json().catch(function () { return {}; });
     if (!cr.ok || !cu.ok) return alert(cu.error || 'Could not create account');
-    
     var sr = await window.sb.auth.signInWithPassword({ email: ph + '@' + window.GC_SMS_DOMAIN, password: pass });
     if (sr.error) return alert('Login failed: ' + sr.error.message);
-    
     var ov = document.getElementById('onboardingOverlay'); if (ov) ov.classList.remove('show');
     localStorage.setItem('onboarded', 'true');
     alert('🎉 Karibu! Account created — you are in.');
@@ -598,15 +593,12 @@
       var phone = '';
       if (/^254\d{9}$/.test(nR)) phone = nR;
       else if (ev.indexOf('@') === -1 && /^254\d{9}$/.test(nE)) { phone = nE; if (rp && !rp.value) rp.value = ev; }
-      
       if (window.gcPhoneMode || phone) {
         window.gcPhoneMode = true;
         var pg = document.getElementById('gc40PhoneReg'); if (pg) pg.style.display = '';
         var eg = ei ? ei.closest('.form-group') : null; if (eg) eg.style.display = 'none';
-        
         if (!phone) return alert('Enter your phone number (e.g. 0712345678), then press Create again.');
         if (rp) rp.value = phone.replace('254', '0');
-        
         return gc40PhoneRegisterDirect();
       }
       return co40.apply(this, arguments);
@@ -623,7 +615,8 @@
     window.doLogin._gc40ph = true;
   }
   setInterval(function () { var ei = document.getElementById('login-email'); if (ei && ei.placeholder !== 'Email or phone number') ei.placeholder = 'Email or phone number'; }, 2000);
-/* ============================================================
+
+  /* ============================================================
      CLEAN RALLY CAUSE: bypass old patch that demands a phone
      ============================================================ */
   window.createCause = function () {
@@ -653,7 +646,6 @@
     });
   };
 
-  /* make sure the Launch button calls the clean function */
   setInterval(function () {
     var modal = document.getElementById('givingModal');
     if (!modal) return;
@@ -674,5 +666,5 @@
     };
     window.alert._gc40wrapped = true;
   }
-  console.log('✝️ app40.js loaded — instant phone registration + strong password validation');
+  console.log('✝️ app40.js loaded — instant phone registration + strong password validation + landing photo/video');
 })();
