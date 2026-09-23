@@ -610,26 +610,40 @@
   }
   setInterval(function () { var ei = document.getElementById('login-email'); if (ei && ei.placeholder !== 'Email or phone number') ei.placeholder = 'Email or phone number'; }, 2000);
 
-/* ============================================================
-     GHOSTBUSTER: Kill stray "No ministries yet." text
-     Because multiple files fight over the ministries grid, this 
-     forcefully deletes the old placeholder whenever real cards exist.
+  /* ============================================================
+     GHOSTBUSTER v2: kill "No ministries yet." / "Join a ministry"
+     Class-agnostic: matches the placeholder by its EXACT text and
+     removes it whenever the grid contains real cards.
      ============================================================ */
   function cleanMinistriesGhost40() {
-    var sec = document.getElementById('ministries') || document.getElementById('ministriesGrid');
-    if (!sec) return;
-    // If real ministry cards exist, hunt down the ghost text
-    if (sec.querySelector('.ministry-card')) {
-      var nodes = sec.querySelectorAll('p, div, span, h3, h4, h2');
-      Array.prototype.forEach.call(nodes, function (n) {
-        if (n.querySelector && n.querySelector('.ministry-card')) return; 
-        if (/no ministries yet/i.test(n.textContent || '')) {
-          if (n.parentNode) n.parentNode.removeChild(n);
-        }
-      });
-    }
+    var sec = document.getElementById('ministries');
+    var grid = document.getElementById('ministriesGrid');
+    if (!sec || !grid) return;
+    var GHOST = /^(no ministries yet\.?|join a ministry\.?)$/i;
+    /* count real (non-ghost) cards in the grid */
+    var real = 0;
+    Array.prototype.forEach.call(grid.children, function (n) {
+      if (!GHOST.test((n.textContent || '').trim())) real++;
+    });
+    if (!real) return;                       /* truly empty → keep placeholder */
+    /* remove ghost ELEMENTS anywhere in the section */
+    var nodes = sec.querySelectorAll('*');
+    Array.prototype.forEach.call(nodes, function (n) {
+      if (GHOST.test((n.textContent || '').trim())) {
+        if (n.parentNode) n.parentNode.removeChild(n);
+      }
+    });
+    /* remove ghost bare TEXT nodes inside the grid */
+    Array.prototype.forEach.call(grid.childNodes, function (n) {
+      if (n.nodeType === 3 && GHOST.test((n.textContent || '').trim())) grid.removeChild(n);
+    });
   }
   setInterval(cleanMinistriesGhost40, 800);
+  if (window.MutationObserver && document.body) {
+    var gbT = null;
+    new MutationObserver(function () { clearTimeout(gbT); gbT = setTimeout(cleanMinistriesGhost40, 200); })
+      .observe(document.body, { childList: true, subtree: true });
+  }
   /* ============================================================
      CLEAN RALLY CAUSE
      ============================================================ */
