@@ -4,17 +4,9 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>ElduConnect</title>
-<link rel="preload" as="image" href="/church-hero.jpg">
-<style>
-  .hero-section{
-    background-color:#0f172a;
-    background-image:url('/church-hero.jpg');
-    background-size:cover;
-    background-position:center;
-  }
-</style>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=Playfair+Display:wght@400;600;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+<link rel="preload" as="image" href="/church-hero.jpg">
 <style>
 :root{--primary:#4F46E5;--primary-light:#818CF8;--primary-dark:#3730A3;--secondary:#F59E0B;--accent:#10B981;--bg:#F8FAFC;--bg-card:#FFF;--text:#1E293B;--text-light:#64748B;--text-lighter:#94A3B8;--border:#E2E8F0;--shadow:0 1px 3px rgba(0,0,0,.08);--shadow-md:0 4px 6px -1px rgba(0,0,0,.07);--shadow-lg:0 10px 25px -5px rgba(0,0,0,.08);--shadow-xl:0 20px 40px -10px rgba(79,70,229,.15);--radius:16px;--radius-sm:10px;--radius-xs:6px;--gradient:linear-gradient(135deg,#4F46E5,#7C3AED,#A855F7);--gradient-warm:linear-gradient(135deg,#F59E0B,#EF4444);--gradient-cool:linear-gradient(135deg,#06B6D4,#3B82F6,#8B5CF6);--gradient-green:linear-gradient(135deg,#10B981,#059669);--gradient-heart:linear-gradient(135deg,#EC4899,#F43F5E,#EF4444);--gradient-dept:linear-gradient(135deg,#8B5CF6,#EC4899);--gradient-chat:linear-gradient(135deg,#10B981,#06B6D4);--nav-height:70px;--header-height:60px}
 *{margin:0;padding:0;box-sizing:border-box}html{scroll-behavior:smooth}body{font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;background:var(--bg);color:var(--text);overflow-x:hidden;-webkit-tap-highlight-color:transparent;min-height:100vh}
@@ -308,7 +300,7 @@
 .official-name{font-weight:700;font-size:.85rem}.official-role{font-size:.7rem;color:var(--primary);font-weight:600}
 .official-contact{font-size:.7rem;color:var(--text-light)}
 
-.dept-card{background:var(--bg-card);border-radius:var(--radius);overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:12px;cursor:pointer}
+.dept-card{background:var(--bg-card);overflow:hidden;box-shadow:var(--shadow);border:1px solid var(--border);margin-bottom:12px;cursor:pointer;border-radius:var(--radius)}
 .dept-banner{height:80px;background:var(--gradient-dept);display:flex;align-items:center;padding:0 16px;color:#fff}
 .dept-banner.alt1{background:var(--gradient-warm)}.dept-banner.alt2{background:var(--gradient-cool)}.dept-banner.alt3{background:var(--gradient-green)}
 .dept-icon{width:50px;height:50px;border-radius:50%;background:rgba(255,255,255,.25);display:flex;align-items:center;justify-content:center;font-size:1.3rem;margin-right:12px}
@@ -402,6 +394,20 @@
 @media (min-width:768px){.main-content{max-width:600px;margin:0 auto}.bottom-nav,.app-header{max-width:600px;left:50%;transform:translateX(-50%)}.modal{border-radius:var(--radius);margin-bottom:20px}.modal-overlay{align-items:center}}
 @media (max-width:768px){.church-name{font-size:2.5rem}.church-tagline{font-size:1.1rem}.welcome-grid{grid-template-columns:1fr;gap:40px}.section-title{font-size:2rem}.hero-buttons{flex-direction:column}.btn-lg{width:100%}}
 @media (max-width:360px){.grid-3{grid-template-columns:1fr 1fr}.section-title-app{font-size:1.2rem}}
+</style>
+<style>
+  .hero-section{
+    background-color:#0f172a;
+    background-image:url('/church-hero.jpg');
+    background-size:cover;
+    background-position:center;
+  }
+  .gc-welcome-video video{
+    position:relative!important;
+    inset:auto!important;
+    z-index:auto!important;
+    opacity:1!important;
+  }
 </style>
 </head>
 <body>
@@ -644,7 +650,7 @@
       <div class="streak-days"><div class="streak-dot">M</div><div class="streak-dot">T</div><div class="streak-dot">W</div><div class="streak-dot">T</div><div class="streak-dot">F</div><div class="streak-dot">S</div><div class="streak-dot">S</div></div>
     </div>
     <div class="my-depts-section">
-      <div class="my-depts-header" onclick="gcOpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div> </div>
+      <div class="my-depts-header" onclick="gcOpenMyList()" style="cursor:pointer"><div class="my-depts-title"><i class="fas fa-list"></i> My List <i class="fas fa-arrow-right" style="font-size:.7rem;color:var(--text-lighter)"></i></div><div class="my-depts-count" id="myDeptsCount">0 joined</div></div> </div>
     </div>
     <div class="section-title-app">💝 How are you feeling?</div>
     <div class="emotional-card">
@@ -993,7 +999,7 @@
 <div class="modal-overlay" id="addLeaderModal" onclick="closeModal(event)">
   <div class="modal" onclick="event.stopPropagation()">
     <div class="modal-handle"></div>
-    <div class="modal-title">👨‍💼 Add Church Leader <span class="admin-only">Admin</span></div>
+    <div class="modal-title">👨‍ Add Church Leader <span class="admin-only">Admin</span></div>
     <div class="form-group"><label class="form-label">Pick User</label><div class="user-picker" id="leaderUserPicker"></div></div>
     <div class="form-group"><label class="form-label">Phone</label><input class="form-input" id="leaderPhone"></div>
     <button class="btn btn-warm btn-block" onclick="addLeader()">Add</button>
@@ -1318,6 +1324,6 @@
 <script src="app37.js?v=20260915a"></script>
 <script src="app38.js?v=20260916"></script>
 <script src="app39.js?v=20260916"></script>
-<script src="app40.js?v=20260916"></script>
+<script src="app40.js?v=20260923"></script>
 </body>
 </html>
