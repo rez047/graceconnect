@@ -446,31 +446,33 @@
     var st = document.createElement('style');
     st.textContent = '.hero-section::before{background:linear-gradient(to bottom,rgba(15,23,42,.25),rgba(15,23,42,.62))!important}'
       + '.gc-welcome-wrap{position:relative;z-index:2;max-width:680px;margin:20px auto 0;width:100%;padding:0 16px}'
-      + '.gc-welcome-msg{background:rgba(255,255,255,.15);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.28);border-radius:14px;padding:10px 14px;font-size:.9rem;line-height:1.5;margin-bottom:12px}'
-      + '.gc-welcome-video video{width:100%;border-radius:16px;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.4);display:block}';
+      + '.gc-welcome-video{display:none;aspect-ratio:16/9;border-radius:16px;overflow:hidden;background:#000;box-shadow:0 20px 50px rgba(0,0,0,.45)}'
+      + '.gc-welcome-video.ready{display:block}'
+      + '.gc-welcome-video video{width:100%;height:100%;object-fit:cover;display:block}';
     document.head.appendChild(st);
   })();
   function landingExtras40() {
     var hero = document.getElementById('heroSection') || document.querySelector('.hero-section');
     if (!hero || hero.querySelector('.gc-welcome-wrap')) return;
     var wrap = document.createElement('div'); wrap.className = 'gc-welcome-wrap';
-    wrap.innerHTML = '<div class="gc-welcome-msg">👋 <b>Karibu!</b> </div>'
-      + '<div class="gc-welcome-video"><video controls playsinline preload="metadata"><source src="' + (window.GC_WELCOME_VIDEO || '/welcome.mp4') + '" type="video/mp4"></video></div>';
+    wrap.innerHTML = '<div class="gc-welcome-video"><video controls playsinline preload="metadata" autoplay muted loop></video></div>';
     var btns = hero.querySelector('.hero-buttons');
     if (btns && btns.parentNode) btns.parentNode.insertBefore(wrap, btns.nextSibling); else hero.appendChild(wrap);
+    var box = wrap.querySelector('.gc-welcome-video');
     var v = wrap.querySelector('video');
-    v.addEventListener('error', function () { var b = wrap.querySelector('.gc-welcome-video'); if (b) b.style.display = 'none'; }, true);
-    var im = new Image();
-    im.onload = function () { if (!hero.style.backgroundImage) { hero.style.backgroundImage = 'url(/church-hero.jpg)'; hero.style.backgroundSize = 'cover'; hero.style.backgroundPosition = 'center'; } };
-    im.src = '/church-hero.jpg';
+    v.addEventListener('loadedmetadata', function () { box.classList.add('ready'); });
+    v.addEventListener('error', function () { if (wrap.parentNode) wrap.parentNode.removeChild(wrap); }, true);
+    var src = window.GC_WELCOME_VIDEO || '/welcome.mp4';
+    v.src = src;
+    v.load();
     try {
       var c = db40();
       if (c) c.from('church_settings').select('welcome_video_url').limit(1).single().then(function (r) {
-        if (r.data && r.data.welcome_video_url) { var s = wrap.querySelector('source'); if (s) { s.src = r.data.welcome_video_url; v.load(); } }
+        if (r.data && r.data.welcome_video_url && r.data.welcome_video_url !== src) { v.src = r.data.welcome_video_url; v.load(); }
       }).catch(function () {});
     } catch (e) {}
   }
-  setInterval(landingExtras40, 2000);
+  
 
   /* ============================================================
      PHONE REGISTRATION - NO SMS, INSTANT ACCESS
