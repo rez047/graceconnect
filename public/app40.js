@@ -610,6 +610,26 @@
   }
   setInterval(function () { var ei = document.getElementById('login-email'); if (ei && ei.placeholder !== 'Email or phone number') ei.placeholder = 'Email or phone number'; }, 2000);
 
+/* ============================================================
+     GHOSTBUSTER: Kill stray "No ministries yet." text
+     Because multiple files fight over the ministries grid, this 
+     forcefully deletes the old placeholder whenever real cards exist.
+     ============================================================ */
+  function cleanMinistriesGhost40() {
+    var sec = document.getElementById('ministries') || document.getElementById('ministriesGrid');
+    if (!sec) return;
+    // If real ministry cards exist, hunt down the ghost text
+    if (sec.querySelector('.ministry-card')) {
+      var nodes = sec.querySelectorAll('p, div, span, h3, h4, h2');
+      Array.prototype.forEach.call(nodes, function (n) {
+        if (n.querySelector && n.querySelector('.ministry-card')) return; 
+        if (/no ministries yet/i.test(n.textContent || '')) {
+          if (n.parentNode) n.parentNode.removeChild(n);
+        }
+      });
+    }
+  }
+  setInterval(cleanMinistriesGhost40, 800);
   /* ============================================================
      CLEAN RALLY CAUSE
      ============================================================ */
